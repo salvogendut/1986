@@ -134,6 +134,7 @@ int main(int argc, char **argv) {
     atexit(SDL_Quit);
 
     notify_init();
+    notify_set_mode(cfg.notify_mode);
 
     C128 c;
     c128_init(&c, &cfg);
