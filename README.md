@@ -16,6 +16,10 @@ From those it reuses the SDL3 display layer, the function-key conventions,
 the options overlay, and the cycle-stepped Z80 core (for CP/M mode). The
 6502-like 8502 core is being ported from the reference VICE SDL port.
 
+The name "1986" was chosen not only because of the sibling projects and the
+year of the C128DCR's introduction, but also because it was the year I got
+my first computer, at the tender age of 13: a Commodore C128.
+
 ## Status: scaffolding
 
 This tree currently boots a runnable skeleton:
