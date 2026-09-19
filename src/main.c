@@ -171,7 +171,6 @@ int main(int argc, char **argv) {
         } else {
             fprintf(stderr, "1986: loaded %d ROM image(s) from '%s'\n", n, dir);
         }
-        if (base) SDL_free((void *)base);
     }
 
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */

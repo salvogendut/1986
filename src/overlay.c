@@ -61,12 +61,10 @@ static void rom_path_display(const Overlay *ov, char *out, size_t sz) {
         snprintf(path, sizeof(path), "%s", ov->cfg->rom_dir);
     } else {
         const char *base = SDL_GetBasePath();
-        if (base) {
+        if (base)
             snprintf(path, sizeof(path), "%s/roms", base);
-            SDL_free((void *)base);
-        } else {
+        else
             snprintf(path, sizeof(path), "roms");
-        }
     }
     abbrev_home(path, out, sz);
 }
