@@ -1,5 +1,7 @@
 #include "cia.h"
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 /* CIA interrupt control register bits. */
 #define CIA_ICR_TA   0x01   /* timer A underflow */

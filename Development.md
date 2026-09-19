@@ -82,15 +82,14 @@ ALL RIGHTS RESERVED
 
 The KERNAL's IEC serial-bus (disk) routines are intercepted with ROM traps
 (`cpu_install_serial_traps`, mirroring VICE's `serial_trap_ready`) so the boot
-does not block on the serial port. After the banner the boot reaches the
-KERNAL's screen-editor main loop, which runs the 50 Hz IRQ correctly, but over
-many frames the stack corrupts: an `RTI` eventually returns to a bad address
-(`$081B`, an empty bank) and the CPU fetches a `0x00` (BRK), dropping into the
-C128 machine monitor (`BREAK`). The corruption comes from the KERNAL's main
-loop needing the full CIA keyboard scan / VIC raster hardware (currently
-stubbed), not just the CPU + memory. Reaching `READY.` requires implementing
-the CIA keyboard scan and VIC raster IRQ so the editor loop runs without
-drifting the stack.
+does not block on the serial port. The CIA1 keyboard scan is wired (port A =
+rows output, port B = columns read via the kbd matrix). After the banner the
+boot enters the KERNAL's screen-editor main loop, but during the transition
+the stack corrupts: an `RTI` returns to a bad bank address (`$081B`) and the
+CPU fetches a `0x00` (BRK), dropping into the C128 machine monitor (`BREAK`).
+The keyboard scan delayed this but did not eliminate it — the KERNAL's IRQ
+handler still corrupts the stack because the CIA timers/VIC raster it drives
+are stubbed. Reaching `READY.` needs the full CIA timer + VIC raster emulation.
 
 Visual check (saves a PPM at frame 60):
 ```bash

@@ -15,7 +15,21 @@ static u8 io_read(C128 *c, u16 addr) {
         return c->mem.color_ram[addr & 0x3FF];   /* colour RAM nibble */
     if (addr >= 0xD500 && addr < 0xD510 && c->mem.mmu.mmio)
         return mmu_read(&c->mem.mmu, addr);
-    if (addr >= 0xDC00 && addr < 0xDD00) return cia_read(&c->cia1, addr);
+    if (addr >= 0xDC00 && addr < 0xDD00) {
+        /* CIA1 keyboard scan: the KERNAL drives port A as the row output and
+         * reads port B for the columns. Return the pressed keys for the
+         * active row(s) (active-low, bit set = key released). */
+        if ((addr & 0x0F) == 0x01) {              /* port B = columns */
+            u8 rowsel = c->cia1.pra & ~c->cia1.ddra;   /* active rows */
+            u8 cols = 0xFF;
+            for (int row = 0; row < KBD_ROWS; row++) {
+                if ((rowsel & (1 << row)) == 0)        /* row active-low */
+                    cols &= kbd_matrix(&c->kbd, row);
+            }
+            return cols;
+        }
+        return cia_read(&c->cia1, addr);
+    }
     if (addr >= 0xDD00 && addr < 0xDE00) return cia_read(&c->cia2, addr);
     if (addr >= 0xD600 && addr < 0xD700) {
         if ((addr & 1) == 0) return vdc_read_data(&c->vdc); /* $D601 */

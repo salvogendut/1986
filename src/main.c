@@ -278,13 +278,8 @@ int main(int argc, char **argv) {
             /* Optional boot-progress trace (C128_BOOT_TRACE=1). */
             if (g_boot_trace && (c128_frame_count % 10) == 0) {
                 const Cpu8502 *cpu = &c.cpu;
-                u16 v316 = (u16)(c128_mem_read(&c, 0x0316) | (c128_mem_read(&c, 0x0317) << 8));
-                u16 v314 = (u16)(c128_mem_read(&c, 0x0314) | (c128_mem_read(&c, 0x0315) << 8));
-                fprintf(stderr, "[boot] frame=%d PC=%04X A=%02X X=%02X Y=%02X "
-                        "SP=%02X P=%02X mcr=%02X v316=%04X v314=%04X cycles=%llu\n",
-                        c128_frame_count, cpu->pc, cpu->a, cpu->x, cpu->y,
-                        cpu->sp, cpu->p, c.mem.mmu.mcr, v316, v314,
-                        (unsigned long long)cpu->cycles);
+                fprintf(stderr, "[boot] frame=%d PC=%04X SP=%02X P=%02X mcr=%02X\n",
+                        c128_frame_count, cpu->pc, cpu->sp, cpu->p, c.mem.mmu.mcr);
             }
 
             /* Pace to the emulated frame time. */
