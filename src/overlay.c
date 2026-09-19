@@ -5,92 +5,73 @@
 
 #define OV_SCALE      1.5f
 #define OV_LINE_H     20
+#define OV_VALUE_X    140
 
-typedef enum { OVT_BOOL, OVT_INT, OVT_ENUM } OvType;
+#define MEDIA_ITEM_COUNT 3
 
-typedef struct {
-    const char *label;
-    OvType      type;
-    size_t      offset;   /* offsetof(Config, field) */
-    int         min, max; /* OVT_INT range */
-} OvItem;
+static void overlay_file_callback(void *userdata, const char * const *files,
+                                  int filter);
 
-/* Each section is a fixed list; NULL label ends the list. */
-static const OvItem SECTIONS[OV_SECTION_COUNT][8] = {
-    [OV_GENERAL] = {
-        { "Fullscreen",        OVT_BOOL, offsetof(Config, fullscreen), 0, 0 },
-        { "Smoothing",         OVT_BOOL, offsetof(Config, smoothing),  0, 0 },
-        { "Fast mode (2 MHz)", OVT_BOOL, offsetof(Config, fast),       0, 0 },
-        { "Model",             OVT_ENUM, offsetof(Config, model),      0, 2 },
-        { "Scale",             OVT_INT,  offsetof(Config, scale),      1, 4 },
-        { "Reset to defaults", OVT_ENUM, (size_t)-1, 0, 0 },  /* action */
-        { NULL, 0, 0, 0, 0 },
-    },
-    [OV_VIDEO] = {
-        { "CRT effect",        OVT_BOOL, offsetof(Config, crt_enabled),    0, 0 },
-        { "Scanlines",         OVT_INT,  offsetof(Config, crt_scanlines),  0, 95 },
-        { "Brightness",        OVT_INT,  offsetof(Config, crt_brightness), 50, 100 },
-        { "Contrast",          OVT_INT,  offsetof(Config, crt_contrast),   50, 150 },
-        { NULL, 0, 0, 0, 0 },
-    },
-    [OV_CAPTURE] = {
-        { "GIF width",         OVT_INT, offsetof(Config, gif_width), 160, 640 },
-        { "GIF fps",           OVT_INT, offsetof(Config, gif_fps),   5, 50 },
-        { "Optimize with ffmpeg", OVT_BOOL, offsetof(Config, gif_ffmpeg), 0, 0 },
-        { "Save & close",      OVT_ENUM, (size_t)-1, 0, 0 },  /* action */
-        { NULL, 0, 0, 0, 0 },
-    },
-};
+static const char *const MODELS[] = { "C128DCR", "C128", "C128D" };
 
-static const char *section_name(OvSection s) {
-    static const char *names[OV_SECTION_COUNT] = {
-        "General", "Video", "Capture"
+static const char *media_label(int row) {
+    static const char *const labels[MEDIA_ITEM_COUNT] = {
+        "Disk Drive", "Tape", "Cartridge"
     };
-    return names[s];
+    return labels[row];
 }
 
-static const OvItem *items_of(OvSection s) {
-    return SECTIONS[s];
+static const char *media_extension(int row) {
+    static const char *const exts[MEDIA_ITEM_COUNT] = {
+        ".d64", ".tap", ".crt"
+    };
+    return exts[row];
 }
 
-static const char *item_value(const Config *cfg, const OvItem *it, char *buf,
-                              size_t bufsz) {
-    if (it->type == OVT_BOOL) {
-        bool *p = (bool *)((char *)cfg + it->offset);
-        return *p ? "on" : "off";
-    }
-    if (it->type == OVT_INT) {
-        int *p = (int *)((char *)cfg + it->offset);
-        snprintf(buf, bufsz, "%d", *p);
-        return buf;
-    }
-    /* OVT_ENUM */
-    int *p = (int *)((char *)cfg + it->offset);
-    static const char *models[] = { "C128DCR", "C128", "C128D" };
-    if (it->offset == (size_t)-1) return "action";
-    if (*p >= 0 && *p < 3) return models[*p];
-    return "?";
+/* The selected file path (or NULL) for a Media row. */
+static const char *media_path(const Overlay *ov, int row) {
+    if (row == 0) return ov->disk_path;
+    if (row == 1) return ov->tape_path;
+    return ov->cart_path;
 }
 
-static void item_adjust(Config *cfg, const OvItem *it, int delta) {
-    if (it->type == OVT_BOOL) {
-        bool *p = (bool *)((char *)cfg + it->offset);
-        *p = !*p;
-    } else if (it->type == OVT_INT) {
-        int *p = (int *)((char *)cfg + it->offset);
-        *p += delta;
-        if (*p < it->min) *p = it->min;
-        if (*p > it->max) *p = it->max;
-    } else if (it->type == OVT_ENUM) {
-        int *p = (int *)((char *)cfg + it->offset);
-        *p = (*p + 1) % 3;
+static void open_media_dialog(Overlay *ov, int row) {
+    static const SDL_DialogFileFilter disk_filters[] = {
+        { "D64 disk images", "d64;D64" },
+        { "All files",       "*"       },
+    };
+    static const SDL_DialogFileFilter tape_filters[] = {
+        { "TAP tapes", "tap;TAP" },
+        { "All files", "*"       },
+    };
+    static const SDL_DialogFileFilter cart_filters[] = {
+        { "CRT cartridges", "crt;CRT" },
+        { "All files",      "*"       },
+    };
+    const SDL_DialogFileFilter *filters = disk_filters;
+    if (row == 0) {
+        ov->dialog_kind = OV_DIALOG_DISK;
+        filters = disk_filters;
+    } else if (row == 1) {
+        ov->dialog_kind = OV_DIALOG_TAPE;
+        filters = tape_filters;
+    } else {
+        ov->dialog_kind = OV_DIALOG_CART;
+        filters = cart_filters;
     }
+    ov->dialog_ready = false;
+    ov->dialog_failed = false;
+    ov->dialog_error[0] = '\0';
+    SDL_ShowOpenFileDialog(overlay_file_callback, ov,
+                           ov->c128 ? ov->c128->display.window : NULL,
+                           filters, 2, NULL, false);
 }
 
 void overlay_init(Overlay *ov, Config *cfg, C128 *c128) {
     memset(ov, 0, sizeof(*ov));
-    ov->cfg = cfg;
+    ov->cfg  = cfg;
     ov->c128 = c128;
+    ov->dialog_kind = OV_DIALOG_NONE;
 }
 
 void overlay_quit(Overlay *ov) {
@@ -102,70 +83,107 @@ bool overlay_is_visible(const Overlay *ov) {
 }
 
 bool overlay_handle_event(Overlay *ov, SDL_Event *ev) {
+    if (ev->type != SDL_EVENT_KEY_DOWN)
+        return ov->visible;   /* consume everything while open */
+
+    SDL_Scancode sc = ev->key.scancode;
+
+    /* F9 always toggles the overlay. */
+    if (sc == SDL_SCANCODE_F9) {
+        if (!ov->visible) {
+            ov->visible = true;
+            ov->section = OV_GENERAL;
+            ov->row     = 0;
+        } else {
+            ov->visible = false;
+        }
+        return true;
+    }
+
     if (!ov->visible) return false;
-    if (ev->type != SDL_EVENT_KEY_DOWN) return true; /* consume everything while open */
 
-    const OvItem *items = items_of(ov->section);
-    int count = 0;
-    while (items[count].label) count++;
-
-    switch (ev->key.scancode) {
+    switch (sc) {
         case SDL_SCANCODE_LEFT:
         case SDL_SCANCODE_RIGHT: {
-            int dir = (ev->key.scancode == SDL_SCANCODE_RIGHT) ? 1 : -1;
-            ov->section = (OvSection)((ov->section + dir + OV_SECTION_COUNT) % OV_SECTION_COUNT);
+            int dir = (sc == SDL_SCANCODE_RIGHT) ? 1 : -1;
+            ov->section = (OvSection)((ov->section + dir + OV_SECTION_COUNT)
+                                      % OV_SECTION_COUNT);
             ov->row = 0;
             break;
         }
-        case SDL_SCANCODE_UP:   if (ov->row > 0) ov->row--; break;
-        case SDL_SCANCODE_DOWN: if (ov->row < count - 1) ov->row++; break;
-        case SDL_SCANCODE_RETURN: {
-            const OvItem *it = &items[ov->row];
-            if (it->offset == (size_t)-1) {
-                if (!strcmp(it->label, "Reset to defaults")) {
-                    config_set_defaults(ov->cfg);
-                    ov->dirty = true;
-                } else if (!strcmp(it->label, "Save & close")) {
-                    config_save(ov->cfg, CONFIG_NAME);
-                    ov->visible = false;
-                }
-            } else {
-                item_adjust(ov->cfg, it, 1);
-                ov->dirty = true;
-            }
+        case SDL_SCANCODE_UP:
+            if (ov->row > 0) ov->row--;
             break;
-        }
-        case SDL_SCANCODE_F9:
-            /* F9 saves-and-closes. */
-            config_save(ov->cfg, CONFIG_NAME);
-            ov->visible = false;
+        case SDL_SCANCODE_DOWN:
+            if (ov->row < MEDIA_ITEM_COUNT - 1) ov->row++;
+            break;
+        case SDL_SCANCODE_RETURN:
+            if (ov->section == OV_MEDIA)
+                open_media_dialog(ov, ov->row);
             break;
         case SDL_SCANCODE_ESCAPE:
-            if (ov->dirty) {
-                ov->state = OV_STATE_CONFIRM;
-            } else {
-                ov->visible = false;
-            }
+            ov->visible = false;
             break;
         default:
             break;
     }
-
-    if (ov->state == OV_STATE_CONFIRM) {
-        if (ev->key.scancode == SDL_SCANCODE_Y || ev->key.scancode == SDL_SCANCODE_RETURN) {
-            *ov->cfg = ov->saved;      /* discard */
-            ov->visible = false;
-            ov->state = OV_STATE_MENU;
-        } else if (ev->key.scancode == SDL_SCANCODE_N || ev->key.scancode == SDL_SCANCODE_ESCAPE) {
-            ov->state = OV_STATE_MENU;
-        }
-    }
-
     return true;
 }
 
 void overlay_tick(Overlay *ov) {
-    (void)ov;
+    if (ov->dialog_failed) {
+        SDL_MemoryBarrierAcquire();
+        ov->dialog_failed = false;
+        ov->dialog_kind   = OV_DIALOG_NONE;
+        fprintf(stderr, "1986: file picker unavailable: %s\n",
+                ov->dialog_error[0] ? ov->dialog_error : "unknown SDL error");
+        return;
+    }
+    if (!ov->dialog_ready) return;
+
+    SDL_MemoryBarrierAcquire();
+    ov->dialog_ready = false;
+    OvDialogKind kind = ov->dialog_kind;
+    ov->dialog_kind = OV_DIALOG_NONE;
+
+    char *dest = NULL;
+    if (kind == OV_DIALOG_DISK)      dest = ov->disk_path;
+    else if (kind == OV_DIALOG_TAPE) dest = ov->tape_path;
+    else if (kind == OV_DIALOG_CART) dest = ov->cart_path;
+    if (dest)
+        snprintf(dest, CONFIG_PATH_MAX, "%s", ov->dialog_path);
+}
+
+static void overlay_file_callback(void *userdata, const char * const *files,
+                                  int filter) {
+    (void)filter;
+    Overlay *ov = userdata;
+    if (!files) {
+        snprintf(ov->dialog_error, sizeof(ov->dialog_error), "%s",
+                 SDL_GetError());
+        SDL_MemoryBarrierRelease();
+        ov->dialog_failed = true;
+    } else if (files[0]) {
+        snprintf(ov->dialog_path, sizeof(ov->dialog_path), "%s", files[0]);
+        SDL_MemoryBarrierRelease();
+        ov->dialog_ready = true;
+    } else {
+        ov->dialog_kind = OV_DIALOG_NONE;
+    }
+}
+
+/* Draw one "label  value" row. */
+static void draw_row(SDL_Renderer *r, int lw, float y,
+                     const char *label, const char *value, bool highlight) {
+    if (highlight) {
+        SDL_SetRenderDrawColor(r, 0x80, 0x60, 0x20, 255);
+        SDL_FRect hl = { 10, y, (float)lw - 20, OV_LINE_H - 4 };
+        SDL_RenderFillRect(r, &hl);
+    }
+    SDL_SetRenderDrawColor(r, 0xFF, 0xFF, 0xFF, 255);
+    SDL_RenderDebugText(r, 20, y, label);
+    if (value)
+        SDL_RenderDebugText(r, (float)OV_VALUE_X, y, value);
 }
 
 void overlay_render(const Overlay *ov, SDL_Renderer *r) {
@@ -188,45 +206,53 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
     SDL_SetRenderDrawColor(r, 0x30, 0x40, 0x60, 255);
     SDL_FRect tabbar = { 10, 10, (float)lw - 20, 22 };
     SDL_RenderFillRect(r, &tabbar);
-    SDL_SetRenderDrawColor(r, 0xFF, 0xFF, 0xFF, 255);
+    static const char *const names[OV_SECTION_COUNT] = { "General", "Media" };
     float tx = 20;
     for (int s = 0; s < OV_SECTION_COUNT; s++) {
-        const char *name = section_name((OvSection)s);
-        int w = (int)(strlen(name) * 8);
-        SDL_RenderDebugText(r, tx, 14, name);
-        tx += w + 20;
+        bool active = (s == (int)ov->section);
+        SDL_SetRenderDrawColor(r, active ? 0xFF : 0xC0,
+                               active ? 0xFF : 0xC0,
+                               active ? 0xFF : 0xC0, 255);
+        SDL_RenderDebugText(r, tx, 14, names[s]);
+        tx += (float)((int)strlen(names[s]) * 8 + 20);
     }
 
-    /* Menu items. */
-    const OvItem *items = items_of(ov->section);
     float y = 48;
-    char vbuf[64];
-    for (int i = 0; items[i].label; i++) {
-        if (i == ov->row) {
-            SDL_SetRenderDrawColor(r, 0x80, 0x60, 0x20, 255);
-            SDL_FRect hl = { 10, y, (float)lw - 20, OV_LINE_H - 4 };
-            SDL_RenderFillRect(r, &hl);
-        }
-        SDL_SetRenderDrawColor(r, 0xFF, 0xFF, 0xFF, 255);
-        SDL_RenderDebugText(r, 20, y, items[i].label);
-        const char *val = item_value(ov->cfg, &items[i], vbuf, sizeof(vbuf));
-        SDL_RenderDebugText(r, (float)(lw - 20 - (int)strlen(val) * 8), y, val);
+
+    if (ov->section == OV_GENERAL) {
+        char machine[64];
+        const char *model = (ov->cfg->model >= 0 && ov->cfg->model < 3)
+                          ? MODELS[ov->cfg->model] : "C128";
+        snprintf(machine, sizeof(machine), "Commodore %s", model);
+
+        draw_row(r, lw, y, "Machine", machine, false); y += OV_LINE_H;
+        draw_row(r, lw, y, "CPU", "MOS 8502 @ 2 MHz + Z80A (CP/M)", false);
         y += OV_LINE_H;
+        draw_row(r, lw, y, "Memory", "128 KB", false); y += OV_LINE_H;
+        draw_row(r, lw, y, "Video", "VIC-IIe (40-col) + 8563 VDC (80-col)", false);
+        y += OV_LINE_H;
+        draw_row(r, lw, y, "Sound", "SID 6581", false); y += OV_LINE_H;
+#ifdef PACKAGE_VERSION
+        draw_row(r, lw, y, "Emulator", PACKAGE_VERSION, false); y += OV_LINE_H;
+#endif
+    } else {
+        for (int i = 0; i < MEDIA_ITEM_COUNT; i++) {
+            const char *path = media_path(ov, i);
+            char vbuf[CONFIG_PATH_MAX + 8];
+            if (path && path[0])
+                snprintf(vbuf, sizeof(vbuf), "%s (%s)", media_extension(i), path);
+            else
+                snprintf(vbuf, sizeof(vbuf), "<none> (%s)", media_extension(i));
+            draw_row(r, lw, y, media_label(i), vbuf, i == ov->row);
+            y += OV_LINE_H;
+        }
     }
 
     /* Footer. */
     SDL_SetRenderDrawColor(r, 0xAA, 0xAA, 0xAA, 255);
-    const char *footer = "Left/Right section  Up/Down select  Enter toggle  F9 save  Esc close";
-    SDL_RenderDebugText(r, (float)((lw - (int)strlen(footer) * 8) / 2), (float)(lh - 20), footer);
-
-    if (ov->state == OV_STATE_CONFIRM) {
-        SDL_SetRenderDrawColor(r, 0, 0, 0, 200);
-        SDL_FRect box = { (float)(lw / 2 - 120), (float)(lh / 2 - 20), 240, 40 };
-        SDL_RenderFillRect(r, &box);
-        SDL_SetRenderDrawColor(r, 0xFF, 0xFF, 0xFF, 255);
-        const char *msg = "Discard changes? Y/N";
-        SDL_RenderDebugText(r, (float)(lw / 2 - (int)strlen(msg) * 4), (float)(lh / 2 - 6), msg);
-    }
+    const char *footer = "Left/Right section  Up/Down select  Enter choose file  F9/Esc close";
+    SDL_RenderDebugText(r, (float)((lw - (int)strlen(footer) * 8) / 2),
+                        (float)(lh - 20), footer);
 
     SDL_SetRenderScale(r, 1.0f, 1.0f);
 }

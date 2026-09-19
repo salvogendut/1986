@@ -270,6 +270,9 @@ int main(int argc, char **argv) {
         /* --- Paste injection (one key per frame) --- */
         paste_tick(&paste, &c.kbd);
 
+        /* --- Overlay (process async file-dialog results) --- */
+        overlay_tick(&overlay);
+
         /* --- Machine step --- */
         if (!paused) {
             int cycles = c128_frame(&c);
