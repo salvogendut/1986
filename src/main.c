@@ -204,7 +204,10 @@ int main(int argc, char **argv) {
             if (overlay_handle_event(&overlay, &ev)) continue;
 
             if (ev.type == SDL_EVENT_KEY_DOWN) {
-                bool ctrl = (ev.key.mod & SDL_KMOD_CTRL) != 0;
+                bool ctrl  = (ev.key.mod & SDL_KMOD_CTRL) != 0;
+                bool shift = (ev.key.mod & SDL_KMOD_SHIFT) != 0;
+                bool fkey  = (ev.key.scancode >= SDL_SCANCODE_F1 &&
+                              ev.key.scancode <= SDL_SCANCODE_F8);
                 bool key_plus  = (ev.key.scancode == SDL_SCANCODE_EQUALS ||
                                   ev.key.scancode == SDL_SCANCODE_KP_PLUS);
                 bool key_minus = (ev.key.scancode == SDL_SCANCODE_MINUS ||
@@ -216,6 +219,17 @@ int main(int argc, char **argv) {
                     SDL_SetWindowSize(c.display.window,
                                       WINDOW_W * cfg.scale,
                                       WINDOW_H * cfg.scale + LED_BAR_HEIGHT);
+                    continue;
+                }
+                /* Shift+PrintScreen toggles the 40/80 column key. */
+                if (shift && ev.key.scancode == SDL_SCANCODE_PRINTSCREEN) {
+                    c.mem.mmu.col4080 = false;   /* key pressed -> 80-col */
+                    continue;
+                }
+                /* Shift+F1-F8 press the C128 function keys (they're the
+                 * emulator's plain F-key shortcuts otherwise). */
+                if (fkey && shift) {
+                    c128_key_event(&c, ev.key.scancode, true);
                     continue;
                 }
                 if (ev.key.scancode == SDL_SCANCODE_F12) {
@@ -259,10 +273,15 @@ int main(int argc, char **argv) {
                            (SDL_GetModState() & SDL_KMOD_CTRL)) {
                     char *text = SDL_GetClipboardText();
                     if (text) { paste_text(&paste, text); SDL_free(text); }
-                } else {
+                } else if (!fkey) {
+                    /* Non-function keys go to the C128 keyboard. Plain F1-F8
+                     * are reserved for the emulator shortcuts above. */
                     c128_key_event(&c, ev.key.scancode, true);
                 }
             } else if (ev.type == SDL_EVENT_KEY_UP) {
+                if (ev.key.scancode == SDL_SCANCODE_PRINTSCREEN)
+                    c.mem.mmu.col4080 = true;   /* 40/80 key released */
+                /* Release function keys too (harmless if not held). */
                 c128_key_event(&c, ev.key.scancode, false);
             }
         }
