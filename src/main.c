@@ -148,14 +148,23 @@ int main(int argc, char **argv) {
                     cfg.crt_red, cfg.crt_green, cfg.crt_blue);
     if (cfg.fullscreen) SDL_SetWindowFullscreen(c.display.window, true);
 
-    /* Load ROMs into the machine (optional at this stage). */
+    /* Load ROMs into the machine (optional at this stage). Default to the
+     * directory containing the executable when no ROM dir is configured. */
     {
-        const char *dir = cfg.rom_dir[0] ? cfg.rom_dir : ROM_INSTALL_DIR;
+        const char *dir = cfg.rom_dir[0] ? cfg.rom_dir : NULL;
+        const char *base = NULL;
+        if (!dir) {
+            base = SDL_GetBasePath();
+            dir = base ? base : ROM_INSTALL_DIR;
+        }
         int n = mem_load_c128_roms(&c.mem, dir);
-        if (n == 0)
+        if (n == 0) {
             fprintf(stderr, "1986: no C128DCR ROMs found in '%s' (boot will not start)\n", dir);
-        else
+            notify_post("NO ROMS FOUND");
+        } else {
             fprintf(stderr, "1986: loaded %d ROM image(s) from '%s'\n", n, dir);
+        }
+        if (base) SDL_free((void *)base);
     }
 
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */
@@ -360,10 +369,14 @@ int main(int argc, char **argv) {
             display_apply_greyscale(&c.display);
         }
 
+        /* --- Notifications (fade/toast timer) --- */
+        notify_tick(20);
+
         /* --- Frame present --- */
         display_upload(&c.display);
         overlay_render(&overlay, c.display.renderer);
         if (paused) display_draw_paused_label(&c.display);
+        notify_render(c.display.renderer);
         display_flip(&c.display);
         if (monitor_is_open(monitor)) monitor_render(monitor);
     }

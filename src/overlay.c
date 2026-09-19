@@ -75,6 +75,18 @@ static void open_media_dialog(Overlay *ov, int row) {
                            filters, 2, NULL, false);
 }
 
+/* Folder picker for the ROM directory (General section). */
+static void open_rom_dialog(Overlay *ov) {
+    ov->dialog_kind   = OV_DIALOG_ROM;
+    ov->dialog_ready  = false;
+    ov->dialog_failed = false;
+    ov->dialog_error[0] = '\0';
+    SDL_ShowOpenFolderDialog(overlay_file_callback, ov,
+                             ov->c128 ? ov->c128->display.window : NULL,
+                             ov->cfg->rom_dir[0] ? ov->cfg->rom_dir : NULL,
+                             false);
+}
+
 void overlay_init(Overlay *ov, Config *cfg, C128 *c128) {
     memset(ov, 0, sizeof(*ov));
     ov->cfg  = cfg;
@@ -133,6 +145,8 @@ bool overlay_handle_event(Overlay *ov, SDL_Event *ev) {
         case SDL_SCANCODE_RETURN:
             if (ov->section == OV_MEDIA)
                 open_media_dialog(ov, ov->row);
+            else
+                open_rom_dialog(ov);
             break;
         case SDL_SCANCODE_ESCAPE:
             overlay_close(ov);
@@ -163,6 +177,7 @@ void overlay_tick(Overlay *ov) {
     if (kind == OV_DIALOG_DISK)      dest = ov->cfg->disk_path;
     else if (kind == OV_DIALOG_TAPE) dest = ov->cfg->tape_path;
     else if (kind == OV_DIALOG_CART) dest = ov->cfg->cart_path;
+    else if (kind == OV_DIALOG_ROM)  dest = ov->cfg->rom_dir;
     if (dest) {
         snprintf(dest, CONFIG_PATH_MAX, "%s", ov->dialog_path);
         char path[CONFIG_PATH_MAX];
@@ -252,6 +267,10 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
 #ifdef PACKAGE_VERSION
         draw_row(r, lw, y, "Emulator", PACKAGE_VERSION, false); y += OV_LINE_H;
 #endif
+        y += OV_LINE_H;
+        const char *rd = ov->cfg->rom_dir[0] ? ov->cfg->rom_dir
+                                              : "(executable directory)";
+        draw_row(r, lw, y, "ROMs", rd, true);
     } else {
         for (int i = 0; i < MEDIA_ITEM_COUNT; i++) {
             const char *path = media_path(ov, i);

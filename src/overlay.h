@@ -16,6 +16,7 @@ typedef enum {
     OV_DIALOG_DISK,   /* .d64 */
     OV_DIALOG_TAPE,   /* .tap */
     OV_DIALOG_CART,   /* .crt */
+    OV_DIALOG_ROM,    /* ROM directory (folder picker) */
 } OvDialogKind;
 
 typedef struct {
