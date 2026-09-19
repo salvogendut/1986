@@ -87,6 +87,7 @@ typedef struct {
 static const C128Trap g_serial_traps[] = {
     { 0xE569, 0xE572 },   /* Serial ready */
     { 0xE4F5, 0xE572 },   /* Serial ready */
+    { 0xE5BC, 0xE5C3 },   /* Serial ready poll (LDA $DC0D; AND #$08; BEQ) */
 };
 #define N_SERIAL_TRAPS (sizeof(g_serial_traps) / sizeof(g_serial_traps[0]))
 

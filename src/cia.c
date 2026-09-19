@@ -1,11 +1,8 @@
 #include "cia.h"
 #include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
 
-/* CIA interrupt control register bits. */
-#define CIA_ICR_TA   0x01   /* timer A underflow */
-#define CIA_ICR_IRQ  0x80   /* IRQ output line */
+#define CIA_ICR_TA    0x01   /* timer A underflow */
+#define CIA_ICR_IRQ   0x80   /* IRQ output line */
 
 void cia_init(Cia *c) {
     memset(c, 0, sizeof(*c));
@@ -19,6 +16,7 @@ void cia_reset(Cia *c) {
     c->imr = 0x00;
     c->ta_lo = c->ta_hi = c->tb_lo = c->tb_hi = 0x00;
     c->tod = 0x00;
+    c->cra = c->crb = 0x00;
     c->ta_latch = 0;
     c->ta_counter = 0;
     c->ta_running = false;
@@ -35,18 +33,17 @@ void cia_write(Cia *c, u16 addr, u8 val) {
         case 0x05: c->ta_hi = val; c->ta_latch = (u16)((c->ta_latch & 0x00FF) | (val << 8)); break;
         case 0x06: c->tb_lo = val; break;
         case 0x07: c->tb_hi = val; break;
-        case 0x0D: c->icr = val; break;   /* write: set/clear mask; clear ICR */
-        case 0x0E:
-            c->imr = val;
-            /* Bit 0 of CIA CR: 1 = start timer A, 0 = stop. On (re)load we
-             * copy the latch into the counter. */
-            if (val & 0x01) {
-                c->ta_running = true;
-                c->ta_counter = c->ta_latch;
-            } else {
-                c->ta_running = false;
-            }
+        case 0x0D:
+            /* ICR write sets/clears the interrupt MASK:
+             * bit 7 = 1 -> set the mask bits; bit 7 = 0 -> clear them. */
+            if (val & 0x80) c->imr |= (val & 0x7F);
+            else            c->imr &= (u8)~(val & 0x7F);
             break;
+        case 0x0E: c->cra = val;
+                   if (val & 0x01) { c->ta_running = true; c->ta_counter = c->ta_latch; }
+                   else            { c->ta_running = false; }
+                   break;
+        case 0x0F: c->crb = val; break;
         default: break;
     }
 }
@@ -62,23 +59,27 @@ u8 cia_read(Cia *c, u16 addr) {
         case 0x06: return c->tb_lo;
         case 0x07: return c->tb_hi;
         case 0x0D: { u8 v = c->icr; c->icr = 0; c->ta_underflow = false; return v; }
-        case 0x0E: return c->imr;
+        case 0x0E: return c->cra;
+        case 0x0F: return c->crb;
         default: return 0xFF;
     }
+}
+
+bool cia_irq_line(const Cia *c) {
+    return (c->icr & c->imr & 0x7F) != 0;
 }
 
 bool cia_tick(Cia *c, int cycles) {
     c->ta_underflow = false;
     if (!c->ta_running) return false;
-    /* Count down; on underflow set the ICR timer-A flag and reload. */
     if ((int)c->ta_counter > cycles) {
         c->ta_counter -= (u16)cycles;
         return false;
     }
+    /* Timer A underflow: set the flag, reload from the latch. */
     c->ta_counter = c->ta_latch;
-    /* Timer A underflow. The KERNAL's main loop polls ICR bit 3 (the
-     * level-triggered IRQ source), so assert that too. */
-    c->icr |= CIA_ICR_TA | CIA_ICR_IRQ | 0x08;
+    c->icr |= CIA_ICR_TA;
+    if (c->icr & c->imr & 0x7F) c->icr |= CIA_ICR_IRQ;
     c->ta_underflow = true;
-    return true;
+    return cia_irq_line(c);
 }

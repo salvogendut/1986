@@ -9,33 +9,29 @@ int c128_frame_count = 0;
 /* --- CPU bus: route CPU reads/writes through memory + I/O. --- */
 
 static u8 io_read(C128 *c, u16 addr) {
-    if (addr >= 0xD000 && addr < 0xD400) return vic_read(&c->vic, addr);
-    if (addr >= 0xD400 && addr < 0xD800) return sid_read(&c->sid, addr);
-    if (addr >= 0xD800 && addr < 0xDC00)
-        return c->mem.color_ram[addr & 0x3FF];   /* colour RAM nibble */
-    if (addr >= 0xD500 && addr < 0xD510 && c->mem.mmu.mmio)
-        return mmu_read(&c->mem.mmu, addr);
-    if (addr >= 0xDC00 && addr < 0xDD00) {
-        /* CIA1 keyboard scan: the KERNAL drives port A as the row output and
-         * reads port B for the columns. Return the pressed keys for the
-         * active row(s) (active-low, bit set = key released). */
-        if ((addr & 0x0F) == 0x01) {              /* port B = columns */
-            u8 rowsel = c->cia1.pra & ~c->cia1.ddra;   /* active rows */
+    u8 v;
+    if (addr >= 0xD000 && addr < 0xD400) v = vic_read(&c->vic, addr);
+    else if (addr >= 0xD400 && addr < 0xD800) v = sid_read(&c->sid, addr);
+    else if (addr >= 0xD800 && addr < 0xDC00) v = c->mem.color_ram[addr & 0x3FF];
+    else if (addr >= 0xD500 && addr < 0xD510 && c->mem.mmu.mmio) v = mmu_read(&c->mem.mmu, addr);
+    else if (addr >= 0xDC00 && addr < 0xDD00) {
+        /* CIA1 keyboard scan: port A = rows output, port B = columns input. */
+        if ((addr & 0x0F) == 0x01) {
+            u8 rowsel = c->cia1.pra & ~c->cia1.ddra;
             u8 cols = 0xFF;
-            for (int row = 0; row < KBD_ROWS; row++) {
-                if ((rowsel & (1 << row)) == 0)        /* row active-low */
-                    cols &= kbd_matrix(&c->kbd, row);
-            }
-            return cols;
+            for (int row = 0; row < KBD_ROWS; row++)
+                if ((rowsel & (1 << row)) == 0) cols &= kbd_matrix(&c->kbd, row);
+            v = cols;
+        } else {
+            v = cia_read(&c->cia1, addr);
         }
-        return cia_read(&c->cia1, addr);
     }
-    if (addr >= 0xDD00 && addr < 0xDE00) return cia_read(&c->cia2, addr);
-    if (addr >= 0xD600 && addr < 0xD700) {
-        if ((addr & 1) == 0) return vdc_read_data(&c->vdc); /* $D601 */
-        return 0xFF;
-    }
-    return 0xFF;
+    else if (addr >= 0xDD00 && addr < 0xDE00) v = cia_read(&c->cia2, addr);
+    else if (addr >= 0xD600 && addr < 0xD700)
+        v = ((addr & 1) == 0) ? vdc_read_data(&c->vdc) : 0xFF;
+    else v = 0xFF;
+
+    return v;
 }
 
 static void io_write(C128 *c, u16 addr, u8 val) {
@@ -126,16 +122,13 @@ void c128_reset(C128 *c) {
 }
 
 int c128_frame(C128 *c) {
-    /* Tick the CIA timers for one frame worth of cycles, then reflect the
-     * timer-A underflow on the IRQ line so the KERNAL's main loop advances. */
+    /* Tick the CIA1 timer and the VIC raster; assert the CPU IRQ line if
+     * either has a pending, masked interrupt. This drives the KERNAL's
+     * 50 Hz main loop. */
     int frame_cycles = c->fast ? 2 * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
-    if (cia_tick(&c->cia1, frame_cycles))
-        cpu_irq(&c->cpu, true);
-    else
-        cpu_irq(&c->cpu, false);
-    /* The KERNAL polls CIA1 ICR bit 3 (a level-triggered IEC/serial source)
-     * during its boot handshake; assert it each frame so the wait proceeds. */
-    c->cia1.icr |= 0x08;
+    cia_tick(&c->cia1, frame_cycles);
+    bool vic_irq = vic_tick(&c->vic);
+    cpu_irq(&c->cpu, cia_irq_line(&c->cia1) || vic_irq);
 
     /* Advance the 8502 for one frame worth of cycles (VICE core). */
     int cycles = cpu_step(&c->cpu);

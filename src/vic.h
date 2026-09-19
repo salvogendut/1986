@@ -27,6 +27,9 @@ typedef struct {
     u8  memory;        /* $D018-derived screen/char pointers */
     u16 screen_addr;   /* current screen RAM base (bank + pointer) */
     u16 char_addr;     /* current char ROM base */
+    u8  irq_status;    /* $D019 (bit 0 = raster, bit 7 = IRQ line) */
+    u8  irq_mask;      /* $D01A (bit 0 = raster IRQ enable) */
+    u8  raster_irq_line; /* raster line for the IRQ compare */
     u64  cycles;       /* raster cycle counter */
 } Vic;
 
@@ -34,5 +37,8 @@ void vic_init(Vic *v);
 void vic_reset(Vic *v);
 void vic_write(Vic *v, u16 addr, u8 val);
 u8   vic_read(Vic *v, u16 addr);
+/* Advance raster/IRQ state and return true if the raster IRQ line is now
+ * asserted. Called once per frame. */
+bool vic_tick(Vic *v);
 /* Render one full frame (raster 0..199) into the display buffer. */
 void vic_render(Vic *v, Mem *m, Display *d);

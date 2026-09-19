@@ -27,18 +27,23 @@ void vic_reset(Vic *v) {
     v->memory = 0;
     v->screen_addr = 0x0400;     /* default 40-col screen */
     v->char_addr = 0x1000;
+    v->irq_status = 0;
+    v->irq_mask = 0;
+    v->raster_irq_line = 0;
     v->cycles = 0;
 }
 
 void vic_write(Vic *v, u16 addr, u8 val) {
     switch (addr & 0x3F) {
         case 0x11: v->vmode = val; break;
-        case 0x12: v->raster = val; break;
+        case 0x12: v->raster = val; v->raster_irq_line = (u8)(v->raster_irq_line & 0x100) | val; break;
         case 0x16: v->ctrl1 = val; break;
         case 0x18: v->ctrl2 = val;
                    v->screen_addr = (u16)((val & 0xF0) << 6);
                    v->char_addr = (u16)((val & 0x0E) << 9);
                    break;
+        case 0x19: v->irq_status &= (u8)~(val & 0x1F); break;   /* clear IRQ status bits */
+        case 0x1A: v->irq_mask = val & 0x1F; break;
         case 0x20: v->border_color = val & 0x0F; break;
         case 0x21: v->bg_color[0] = val & 0x0F; break;
         case 0x22: v->bg_color[1] = val & 0x0F; break;
@@ -62,10 +67,29 @@ u8 vic_read(Vic *v, u16 addr) {
         case 0x12: return (u8)(raster & 0xFF);
         case 0x16: return v->ctrl1;
         case 0x18: return v->ctrl2;
+        case 0x19: return v->irq_status;
+        case 0x1A: return v->irq_mask;
         case 0x20: return v->border_color;
         case 0x21: return v->bg_color[0];
         default: return 0xFF;
     }
+}
+
+/* Check the raster IRQ compare once per frame. */
+bool vic_tick(Vic *v) {
+    unsigned raster = vic_raster(v);
+    if ((raster & 0xFF) == (v->raster_irq_line & 0xFF)) {
+        if (v->irq_status & 0x01) {
+            /* already pending */
+        } else {
+            v->irq_status |= 0x01;   /* raster IRQ flag */
+        }
+    }
+    if (v->irq_status & v->irq_mask & 0x01)
+        v->irq_status |= 0x80;       /* IRQ line */
+    else
+        v->irq_status &= 0x7F;
+    return (v->irq_status & 0x80) != 0;
 }
 
 /* Render the 40x25 character screen into the display buffer. */

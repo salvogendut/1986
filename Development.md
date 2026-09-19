@@ -66,30 +66,32 @@ ported behind the project's `CpuBus` seam:
 - Memory mapping follows VICE's C128 config-register semantics (raw `$D500`
   -> config index -> RAM/ROM per region) in `mem.c`.
 
-## Status: boots to the BASIC banner
+## Status: boots to BASIC READY
 
 With a real C128DCR ROM set (`roms/kernal.bin`, `roms/basic.bin`,
 `roms/chargen.bin`), the 8502 executes the reset vector (`$FF3D`), runs the
-KERNAL cold start (MMU init at `$D500`), and BASIC 7.0 boots and renders its
-banner:
+KERNAL cold start, and BASIC 7.0 boots to the `READY.` prompt:
 
 ```
 COMMODORE BASIC V7.0  122365 BYTES FREE
 (C)1986 COMMODORE ELECTRONICS, LTD.
 (C)1977 MICROSOFT CORP.
 ALL RIGHTS RESERVED
+
+READY.
 ```
 
-The KERNAL's IEC serial-bus (disk) routines are intercepted with ROM traps
-(`cpu_install_serial_traps`, mirroring VICE's `serial_trap_ready`) so the boot
-does not block on the serial port. The CIA1 keyboard scan is wired (port A =
-rows output, port B = columns read via the kbd matrix). After the banner the
-boot enters the KERNAL's screen-editor main loop, but during the transition
-the stack corrupts: an `RTI` returns to a bad bank address (`$081B`) and the
-CPU fetches a `0x00` (BRK), dropping into the C128 machine monitor (`BREAK`).
-The keyboard scan delayed this but did not eliminate it — the KERNAL's IRQ
-handler still corrupts the stack because the CIA timers/VIC raster it drives
-are stubbed. Reaching `READY.` needs the full CIA timer + VIC raster emulation.
+This is driven by:
+- The IEC serial-bus ROM traps (`cpu_install_serial_traps`, mirroring VICE's
+  `serial_trap_ready`) so the boot doesn't block on the disk/serial bus.
+- Correct MOS 6526 CIA semantics: `$DC0D` reads the interrupt flags and writes
+  the mask, `$DC0E` is timer-A control; timer-A underflow sets ICR bit 0 and
+  asserts the IRQ line when masked.
+- The VIC-IIe raster IRQ: `$D012` compare, `$D019` status, `$D01A` mask.
+- Both IRQ sources wired to the CPU, driving the KERNAL's 50 Hz main loop.
+
+The CIA1 keyboard scan is wired (port A rows / port B columns). The 40x25
+text renderer draws screen RAM, colour RAM and chargen.
 
 Visual check (saves a PPM at frame 60):
 ```bash
@@ -98,11 +100,11 @@ SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
 
 ## Roadmap
 
-1. **Boot to BASIC READY** — implement the CIA keyboard scan and VIC raster
-   IRQ so the KERNAL's screen-editor main loop runs without corrupting the
-   stack (currently an `RTI` returns to a bad bank and the monitor appears).
+1. **Keyboard input** — wire host keys into the C128 keyboard matrix so
+   commands can be typed at the `READY.` prompt.
 2. **VIC-IIe raster** — per-line raster/IRQ timing and sprite/bitmap modes.
-3. **CIA timers + IRQs** — full timer/port emulation and the keyboard matrix.
+3. **CIA timers + IRQs** — full timer/port emulation (timer B cascade, TOD,
+   serial).
 4. **VDC 8563** — render the 80-column framebuffer.
 5. **SID audio** — three-voice render + SDL3 audio stream.
 6. **1571 drives** — disk images (D64/D81), the C128's fast serial.
