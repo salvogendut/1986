@@ -158,10 +158,12 @@ int c128_frame(C128 *c) {
     c->total_cycles += (u64)total;
     c128_frame_count++;
 
-    /* Render the VIC-IIe frame (40-column). The 8563 VDC framebuffer is
-     * rendered only when the KERNAL actively drives it (80-col mode); the
-     * C128 boots to the 40-col VIC. */
+    /* Render the VIC-IIe frame (40-column) and the VDC 8563 (80-column)
+     * framebuffer every frame. The active display is selected from the
+     * KERNAL's 40/80 mode flag ($00D7: 0 = 40-col, non-zero = 80-col). */
     vic_render(&c->vic, &c->mem, &c->display);
+    vdc_render(&c->vdc, c->display.vdc_pixels, VDC_SCREEN_W, VDC_SCREEN_H);
+    c->display.vdc_active = (c->mem.ram[0x00D7] != 0);
     return total;
 }
 

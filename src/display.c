@@ -68,6 +68,14 @@ int display_init(Display *d, const char *title, int scale) {
         return -1;
     }
 
+    d->vdc_texture = SDL_CreateTexture(d->renderer,
+        SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING,
+        VDC_SCREEN_W, VDC_SCREEN_H);
+    if (!d->vdc_texture) {
+        fprintf(stderr, "SDL_CreateTexture (VDC): %s\n", SDL_GetError());
+        return -1;
+    }
+
     memset(d->pixels, 0, sizeof(d->pixels));
     d->crt_scanlines = DISPLAY_CRT_SCANLINES_DEFAULT;
     d->crt_brightness = DISPLAY_CRT_BRIGHTNESS_DEFAULT;
@@ -95,7 +103,57 @@ void display_set_crt(Display *d, bool enabled, int scanlines, int brightness,
     d->crt_blue = clamp_int(blue, 50, 150);
 }
 
+/* Create or destroy the separate VDC (80-column) window used in two-window
+ * mode. The VDC shares the main window when one_display is true. */
+void display_set_one_display(Display *d, bool one) {
+    d->one_display = one;
+    if (one) {
+        if (d->vdc_window_texture) SDL_DestroyTexture(d->vdc_window_texture);
+        if (d->vdc_renderer) SDL_DestroyRenderer(d->vdc_renderer);
+        if (d->vdc_window)   SDL_DestroyWindow(d->vdc_window);
+        d->vdc_window_texture = NULL;
+        d->vdc_renderer = NULL;
+        d->vdc_window   = NULL;
+        return;
+    }
+    if (d->vdc_window) return;   /* already open */
+    d->vdc_window = SDL_CreateWindow("1986 — VDC 8563 (80-column)",
+                                     VDC_SCREEN_W, VDC_SCREEN_H,
+                                     SDL_WINDOW_RESIZABLE);
+    if (!d->vdc_window) {
+        fprintf(stderr, "SDL_CreateWindow (VDC): %s\n", SDL_GetError());
+        return;
+    }
+    d->vdc_renderer = SDL_CreateRenderer(d->vdc_window, NULL);
+    if (!d->vdc_renderer) {
+        fprintf(stderr, "SDL_CreateRenderer (VDC): %s\n", SDL_GetError());
+        SDL_DestroyWindow(d->vdc_window);
+        d->vdc_window = NULL;
+        return;
+    }
+    d->vdc_window_texture = SDL_CreateTexture(d->vdc_renderer,
+        SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING,
+        VDC_SCREEN_W, VDC_SCREEN_H);
+    if (!d->vdc_window_texture) {
+        fprintf(stderr, "SDL_CreateTexture (VDC window): %s\n", SDL_GetError());
+        SDL_DestroyRenderer(d->vdc_renderer);
+        SDL_DestroyWindow(d->vdc_window);
+        d->vdc_renderer = NULL;
+        d->vdc_window = NULL;
+    }
+}
+
+void display_set_vdc_active(Display *d, bool active) {
+    d->vdc_active = active;
+}
+
+bool display_vdc_window_open(const Display *d) {
+    return d->vdc_window != NULL;
+}
+
 void display_destroy(Display *d) {
+    display_set_one_display(d, true);   /* destroy the VDC window if open */
+    if (d->vdc_texture) SDL_DestroyTexture(d->vdc_texture);
     if (d->texture)  SDL_DestroyTexture(d->texture);
     if (d->renderer) SDL_DestroyRenderer(d->renderer);
     if (d->window)   SDL_DestroyWindow(d->window);
@@ -137,14 +195,25 @@ void display_upload(Display *d) {
     int area_h = wh - bar_h;
     if (area_h < 1) area_h = 1;
 
-    /* Fit the 384x272 VIC-II screen (with border) into (ww x area_h),
-     * maintaining the WINDOW_W:WINDOW_H aspect ratio. */
+    /* Which output fills the main window: the VDC when in one-display mode
+     * and 80-column is active, otherwise the VIC. */
+    bool show_vdc = d->one_display && d->vdc_active;
+    SDL_Texture *tex   = show_vdc ? d->vdc_texture : d->texture;
+    int          tex_w = show_vdc ? VDC_SCREEN_W : C128_SCREEN_W;
+    int          tex_h = show_vdc ? VDC_SCREEN_H : C128_SCREEN_H;
+
+    SDL_UpdateTexture(d->texture, NULL, display_crt_pixels(d),
+                      C128_SCREEN_W * sizeof(u32));
+    SDL_UpdateTexture(d->vdc_texture, NULL, d->vdc_pixels,
+                      VDC_SCREEN_W * sizeof(u32));
+
+    /* Fit into (ww x area_h) maintaining the texture's aspect ratio. */
     int dst_w = ww;
     int dst_h = area_h;
-    if (dst_w * WINDOW_H > dst_h * WINDOW_W)
-        dst_w = dst_h * WINDOW_W / WINDOW_H;
+    if (dst_w * tex_h > dst_h * tex_w)
+        dst_w = dst_h * tex_w / tex_h;
     else
-        dst_h = dst_w * WINDOW_H / WINDOW_W;
+        dst_h = dst_w * tex_h / tex_w;
     SDL_FRect dst = {
         (float)(ww - dst_w) / 2,
         (float)(area_h - dst_h) / 2,
@@ -152,13 +221,11 @@ void display_upload(Display *d) {
         (float)dst_h
     };
 
-    SDL_UpdateTexture(d->texture, NULL, display_crt_pixels(d),
-                      C128_SCREEN_W * sizeof(u32));
-    SDL_SetTextureColorMod(d->texture, 255, 255, 255);
+    SDL_SetTextureColorMod(tex, 255, 255, 255);
     SDL_SetRenderDrawColor(d->renderer, 0, 0, 0, 255);
     SDL_RenderClear(d->renderer);
-    SDL_RenderTexture(d->renderer, d->texture, NULL, &dst);
-    if (d->crt_enabled && d->crt_scanlines > 0) {
+    SDL_RenderTexture(d->renderer, tex, NULL, &dst);
+    if (!show_vdc && d->crt_enabled && d->crt_scanlines > 0) {
         Uint8 alpha = (Uint8)((d->crt_scanlines * 255 + 50) / 100);
         SDL_SetRenderDrawBlendMode(d->renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(d->renderer, 0, 0, 0, alpha);
@@ -169,10 +236,31 @@ void display_upload(Display *d) {
         }
     }
     leds_render(d->renderer, 0, wh - bar_h, ww, bar_h);
+
+    /* Separate VDC window (two-window mode). */
+    if (!d->one_display && d->vdc_window) {
+        int vw, vh;
+        SDL_GetWindowSize(d->vdc_window, &vw, &vh);
+        SDL_UpdateTexture(d->vdc_window_texture, NULL, d->vdc_pixels,
+                          VDC_SCREEN_W * sizeof(u32));
+        int vdst_w = vw, vdst_h = vh;
+        if (vdst_w * VDC_SCREEN_H > vdst_h * VDC_SCREEN_W)
+            vdst_w = vdst_h * VDC_SCREEN_W / VDC_SCREEN_H;
+        else
+            vdst_h = vdst_w * VDC_SCREEN_H / VDC_SCREEN_W;
+        SDL_FRect vdst = {
+            (float)(vw - vdst_w) / 2, (float)(vh - vdst_h) / 2,
+            (float)vdst_w, (float)vdst_h
+        };
+        SDL_SetRenderDrawColor(d->vdc_renderer, 0, 0, 0, 255);
+        SDL_RenderClear(d->vdc_renderer);
+        SDL_RenderTexture(d->vdc_renderer, d->vdc_window_texture, NULL, &vdst);
+    }
 }
 
 void display_flip(Display *d) {
     SDL_RenderPresent(d->renderer);
+    if (d->vdc_renderer) SDL_RenderPresent(d->vdc_renderer);
 }
 
 void display_apply_greyscale(Display *d) {

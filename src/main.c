@@ -147,6 +147,7 @@ int main(int argc, char **argv) {
     display_set_crt(&c.display, cfg.crt_enabled, cfg.crt_scanlines,
                     cfg.crt_brightness, cfg.crt_contrast,
                     cfg.crt_red, cfg.crt_green, cfg.crt_blue);
+    display_set_one_display(&c.display, cfg.one_display);
     if (cfg.fullscreen) SDL_SetWindowFullscreen(c.display.window, true);
 
     /* Load ROMs into the machine (optional at this stage). Default to the
