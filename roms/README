@@ -1,0 +1,26 @@
+# 1986 machine ROMs
+#
+# Drop the machine ROM images into this directory (or point --rom at a
+# directory that holds them) and the emulator loads them by name. A full
+# C128DCR set is two 32K dumps:
+#
+#   kernal.bin   0x4000 bytes — KERNAL + EDITOR + Z80-BIOS (VICE-split)
+#                 from the C128DCR ROM chip (e.g. MAME 318022-02.u34):
+#                   [0x0000..0x0FFF]  EDITOR    -> $C000-$CFFF
+#                   [0x1000..0x1FFF]  Z80-BIOS  -> $D000-$DFFF (CP/M)
+#                   [0x2000..0x3FFF]  KERNAL    -> $E000-$FFFF
+#   basic.bin    0x4000 bytes — BASIC 7.0 low + high halves
+#                 from the C128DCR ROM chip (e.g. MAME 318023-02.u32):
+#                   [0x0000..0x3FFF]  BASIC low -> $4000-$7FFF
+#                   [0x4000..0x7FFF]  BASIC high-> $8000-$BFFF
+#   chargen.bin  0x1000 bytes — the C128 character generator (optional)
+#
+# These ROMs are copyright Commodore and are not redistributed here. Obtain
+# them from a source you are entitled to use (for example by dumping your own
+# machine or using a MAME/VICE set). The emulator runs and renders its test
+# pattern without them.
+#
+# Current status: the 8502 core executes the reset vector and runs into the
+# C128 memory space (it reaches BASIC's address area), but a stable boot
+# needs the full VICE 8502 core and the real C128 MMU banking — see
+# DEVELOPMENT.md.

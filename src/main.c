@@ -1,0 +1,298 @@
+#include <SDL3/SDL.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <time.h>
+#include <libgen.h>
+#include "config.h"
+#include "overlay.h"
+#include "c128.h"
+#include "paste.h"
+#include "monitor.h"
+#include "gifcap.h"
+#include "notify.h"
+#include "leds.h"
+#include "compat_win.h"
+#include "startup_debug.h"
+
+/* notify.c forward-declares this debug master switch (defined in the
+ * machine file in the reference tree); provide it here so the module links. */
+int g_debug_enabled = 0;
+
+/* Boot-progress trace enabled with C128_BOOT_TRACE=1. */
+static bool g_boot_trace = false;
+
+/* --- Video capture state (F6). --- */
+static GifCap  *g_videocap_gif = NULL;
+static uint64_t g_videocap_gif_interval_ns = 0;
+static uint64_t g_videocap_gif_elapsed_ns = 0;
+static bool     g_videocap_gif_first = false;
+
+static bool videocap_active(void) { return g_videocap_gif != NULL; }
+
+static bool videocap_start(const char *path, int gif_width, int gif_fps) {
+    if (!path || !path[0] || videocap_active()) return false;
+    if (gif_fps < 1) gif_fps = 25;
+    int delay_cs = 100 / gif_fps;
+    g_videocap_gif = gifcap_open(path, C128_SCREEN_W, C128_SCREEN_H,
+                                 gif_width, (gif_width * 5) / 8, delay_cs);
+    if (!g_videocap_gif) {
+        fprintf(stderr, "[videocap] GIF open failed for '%s'\n", path);
+        return false;
+    }
+    g_videocap_gif_interval_ns = 1000000000ULL / (uint64_t)gif_fps;
+    g_videocap_gif_elapsed_ns = 0;
+    g_videocap_gif_first = true;
+    fprintf(stderr, "[videocap] recording to %s\n", path);
+    return true;
+}
+
+static void videocap_stop(void) {
+    if (g_videocap_gif) {
+        int n = gifcap_frame_count(g_videocap_gif);
+        gifcap_close(g_videocap_gif);
+        g_videocap_gif = NULL;
+        fprintf(stderr, "[videocap] GIF stopped (%d frames)\n", n);
+    }
+}
+
+static bool videocap_gif_due(uint64_t emulated_frame_ns) {
+    if (g_videocap_gif_first) { g_videocap_gif_first = false; return true; }
+    g_videocap_gif_elapsed_ns += emulated_frame_ns;
+    if (g_videocap_gif_elapsed_ns < g_videocap_gif_interval_ns) return false;
+    g_videocap_gif_elapsed_ns %= g_videocap_gif_interval_ns;
+    return true;
+}
+
+static void usage(const char *argv0) {
+    fprintf(stderr,
+        "1986 — Commodore C128DCR emulator (scaffolding)\n"
+        "Usage: %s [options]\n"
+        "  --scale N        window scale (1..4, default 2)\n"
+        "  --fullscreen     start fullscreen\n"
+        "  --fast           run the 8502 at 2 MHz\n"
+        "  --rom DIR        directory holding the machine ROM images\n"
+        "  --gif-out PATH   start recording a GIF at launch\n"
+        "  --help           this message\n"
+        "\n"
+        "  F4     Screenshot (PPM)\n"
+        "  F5     Reset\n"
+        "  F6     Toggle GIF capture\n"
+        "  F8     Monitor\n"
+        "  F9     Options overlay\n"
+        "  F10    Pause\n"
+        "  F11    Toggle fullscreen\n"
+        "  F12    Quit\n"
+        "  Ctrl+V Paste clipboard text\n"
+        "  Ctrl++ / Ctrl+- Adjust window scale\n",
+        argv0);
+}
+
+int main(int argc, char **argv) {
+    Config cfg;
+    config_set_defaults(&cfg);
+    const char *rom_dir = NULL;
+    const char *gif_out = NULL;
+
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--scale") && i + 1 < argc) cfg.scale = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--fullscreen")) cfg.fullscreen = true;
+        else if (!strcmp(argv[i], "--fast")) cfg.fast = true;
+        else if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom_dir = argv[++i];
+        else if (!strcmp(argv[i], "--gif-out") && i + 1 < argc) gif_out = argv[++i];
+        else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
+        else if (argv[i][0] == '-') { usage(argv[0]); return 1; }
+    }
+
+    /* Load user config (overrides defaults; command-line flags above still win). */
+    config_load(&cfg, CONFIG_NAME);
+    if (rom_dir) snprintf(cfg.rom_dir, sizeof(cfg.rom_dir), "%s", rom_dir);
+    g_boot_trace = getenv("C128_BOOT_TRACE") != NULL;
+
+    net_compat_init();  /* WSAStartup on Windows; no-op elsewhere */
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+        fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
+        return 1;
+    }
+    atexit(SDL_Quit);
+
+    notify_init();
+
+    C128 c;
+    c128_init(&c, &cfg);
+
+    if (display_init(&c.display, "1986 — Commodore C128DCR", cfg.scale) != 0) {
+        fprintf(stderr, "display_init failed\n");
+        return 1;
+    }
+    display_set_smoothing(&c.display, cfg.smoothing);
+    display_set_crt(&c.display, cfg.crt_enabled, cfg.crt_scanlines,
+                    cfg.crt_brightness, cfg.crt_contrast,
+                    cfg.crt_red, cfg.crt_green, cfg.crt_blue);
+    if (cfg.fullscreen) SDL_SetWindowFullscreen(c.display.window, true);
+
+    /* Load ROMs into the machine (optional at this stage). */
+    {
+        const char *dir = cfg.rom_dir[0] ? cfg.rom_dir : ROM_INSTALL_DIR;
+        int n = mem_load_c128_roms(&c.mem, dir);
+        if (n == 0)
+            fprintf(stderr, "1986: no C128DCR ROMs found in '%s' (boot will not start)\n", dir);
+        else
+            fprintf(stderr, "1986: loaded %d ROM image(s) from '%s'\n", n, dir);
+    }
+
+    Overlay overlay;
+    overlay_init(&overlay, &cfg, &c);
+
+    Monitor *monitor = monitor_create(&c);
+    Paste paste;
+    paste_init(&paste);
+
+    if (gif_out) videocap_start(gif_out, cfg.gif_width, cfg.gif_fps);
+
+    bool running = true;
+    bool fullscreen = cfg.fullscreen;
+    bool paused = false;
+    int  mouse_captured = 0;
+    uint64_t next_frame = 0;
+
+    while (running) {
+        /* --- Event processing --- */
+        SDL_Event ev;
+        while (SDL_PollEvent(&ev)) {
+            if (ev.type == SDL_EVENT_QUIT) {
+                running = false;
+            } else if (ev.type == SDL_EVENT_WINDOW_RESIZED ||
+                       ev.type == SDL_EVENT_WINDOW_SHOWN) {
+                /* Nothing special — renderer resizes automatically. */
+            } else if (ev.type == SDL_EVENT_MOUSE_MOTION) {
+                leds_set_mouse_position(ev.motion.x, ev.motion.y, true);
+            } else if (ev.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
+                leds_set_mouse_position(0, 0, false);
+            } else if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+                if (!paused && !overlay_is_visible(&overlay) && mouse_captured) {
+                    /* placeholder: joystick/mouse later */
+                }
+            } else if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+                /* placeholder */
+            }
+
+            if (monitor_handle_event(monitor, &ev)) continue;
+
+            /* F9 opens overlay — release mouse capture first. */
+            if (mouse_captured && ev.type == SDL_EVENT_KEY_DOWN &&
+                ev.key.scancode == SDL_SCANCODE_F9)
+                mouse_captured = 0;
+
+            if (overlay_handle_event(&overlay, &ev)) continue;
+
+            if (ev.type == SDL_EVENT_KEY_DOWN) {
+                bool ctrl = (ev.key.mod & SDL_KMOD_CTRL) != 0;
+                bool key_plus  = (ev.key.scancode == SDL_SCANCODE_EQUALS ||
+                                  ev.key.scancode == SDL_SCANCODE_KP_PLUS);
+                bool key_minus = (ev.key.scancode == SDL_SCANCODE_MINUS ||
+                                  ev.key.scancode == SDL_SCANCODE_KP_MINUS);
+                if (ctrl && (key_plus || key_minus)) {
+                    cfg.scale += key_plus ? 1 : -1;
+                    if (cfg.scale < 1) cfg.scale = 1;
+                    if (cfg.scale > 4) cfg.scale = 4;
+                    SDL_SetWindowSize(c.display.window,
+                                      WINDOW_W * cfg.scale,
+                                      WINDOW_H * cfg.scale + LED_BAR_HEIGHT);
+                    continue;
+                }
+                if (ev.key.scancode == SDL_SCANCODE_F12) {
+                    running = false;
+                } else if (ev.key.scancode == SDL_SCANCODE_F8) {
+                    if (monitor_is_open(monitor))
+                        monitor_handle_event(monitor,
+                            &(SDL_Event){.type = SDL_EVENT_WINDOW_CLOSE_REQUESTED,
+                                         .window.windowID = monitor_window_id(monitor)});
+                    else
+                        monitor_open(monitor);
+                } else if (ev.key.scancode == SDL_SCANCODE_F11) {
+                    fullscreen = !fullscreen;
+                    SDL_SetWindowFullscreen(c.display.window, fullscreen);
+                } else if (ev.key.scancode == SDL_SCANCODE_F4) {
+                    char path[256];
+                    char tmp[256];
+                    strncpy(tmp, argv[0], sizeof(tmp) - 1);
+                    tmp[sizeof(tmp) - 1] = '\0';
+                    snprintf(path, sizeof(path), "%s_%ld.ppm",
+                             basename(tmp), (long)time(NULL));
+                    display_save_ppm(&c.display, path);
+                } else if (ev.key.scancode == SDL_SCANCODE_F5) {
+                    c128_reset(&c);
+                } else if (ev.key.scancode == SDL_SCANCODE_F6) {
+                    if (videocap_active()) {
+                        videocap_stop();
+                    } else {
+                        char path[256];
+                        time_t t = time(NULL);
+                        struct tm *lt = localtime(&t);
+                        if (lt) strftime(path, sizeof(path),
+                                         "1986-%Y%m%d-%H%M%S.gif", lt);
+                        else snprintf(path, sizeof(path), "1986-capture.gif");
+                        videocap_start(path, cfg.gif_width, cfg.gif_fps);
+                    }
+                } else if (ev.key.scancode == SDL_SCANCODE_F10) {
+                    paused = !paused;
+                    c.paused = paused;
+                } else if (ev.key.scancode == SDL_SCANCODE_V &&
+                           (SDL_GetModState() & SDL_KMOD_CTRL)) {
+                    char *text = SDL_GetClipboardText();
+                    if (text) { paste_text(&paste, text); SDL_free(text); }
+                } else {
+                    c128_key_event(&c, ev.key.scancode, true);
+                }
+            } else if (ev.type == SDL_EVENT_KEY_UP) {
+                c128_key_event(&c, ev.key.scancode, false);
+            }
+        }
+
+        /* --- Paste injection (one key per frame) --- */
+        paste_tick(&paste, &c.kbd);
+
+        /* --- Machine step --- */
+        if (!paused) {
+            int cycles = c128_frame(&c);
+            uint64_t emulated_frame_ns = c128_cycles_to_ns(&c, cycles);
+
+            /* Optional boot-progress trace (C128_BOOT_TRACE=1). */
+            if (g_boot_trace && (c128_frame_count % 10) == 0) {
+                const Cpu8502 *cpu = &c.cpu;
+                fprintf(stderr, "[boot] frame=%d PC=%04X A=%02X X=%02X Y=%02X "
+                        "SP=%02X P=%02X cycles=%llu\n",
+                        c128_frame_count, cpu->pc, cpu->a, cpu->x, cpu->y,
+                        cpu->sp, cpu->p, (unsigned long long)cpu->cycles);
+            }
+
+            /* Pace to the emulated frame time. */
+            uint64_t now = SDL_GetTicksNS();
+            if (next_frame == 0) next_frame = now;
+            if (now < next_frame) SDL_Delay((Uint32)((next_frame - now) / 1000000ULL));
+            next_frame += emulated_frame_ns;
+
+            if (g_videocap_gif && videocap_gif_due(emulated_frame_ns))
+                gifcap_frame(g_videocap_gif, c.display.pixels);
+        } else {
+            display_apply_greyscale(&c.display);
+        }
+
+        /* --- Frame present --- */
+        display_upload(&c.display);
+        overlay_render(&overlay, c.display.renderer);
+        if (paused) display_draw_paused_label(&c.display);
+        display_flip(&c.display);
+        if (monitor_is_open(monitor)) monitor_render(monitor);
+    }
+
+    if (videocap_active()) videocap_stop();
+    paste_free(&paste);
+    monitor_destroy(monitor);
+    overlay_quit(&overlay);
+    display_destroy(&c.display);
+    return 0;
+}

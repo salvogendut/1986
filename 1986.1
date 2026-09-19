@@ -1,0 +1,71 @@
+.TH 1986 1 "September 2026" "1986 0.1.0" "User Commands"
+.SH NAME
+1986 \- Commodore C128DCR emulator
+.SH SYNOPSIS
+.B 1986
+[\fIoptions\fR]
+.SH DESCRIPTION
+.B 1986
+is a work-in-progress emulator of the Commodore C128DCR computer. It reuses
+the SDL3 display, function-key, and options-overlay conventions of the
+sibling projects (1983, 1984, 1985), the Z80 core for CP/M mode, and takes
+its 8502 (6502-like) CPU core from the reference VICE SDL port.
+.SH OPTIONS
+.TP
+\fB\-\-scale\fR N
+Window scale factor (1..4). Default 2.
+.TP
+\fB\-\-fullscreen\fR
+Start fullscreen.
+.TP
+\fB\-\-fast\fR
+Run the 8502 at 2 MHz (C128 fast mode).
+.TP
+\fB\-\-rom\fR DIR
+Directory holding the machine ROM images (kernal.rom, basic.rom, chargen.rom).
+.TP
+\fB\-\-gif\-out\fR PATH
+Start recording an animated GIF at launch.
+.TP
+\fB\-\-help\fR
+Show this help and exit.
+.SH KEYS
+.TP
+.B F4
+Save a PPM screenshot.
+.TP
+.B F5
+Reset.
+.TP
+.B F6
+Toggle animated GIF recording.
+.TP
+.B F8
+Monitor.
+.TP
+.B F9
+Open the options overlay (save-and-close with F9, discard with Esc).
+.TP
+.B F10
+Pause/resume.
+.TP
+.B F11
+Toggle fullscreen.
+.TP
+.B F12
+Quit.
+.TP
+.B Ctrl+V
+Paste host clipboard text.
+.TP
+.B Ctrl++ / Ctrl+-
+Adjust window scale.
+.SH FILES
+.TP
+.I 1986.conf
+Per-user configuration written by the options overlay.
+.SH SEE ALSO
+.BR SDL3 (3)
+.SH BUGS
+This is scaffolding: the 8502 core is a subset and the VIC/VDC/CIAs/SID are
+stubs. See DEVELOPMENT.md for the roadmap.

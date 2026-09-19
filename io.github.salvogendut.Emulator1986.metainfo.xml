@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.salvogendut.Emulator1986</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>1986</name>
+  <summary>Commodore C128DCR emulator</summary>
+  <description>
+    <p>1986 is an emulator of the Commodore C128DCR computer. It reuses the
+    SDL3 display, function-key, and options-overlay conventions of the
+    sibling projects (1983, 1984, 1985), the Z80 core for CP/M mode, and
+    takes its 8502 (6502-like) CPU core from the reference VICE SDL port.</p>
+  </description>
+  <launchable type="desktop-id">io.github.salvogendut.Emulator1986.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-09-19"/>
+  </releases>
+  <categories>
+    <category>Game</category>
+  </categories>
+  <keywords>
+    <keyword>commodore</keyword>
+    <keyword>c128</keyword>
+    <keyword>emulator</keyword>
+  </keywords>
+</component>

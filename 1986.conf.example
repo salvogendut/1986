@@ -1,0 +1,27 @@
+# 1986 configuration
+# This file is written by the options overlay (F9 -> save).
+
+scale = 2
+fullscreen = 0
+smoothing = 0
+
+# CRT / video
+crt = 0
+crt_scanlines = 35
+crt_brightness = 100
+crt_contrast = 100
+crt_red = 100
+crt_green = 100
+crt_blue = 100
+
+# Machine
+model = 0
+fast = 0
+
+# F6 GIF capture
+gif_width = 320
+gif_fps = 25
+gif_ffmpeg = 0
+
+# Directory holding the machine ROM images (kernal.rom, basic.rom, chargen.rom)
+rom_dir =
