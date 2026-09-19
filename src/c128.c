@@ -34,7 +34,7 @@ static u8 io_read(C128 *c, u16 addr) {
     }
     else if (addr >= 0xDD00 && addr < 0xDE00) v = cia_read(&c->cia2, addr);
     else if (addr >= 0xD600 && addr < 0xD700)
-        v = ((addr & 1) == 0) ? vdc_read_data(&c->vdc) : 0xFF;
+        v = ((addr & 1) == 0) ? vdc_read_status(&c->vdc) : vdc_read_data(&c->vdc);
     else v = 0xFF;
 
     return v;
@@ -154,7 +154,9 @@ int c128_frame(C128 *c) {
     c->total_cycles += (u64)total;
     c128_frame_count++;
 
-    /* Render the VIC-IIe frame. */
+    /* Render the VIC-IIe frame (40-column). The 8563 VDC framebuffer is
+     * rendered only when the KERNAL actively drives it (80-col mode); the
+     * C128 boots to the 40-col VIC. */
     vic_render(&c->vic, &c->mem, &c->display);
     return total;
 }
