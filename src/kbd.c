@@ -31,7 +31,8 @@ u8 kbd_matrix(const Kbd *k, int row) {
  * positions must be exactly right. Rows are driven by CIA1 port A (active
  * low), columns are read on CIA1 port B (active low).
  */
-bool kbd_map_scancode(int scancode, int *row, int *col) {
+bool kbd_map_scancode(int scancode, int *row, int *col, bool *shift) {
+    *shift = false;
     /* Letters */
     switch (scancode) {
         case SDL_SCANCODE_A: *row = 1; *col = 2; return true;
@@ -109,10 +110,10 @@ bool kbd_map_scancode(int scancode, int *row, int *col) {
         case SDL_SCANCODE_F2:       *row = 0; *col = 5; return true;    /* F3 */
         case SDL_SCANCODE_F3:       *row = 0; *col = 6; return true;    /* F5 */
         case SDL_SCANCODE_F4:       *row = 0; *col = 3; return true;    /* F7 */
-        case SDL_SCANCODE_UP:       *row = 0; *col = 7; return true;    /* cursor up/down */
-        case SDL_SCANCODE_DOWN:     *row = 0; *col = 7; return true;
-        case SDL_SCANCODE_LEFT:     *row = 0; *col = 2; return true;    /* cursor left/right */
-        case SDL_SCANCODE_RIGHT:    *row = 0; *col = 2; return true;
+        case SDL_SCANCODE_UP:       *row = 0; *col = 7; *shift = true; return true;    /* cursor up (shifted Down) */
+        case SDL_SCANCODE_DOWN:     *row = 0; *col = 7; return true;                   /* cursor down */
+        case SDL_SCANCODE_LEFT:     *row = 0; *col = 2; *shift = true; return true;    /* cursor left (shifted Right) */
+        case SDL_SCANCODE_RIGHT:    *row = 0; *col = 2; return true;                   /* cursor right */
         case SDL_SCANCODE_HOME:     *row = 6; *col = 3; return true;    /* CLR/HOME */
         default: return false;
     }
