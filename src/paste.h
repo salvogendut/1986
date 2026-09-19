@@ -8,7 +8,6 @@ typedef struct {
     int   pos;      /* index of next character to inject */
     int   timer;    /* frames to wait before next action */
     bool  held;     /* true while the current key is pressed */
-    int   last_scancode;
 } Paste;
 
 void paste_init(Paste *p);
@@ -18,5 +17,9 @@ void paste_free(Paste *p);
  * Auto-appends a newline so single-shot commands fire on their own. */
 void paste_text(Paste *p, const char *text);
 
-/* Call once per frame before c128_frame(); injects one key at a time. */
+/* Like paste_text but does NOT append a newline. Streams text verbatim — the
+ * caller is responsible for sending \r itself when it wants Enter pressed. */
+void paste_text_raw(Paste *p, const char *text);
+
+/* Call once per frame before c128_frame(); injects one key event at a time. */
 void paste_tick(Paste *p, Kbd *k);
