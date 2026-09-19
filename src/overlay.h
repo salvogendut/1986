@@ -7,6 +7,7 @@
 typedef enum {
     OV_GENERAL = 0,
     OV_MEDIA,
+    OV_ADVANCED,   /* shown only when Config.tinker is enabled */
     OV_SECTION_COUNT
 } OvSection;
 
