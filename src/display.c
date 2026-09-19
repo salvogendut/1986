@@ -186,6 +186,36 @@ void display_finalize_frame(Display *d, u32 blank) {
     }
 }
 
+/* Render a texture into an area (aw x ah), centred, preserving aspect ratio.
+ * Clears to black first. */
+static void blit_fit(SDL_Renderer *r, SDL_Texture *tex, int tw, int th,
+                     int aw, int ah) {
+    int dw = aw, dh = ah;
+    if (dw * th > dh * tw) dw = dh * tw / th;
+    else dh = dw * th / tw;
+    SDL_FRect dst = {
+        (float)(aw - dw) / 2, (float)(ah - dh) / 2,
+        (float)dw, (float)dh
+    };
+    SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+    SDL_RenderClear(r);
+    SDL_RenderTexture(r, tex, NULL, &dst);
+}
+
+/* Draw the CRT scanline effect over the (dst) VIC rect. */
+static void blit_scanlines(SDL_Renderer *r, const Display *d, const SDL_FRect *dst) {
+    if (!d->crt_enabled || d->crt_scanlines <= 0) return;
+    Uint8 alpha = (Uint8)((d->crt_scanlines * 255 + 50) / 100);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(r, 0, 0, 0, alpha);
+    int lines = (int)dst->h;
+    for (int y = 1; y < lines; y += 2) {
+        SDL_FRect scan = { dst->x, dst->y + (float)y, dst->w, 1.0f };
+        SDL_RenderFillRect(r, &scan);
+    }
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+}
+
 void display_upload(Display *d) {
     int ww, wh;
     SDL_GetWindowSize(d->window, &ww, &wh);
@@ -195,66 +225,47 @@ void display_upload(Display *d) {
     int area_h = wh - bar_h;
     if (area_h < 1) area_h = 1;
 
-    /* Which output fills the main window: the VDC when in one-display mode
-     * and 80-column is active, otherwise the VIC. */
-    bool show_vdc = d->one_display && d->vdc_active;
-    SDL_Texture *tex   = show_vdc ? d->vdc_texture : d->texture;
-    int          tex_w = show_vdc ? VDC_SCREEN_W : C128_SCREEN_W;
-    int          tex_h = show_vdc ? VDC_SCREEN_H : C128_SCREEN_H;
-
     SDL_UpdateTexture(d->texture, NULL, display_crt_pixels(d),
                       C128_SCREEN_W * sizeof(u32));
     SDL_UpdateTexture(d->vdc_texture, NULL, d->vdc_pixels,
                       VDC_SCREEN_W * sizeof(u32));
 
-    /* Fit into (ww x area_h) maintaining the texture's aspect ratio. */
-    int dst_w = ww;
-    int dst_h = area_h;
-    if (dst_w * tex_h > dst_h * tex_w)
-        dst_w = dst_h * tex_w / tex_h;
-    else
-        dst_h = dst_w * tex_h / tex_w;
-    SDL_FRect dst = {
-        (float)(ww - dst_w) / 2,
-        (float)(area_h - dst_h) / 2,
-        (float)dst_w,
-        (float)dst_h
-    };
-
-    SDL_SetTextureColorMod(tex, 255, 255, 255);
-    SDL_SetRenderDrawColor(d->renderer, 0, 0, 0, 255);
-    SDL_RenderClear(d->renderer);
-    SDL_RenderTexture(d->renderer, tex, NULL, &dst);
-    if (!show_vdc && d->crt_enabled && d->crt_scanlines > 0) {
-        Uint8 alpha = (Uint8)((d->crt_scanlines * 255 + 50) / 100);
-        SDL_SetRenderDrawBlendMode(d->renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(d->renderer, 0, 0, 0, alpha);
-        int lines = (int)dst.h;
-        for (int y = 1; y < lines; y += 2) {
-            SDL_FRect scan = { dst.x, dst.y + (float)y, dst.w, 1.0f };
-            SDL_RenderFillRect(d->renderer, &scan);
+    if (d->one_display) {
+        /* One window: show whichever of VIC/VDC is active, full brightness. */
+        bool show_vdc = d->vdc_active;
+        SDL_Texture *tex   = show_vdc ? d->vdc_texture : d->texture;
+        int          tex_w = show_vdc ? VDC_SCREEN_W : C128_SCREEN_W;
+        int          tex_h = show_vdc ? VDC_SCREEN_H : C128_SCREEN_H;
+        SDL_SetTextureColorMod(tex, 255, 255, 255);
+        blit_fit(d->renderer, tex, tex_w, tex_h, ww, area_h);
+        if (!show_vdc) {
+            SDL_FRect dst = { 0, 0, (float)ww, (float)area_h };
+            blit_scanlines(d->renderer, d, &dst);
         }
+        leds_render(d->renderer, 0, wh - bar_h, ww, bar_h);
+        return;
+    }
+
+    /* Two windows: VIC in the main window, VDC in a second. The inactive
+     * output is dimmed ("sleeping"). */
+    int vmod = d->vdc_active ? 80 : 255;   /* VIC sleeps while VDC is active */
+    SDL_SetTextureColorMod(d->texture, vmod, vmod, vmod);
+    blit_fit(d->renderer, d->texture, C128_SCREEN_W, C128_SCREEN_H, ww, area_h);
+    if (!d->vdc_active) {
+        SDL_FRect dst = { 0, 0, (float)ww, (float)area_h };
+        blit_scanlines(d->renderer, d, &dst);
     }
     leds_render(d->renderer, 0, wh - bar_h, ww, bar_h);
 
-    /* Separate VDC window (two-window mode). */
-    if (!d->one_display && d->vdc_window) {
+    if (d->vdc_window) {
         int vw, vh;
         SDL_GetWindowSize(d->vdc_window, &vw, &vh);
         SDL_UpdateTexture(d->vdc_window_texture, NULL, d->vdc_pixels,
                           VDC_SCREEN_W * sizeof(u32));
-        int vdst_w = vw, vdst_h = vh;
-        if (vdst_w * VDC_SCREEN_H > vdst_h * VDC_SCREEN_W)
-            vdst_w = vdst_h * VDC_SCREEN_W / VDC_SCREEN_H;
-        else
-            vdst_h = vdst_w * VDC_SCREEN_H / VDC_SCREEN_W;
-        SDL_FRect vdst = {
-            (float)(vw - vdst_w) / 2, (float)(vh - vdst_h) / 2,
-            (float)vdst_w, (float)vdst_h
-        };
-        SDL_SetRenderDrawColor(d->vdc_renderer, 0, 0, 0, 255);
-        SDL_RenderClear(d->vdc_renderer);
-        SDL_RenderTexture(d->vdc_renderer, d->vdc_window_texture, NULL, &vdst);
+        int vmod2 = d->vdc_active ? 255 : 80;   /* VDC sleeps while VIC is active */
+        SDL_SetTextureColorMod(d->vdc_window_texture, vmod2, vmod2, vmod2);
+        blit_fit(d->vdc_renderer, d->vdc_window_texture,
+                 VDC_SCREEN_W, VDC_SCREEN_H, vw, vh);
     }
 }
 
