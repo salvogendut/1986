@@ -39,4 +39,15 @@ void maincpu_resync_limits(void);
 void maincpu_reset(void);
 void maincpu_mainloop(void);
 
+void maincpu_set_pc(int pc);
+void maincpu_set_a(int a);
+void maincpu_set_x(int x);
+void maincpu_set_y(int y);
+void maincpu_set_sign(int n);
+void maincpu_set_zero(int z);
+void maincpu_set_carry(int c);
+void maincpu_set_interrupt(int i);
+unsigned int maincpu_get_pc(void);
+unsigned int maincpu_get_a(void);
+
 #endif

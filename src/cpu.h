@@ -58,3 +58,4 @@ void cpu_irq(Cpu8502 *cpu, bool level);
 void cpu_nmi(Cpu8502 *cpu, bool level);
 void cpu_pc(Cpu8502 *cpu, u16 pc);
 u64  cpu_cycles(void);                /* total cycles executed (for raster sync) */
+void cpu_install_serial_traps(u8 *kernal); /* patch the KERNAL ROM with IEC traps */

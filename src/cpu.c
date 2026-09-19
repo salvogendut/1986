@@ -22,10 +22,6 @@
 int maincpu_stretch = 0;
 struct vice_debug_t debug;
 
-/* Per-instruction trace (set by C128_TRACE_OP in main). */
-extern int g_cpu_op_trace;
-extern int g_cpu_op_trace_count;
-
 /* Monitor interrupt-mask (array used by the core's DO_INTERRUPT). */
 int monitor_mask[1];
 /* ------------------------------------------------------------------------- */
@@ -79,8 +75,46 @@ void machine_reset(void) {
 void machine_autostart(void) {
 }
 
+/* --- Serial (IEC) ROM traps. VICE intercepts the KERNAL's serial-bus
+ * routines so the boot doesn't wait for real hardware; we do the same by
+ * patching the KERNAL ROM with TRAP_OPCODE (0x02) at the trap addresses. --- */
+
+typedef struct {
+    WORD addr;     /* address patched with TRAP_OPCODE */
+    WORD resume;   /* address to resume at after the trap */
+} C128Trap;
+
+static const C128Trap g_serial_traps[] = {
+    { 0xE569, 0xE572 },   /* Serial ready */
+    { 0xE4F5, 0xE572 },   /* Serial ready */
+};
+#define N_SERIAL_TRAPS (sizeof(g_serial_traps) / sizeof(g_serial_traps[0]))
+
 DWORD traps_handler(void) {
+    unsigned pc = reg_pc;
+    for (size_t i = 0; i < N_SERIAL_TRAPS; i++) {
+        /* reg_pc is the address just after the fetched TRAP_OPCODE. */
+        if (pc == g_serial_traps[i].addr || pc == (unsigned)(g_serial_traps[i].addr + 1)) {
+            /* "Serial ready": report the IEC bus ready. */
+            maincpu_set_a(1);
+            maincpu_set_sign(0);
+            maincpu_set_zero(0);
+            maincpu_set_interrupt(0);
+            maincpu_set_pc(g_serial_traps[i].resume);
+            return 0;
+        }
+    }
     return (DWORD)-1;
+}
+
+/* Patch the KERNAL ROM so the serial traps fire. kernal is the 8K image that
+ * maps at $E000-$FFFF. */
+void cpu_install_serial_traps(u8 *kernal) {
+    for (size_t i = 0; i < N_SERIAL_TRAPS; i++) {
+        unsigned off = g_serial_traps[i].addr - 0xE000;
+        if (off < 0x2000)
+            kernal[off] = TRAP_OPCODE;
+    }
 }
 
 monitor_interface_t *maincpu_monitor_interface_get(void) {

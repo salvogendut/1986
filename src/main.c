@@ -154,6 +154,10 @@ int main(int argc, char **argv) {
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */
     c128_reset(&c);
 
+    /* Patch the KERNAL ROM with the IEC serial traps (like VICE) so the boot
+     * does not block waiting for the serial/disk bus. */
+    cpu_install_serial_traps(c.mem.kernal);
+
     Overlay overlay;
     overlay_init(&overlay, &cfg, &c);
 

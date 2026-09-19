@@ -80,11 +80,12 @@ COMMODORE BASIC V7.0  122365 BYTES FREE
 ALL RIGHTS RESERVED
 ```
 
-It does not yet reach the `READY.` prompt: after the banner the KERNAL enters
-its IEC serial-bus (disk) routines, which wait for the serial port. VICE
-intercepts these with ROM **traps** (`serial_trap_ready`, etc. in
-`c128/c128.c`); without that, the boot blocks. The C128 MMU banking and the
-40x25 text renderer are working.
+The KERNAL's IEC serial-bus (disk) routines are intercepted with ROM traps
+(`cpu_install_serial_traps`, mirroring VICE's `serial_trap_ready`) so the boot
+does not block on the serial port. After the banner the boot enters the C128
+machine monitor (`BREAK`) — the KERNAL jumps into a C128 RAM/ROM bank above
+bank 1 that the simplified 2-bank MMU maps incorrectly, so the CPU fetches a
+`0x00` (BRK). Reaching `READY.` needs the full 16-bank MMU.
 
 Visual check (saves a PPM at frame 60):
 ```bash
@@ -93,9 +94,9 @@ SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
 
 ## Roadmap
 
-1. **Boot to BASIC READY** — add the IEC serial-bus emulation (or port VICE's
-   serial ROM traps) so the KERNAL's disk/serial routines don't block, and
-   wire the CIA keyboard scan so the `READY.` prompt + cursor appear.
+1. **Boot to BASIC READY** — implement the C128 16-bank MMU (the KERNAL jumps
+   into a bank above 1 after the banner, which the simplified 2-bank model
+   maps wrong), then wire the CIA keyboard scan so `READY.` appears.
 2. **VIC-IIe raster** — per-line raster/IRQ timing and sprite/bitmap modes.
 3. **CIA timers + IRQs** — full timer/port emulation and the keyboard matrix.
 4. **VDC 8563** — render the 80-column framebuffer.
