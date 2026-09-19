@@ -122,6 +122,55 @@ void vic_render(Vic *v, Mem *m, Display *d) {
             d->pixels[y * C128_SCREEN_W + x] = bg;
     }
 
+    /* Bitmap (graphics) mode: $D011 bit 5. The 8K bitmap base is selected by
+     * $D018 bits 1-3 ((ctrl2 & 0x0E) << 10, 8K-aligned); the 1K colour/screen
+     * matrix (the video RAM) is selected by $D018 bits 4-7 and holds the
+     * foreground colour per 8x8 cell. Bitmap bit 1 = foreground, bit 0 = the
+     * background colour ($D021). Multicolor ($D016 bit 4) uses 2 bits/pixel. */
+    if (v->vmode & 0x20) {
+        u16 bitmap_addr = (u16)(((v->ctrl2 & 0x0E) << 10) & 0xE000);
+        u16 screen_base = (u16)((v->ctrl2 & 0xF0) << 6);
+        bool multicolor = (v->ctrl1 & 0x10) != 0;
+
+        for (int cy = 0; cy < VIC_CHARS_Y; cy++) {
+            for (int cx = 0; cx < VIC_CHARS_X; cx++) {
+                u16 cell = (u16)(cy * VIC_CHARS_X + cx);
+                u8 fg = m->ram[(u16)(screen_base + cell)] & 0x0F;
+
+                if (!multicolor) {
+                    for (int py = 0; py < 8; py++) {
+                        u8 bits = m->ram[(u16)(bitmap_addr + cy * 320 + cx * 8 + py)];
+                        int dy = VIC_TEXT_Y + cy * 8 + py;
+                        for (int px = 0; px < 8; px++) {
+                            int dx = VIC_TEXT_X + cx * 8 + px;
+                            d->pixels[dy * C128_SCREEN_W + dx] =
+                                (bits & (0x80 >> px)) ? VIC_COLORS[fg] : bg;
+                        }
+                    }
+                } else {
+                    for (int py = 0; py < 8; py++) {
+                        u8 bits = m->ram[(u16)(bitmap_addr + cy * 320 + cx * 8 + py)];
+                        int dy = VIC_TEXT_Y + cy * 8 + py;
+                        for (int px = 0; px < 4; px++) {
+                            u8 code = (u8)((bits >> (6 - px * 2)) & 0x03);
+                            u32 col;
+                            switch (code) {
+                                case 0: col = bg; break;
+                                case 1: col = VIC_COLORS[fg]; break;
+                                case 2: col = VIC_COLORS[v->bg_color[1] & 0x0F]; break;
+                                default: col = VIC_COLORS[v->bg_color[2] & 0x0F]; break;
+                            }
+                            int dx = VIC_TEXT_X + cx * 8 + px * 2;
+                            d->pixels[dy * C128_SCREEN_W + dx] = col;
+                            d->pixels[dy * C128_SCREEN_W + dx + 1] = col;
+                        }
+                    }
+                }
+            }
+        }
+        return;
+    }
+
     /* 40x25 characters, 8x8 pixels each. */
     unsigned screen_base = (v->screen_addr & 0x3FFF) & 0x3C00;  /* page-aligned, <=16K */
     if (screen_base < 0x400) screen_base = 0x400;
