@@ -70,30 +70,39 @@ void vdc_write_data(Vdc *v, u8 val) {
         case 13: v->screen_adr = (u16)((v->screen_adr & 0xFF00) | val);       v->dirty = true; break;
         case 14: v->cursor_adr = (u16)((v->cursor_adr & 0x00FF) | (val << 8)); break;
         case 15: v->cursor_adr = (u16)((v->cursor_adr & 0xFF00) | val);        break;
-        case 18: v->update_adr = (u16)((v->update_adr & 0x00FF) | (val << 8)); break;
-        case 19: v->update_adr = (u16)((v->update_adr & 0xFF00) | val);        break;
+        case 18: v->update_adr = (u16)((v->regs[18] << 8) | v->regs[19]); break;
+        case 19: v->update_adr = (u16)((v->regs[18] << 8) | v->regs[19]); break;
         case 20: v->attribute_adr = (u16)((v->attribute_adr & 0x00FF) | (val << 8)); v->dirty = true; break;
         case 21: v->attribute_adr = (u16)((v->attribute_adr & 0xFF00) | val);        v->dirty = true; break;
         case 28: v->chargen_adr = (u16)(val << 8); v->dirty = true; break;
         case 30: { /* R30 word count -> fill or copy block */
+            u16 ptr = (u16)((v->regs[18] << 8) | v->regs[19]);
             int blklen = val ? val : 256;
             if (v->regs[24] & 0x80) { /* copy */
                 u16 src = (u16)((v->regs[32] << 8) | v->regs[33]);
                 for (int i = 0; i < blklen; i++)
-                    v->ram[(v->update_adr + i) & 0xFFFF] = v->ram[(src + i) & 0xFFFF];
+                    v->ram[(ptr + i) & 0xFFFF] = v->ram[(src + i) & 0xFFFF];
             } else { /* fill */
                 for (int i = 0; i < blklen; i++)
-                    v->ram[(v->update_adr + i) & 0xFFFF] = v->regs[31];
+                    v->ram[(ptr + i) & 0xFFFF] = v->regs[31];
             }
-            v->update_adr = (u16)(v->update_adr + blklen);
+            ptr += blklen;
+            v->regs[18] = (u8)(ptr >> 8);
+            v->regs[19] = (u8)(ptr & 0xFF);
+            v->update_adr = ptr;
             v->dirty = true;
             break;
         }
-        case 31: /* R31 data -> write to update address, auto-increment */
-            v->ram[v->update_adr & 0xFFFF] = val;
-            v->update_adr++;
+        case 31: { /* R31 data -> write to update address, auto-increment */
+            u16 ptr = (u16)((v->regs[18] << 8) | v->regs[19]);
+            v->ram[ptr & 0xFFFF] = val;
+            ptr++;
+            v->regs[18] = (u8)(ptr >> 8);
+            v->regs[19] = (u8)(ptr & 0xFF);
+            v->update_adr = ptr;
             v->dirty = true;
             break;
+        }
         default:
             break;
     }
@@ -101,8 +110,12 @@ void vdc_write_data(Vdc *v, u8 val) {
 
 u8 vdc_read_data(Vdc *v) {
     if (v->reg == 31) {
-        u8 val = v->ram[v->update_adr & 0xFFFF];
-        v->update_adr++;
+        u16 ptr = (u16)((v->regs[18] << 8) | v->regs[19]);
+        u8 val = v->ram[ptr & 0xFFFF];
+        ptr++;
+        v->regs[18] = (u8)(ptr >> 8);
+        v->regs[19] = (u8)(ptr & 0xFF);
+        v->update_adr = ptr;
         return val;
     }
     if (v->reg < 38) return v->regs[v->reg] | regmask[v->reg];
