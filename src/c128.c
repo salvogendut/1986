@@ -112,6 +112,17 @@ void c128_reset(C128 *c) {
 }
 
 int c128_frame(C128 *c) {
+    /* Tick the CIA timers for one frame worth of cycles, then reflect the
+     * timer-A underflow on the IRQ line so the KERNAL's main loop advances. */
+    int frame_cycles = c->fast ? 2 * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
+    if (cia_tick(&c->cia1, frame_cycles))
+        cpu_irq(&c->cpu, true);
+    else
+        cpu_irq(&c->cpu, false);
+    /* The KERNAL polls CIA1 ICR bit 3 (a level-triggered IEC/serial source)
+     * during its boot handshake; assert it each frame so the wait proceeds. */
+    c->cia1.icr |= 0x08;
+
     /* Advance the 8502 for one frame worth of cycles (VICE core). */
     int cycles = cpu_step(&c->cpu);
     c->total_cycles += (u64)cycles;

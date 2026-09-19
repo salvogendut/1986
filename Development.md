@@ -66,16 +66,25 @@ ported behind the project's `CpuBus` seam:
 - Memory mapping follows VICE's C128 config-register semantics (raw `$D500`
   -> config index -> RAM/ROM per region) in `mem.c`.
 
-## Status: boots the KERNAL
+## Status: boots to the BASIC banner
 
 With a real C128DCR ROM set (`roms/kernal.bin`, `roms/basic.bin`,
 `roms/chargen.bin`), the 8502 executes the reset vector (`$FF3D`), runs the
-KERNAL cold start (initialises the MMU at `$D500`), renders the boot screen
-(border/background + 40x25 text via screen RAM, colour RAM and chargen), and
-reaches the KERNAL's machine-monitor `BREAK` display. It does not yet reach
-BASIC `READY`: the KERNAL's jump into BASIC-lo (`$4000`) needs the full C128
-MMU banking and the keyboard/CIA/timer I/O the KERNAL drives, which is the
-next milestone.
+KERNAL cold start (MMU init at `$D500`), and BASIC 7.0 boots and renders its
+banner:
+
+```
+COMMODORE BASIC V7.0  122365 BYTES FREE
+(C)1986 COMMODORE ELECTRONICS, LTD.
+(C)1977 MICROSOFT CORP.
+ALL RIGHTS RESERVED
+```
+
+It does not yet reach the `READY.` prompt: after the banner the KERNAL enters
+its IEC serial-bus (disk) routines, which wait for the serial port. VICE
+intercepts these with ROM **traps** (`serial_trap_ready`, etc. in
+`c128/c128.c`); without that, the boot blocks. The C128 MMU banking and the
+40x25 text renderer are working.
 
 Visual check (saves a PPM at frame 60):
 ```bash
@@ -84,11 +93,11 @@ SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
 
 ## Roadmap
 
-1. **Boot to BASIC READY** — finish the C128 MMU banking (full `c128mem.c`
-   config semantics incl. BASIC-lo at `$4000`) and wire the CIA keyboard scan
-   + raster IRQ so the KERNAL runs its main loop to the `READY` prompt.
+1. **Boot to BASIC READY** — add the IEC serial-bus emulation (or port VICE's
+   serial ROM traps) so the KERNAL's disk/serial routines don't block, and
+   wire the CIA keyboard scan so the `READY.` prompt + cursor appear.
 2. **VIC-IIe raster** — per-line raster/IRQ timing and sprite/bitmap modes.
-3. **CIA timers + IRQs** — drive raster IRQs and the keyboard scan.
+3. **CIA timers + IRQs** — full timer/port emulation and the keyboard matrix.
 4. **VDC 8563** — render the 80-column framebuffer.
 5. **SID audio** — three-voice render + SDL3 audio stream.
 6. **1571 drives** — disk images (D64/D81), the C128's fast serial.

@@ -31,17 +31,21 @@ static unsigned c128_config(const Mem *m) {
     return cfg & 0x7F;
 }
 
-/* $8000-$BFFF: k = cfg&7 -> 0,1 BASIC-hi; 6,7 RAM; 2-5 function ROM (RAM for now). */
+/* $4000-$7FFF: BASIC-lo ROM when the config's low bit is set (odd config),
+ * RAM otherwise. Mirrors VICE's basic_lo_read mapping. */
+static bool cfg_4000_is_rom(unsigned cfg) {
+    return (cfg & 1) != 0;
+}
+/* $8000-$BFFF: k = cfg&7 -> 0,1 BASIC-hi; 2,3 internal function ROM; 4,5
+ * external function ROM; 6,7 RAM. We map 0,1 to BASIC-hi and the rest to RAM
+ * until the function ROMs are implemented. */
 static bool cfg_8000_is_rom(unsigned cfg) {
     return (cfg & 7) == 0 || (cfg & 7) == 1;
 }
-/* $E000-$FFFF: k = cfg&7 -> 0,1 KERNAL; 6,7 RAM; 2-5 function ROM (RAM for now). */
+/* $E000-$FFFF: KERNAL ROM when bits 3-5 of the config are clear (configs
+ * 0-7 and 64-71). */
 static bool cfg_e000_is_rom(unsigned cfg) {
-    return (cfg & 7) == 0 || (cfg & 7) == 1;
-}
-/* $4000-$7FFF: BASIC-lo ROM for configs 32-63 and 96-127. */
-static bool cfg_4000_is_rom(unsigned cfg) {
-    return (cfg >= 32 && cfg < 64) || (cfg >= 96 && cfg < 128);
+    return (cfg & 0x38) == 0x00 || (cfg & 0x38) == 0x40;
 }
 
 u8 mem_read(Mem *m, u16 addr) {
