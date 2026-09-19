@@ -71,6 +71,16 @@ static void overlay_close(Overlay *ov) {
     ov->visible = false;
 }
 
+/* Apply the display-affecting config to the live window immediately, so
+ * overlay changes take effect without a restart. */
+static void apply_display(const Overlay *ov) {
+    display_set_smoothing(&ov->c128->display, ov->cfg->smoothing);
+    display_set_crt(&ov->c128->display, ov->cfg->crt_enabled,
+                    ov->cfg->crt_scanlines, ov->cfg->crt_brightness,
+                    ov->cfg->crt_contrast, ov->cfg->crt_red,
+                    ov->cfg->crt_green, ov->cfg->crt_blue);
+}
+
 static const char *const MODELS[] = { "C128DCR", "C128", "C128D" };
 
 static const char *media_label(int row) {
@@ -216,13 +226,16 @@ static void overlay_activate(Overlay *ov) {
             switch (ov->row) {
                 case ADV_SMOOTHING:
                     ov->cfg->smoothing = !ov->cfg->smoothing;
+                    apply_display(ov);
                     break;
                 case ADV_REAL_CRT:
                     ov->cfg->crt_enabled = !ov->cfg->crt_enabled;
+                    apply_display(ov);
                     break;
                 case ADV_CRT_SCANLINES:
                     ov->cfg->crt_scanlines += 5;
                     if (ov->cfg->crt_scanlines > 95) ov->cfg->crt_scanlines = 0;
+                    apply_display(ov);
                     break;
                 case ADV_ONE_DISPLAY:
                     ov->cfg->one_display = !ov->cfg->one_display;
@@ -253,6 +266,7 @@ static void overlay_activate(Overlay *ov) {
                     break;
                 case ADV_RESET:
                     config_set_defaults(ov->cfg);
+                    apply_display(ov);
                     break;
                 default:
                     break;
