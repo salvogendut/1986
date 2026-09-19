@@ -1,6 +1,7 @@
 #include "overlay.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <stddef.h>
 
 #define OV_SCALE      1.5f
@@ -41,6 +42,33 @@ static const char *media_path(const Overlay *ov, int row) {
     if (row == 0) return ov->cfg->disk_path;
     if (row == 1) return ov->cfg->tape_path;
     return ov->cfg->cart_path;
+}
+
+/* Abbreviate the user's home directory as "~" to keep long paths short. */
+static void abbrev_home(const char *path, char *out, size_t sz) {
+    const char *home = getenv("HOME");
+    if (home && *home && strncmp(path, home, strlen(home)) == 0)
+        snprintf(out, sz, "~%s", path + strlen(home));
+    else
+        snprintf(out, sz, "%s", path);
+}
+
+/* The ROM directory currently in effect, for display: the configured path,
+ * or the executable's "roms" subdirectory when none is set. */
+static void rom_path_display(const Overlay *ov, char *out, size_t sz) {
+    char path[CONFIG_PATH_MAX];
+    if (ov->cfg->rom_dir[0]) {
+        snprintf(path, sizeof(path), "%s", ov->cfg->rom_dir);
+    } else {
+        const char *base = SDL_GetBasePath();
+        if (base) {
+            snprintf(path, sizeof(path), "%s/roms", base);
+            SDL_free((void *)base);
+        } else {
+            snprintf(path, sizeof(path), "roms");
+        }
+    }
+    abbrev_home(path, out, sz);
 }
 
 static void open_media_dialog(Overlay *ov, int row) {
@@ -268,9 +296,9 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, lw, y, "Emulator", PACKAGE_VERSION, false); y += OV_LINE_H;
 #endif
         y += OV_LINE_H;
-        const char *rd = ov->cfg->rom_dir[0] ? ov->cfg->rom_dir
-                                              : "(executable directory)";
-        draw_row(r, lw, y, "ROMs", rd, true);
+        char rd[CONFIG_PATH_MAX];
+        rom_path_display(ov, rd, sizeof(rd));
+        draw_row(r, lw, y, "ROMS PATH", rd, true);
     } else {
         for (int i = 0; i < MEDIA_ITEM_COUNT; i++) {
             const char *path = media_path(ov, i);
