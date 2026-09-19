@@ -31,6 +31,7 @@ typedef struct {
     u8   z80bios[ROM_Z80BIOS];
     u8   kernal[ROM_KERNAL];
     u8   chargen[ROM_CHARGEN];
+    u8   color_ram[0x400];   /* $D800-$DBFF nibbles */
 } Mem;
 
 void mem_init(Mem *m);

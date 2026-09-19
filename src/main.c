@@ -24,6 +24,10 @@ int g_debug_enabled = 0;
 /* Boot-progress trace enabled with C128_BOOT_TRACE=1. */
 static bool g_boot_trace = false;
 
+/* One-shot PPM capture (C128_SAVE_PPM=<path>) for visual debugging. */
+static char *g_save_ppm = NULL;
+static int   g_save_ppm_frame = 60;
+
 /* --- Video capture state (F6). --- */
 static GifCap  *g_videocap_gif = NULL;
 static uint64_t g_videocap_gif_interval_ns = 0;
@@ -110,6 +114,10 @@ int main(int argc, char **argv) {
     config_load(&cfg, CONFIG_NAME);
     if (rom_dir) snprintf(cfg.rom_dir, sizeof(cfg.rom_dir), "%s", rom_dir);
     g_boot_trace = getenv("C128_BOOT_TRACE") != NULL;
+    if (getenv("C128_SAVE_PPM"))
+        g_save_ppm = strdup(getenv("C128_SAVE_PPM"));
+    if (getenv("C128_SAVE_FRAME"))
+        g_save_ppm_frame = atoi(getenv("C128_SAVE_FRAME"));
 
     net_compat_init();  /* WSAStartup on Windows; no-op elsewhere */
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
@@ -142,6 +150,9 @@ int main(int argc, char **argv) {
         else
             fprintf(stderr, "1986: loaded %d ROM image(s) from '%s'\n", n, dir);
     }
+
+    /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */
+    c128_reset(&c);
 
     Overlay overlay;
     overlay_init(&overlay, &cfg, &c);
@@ -263,10 +274,13 @@ int main(int argc, char **argv) {
             /* Optional boot-progress trace (C128_BOOT_TRACE=1). */
             if (g_boot_trace && (c128_frame_count % 10) == 0) {
                 const Cpu8502 *cpu = &c.cpu;
+                u16 v316 = (u16)(c128_mem_read(&c, 0x0316) | (c128_mem_read(&c, 0x0317) << 8));
+                u16 v314 = (u16)(c128_mem_read(&c, 0x0314) | (c128_mem_read(&c, 0x0315) << 8));
                 fprintf(stderr, "[boot] frame=%d PC=%04X A=%02X X=%02X Y=%02X "
-                        "SP=%02X P=%02X cycles=%llu\n",
+                        "SP=%02X P=%02X mcr=%02X v316=%04X v314=%04X cycles=%llu\n",
                         c128_frame_count, cpu->pc, cpu->a, cpu->x, cpu->y,
-                        cpu->sp, cpu->p, (unsigned long long)cpu->cycles);
+                        cpu->sp, cpu->p, c.mem.mmu.mcr, v316, v314,
+                        (unsigned long long)cpu->cycles);
             }
 
             /* Pace to the emulated frame time. */
@@ -277,6 +291,12 @@ int main(int argc, char **argv) {
 
             if (g_videocap_gif && videocap_gif_due(emulated_frame_ns))
                 gifcap_frame(g_videocap_gif, c.display.pixels);
+
+            /* One-shot frame capture (C128_SAVE_PPM=<path>) for visual debug. */
+            if (g_save_ppm && c128_frame_count == g_save_ppm_frame) {
+                display_save_ppm(&c.display, g_save_ppm);
+                g_save_ppm = NULL;
+            }
         } else {
             display_apply_greyscale(&c.display);
         }

@@ -11,9 +11,9 @@ TESTS = test-cpu test-mmu test-config test-gifcap
 
 all: $(TESTS)
 
-test-cpu: test_cpu.c ../src/cpu.c ../src/cpu.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
-		test_cpu.c ../src/cpu.c -o $@
+test-cpu: test_cpu.c ../src/cpu.c ../src/cpu.h ../src/vice/maincpu.c ../src/vice/interrupt.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
+		test_cpu.c ../src/cpu.c ../src/vice/maincpu.c ../src/vice/interrupt.c -lm -o $@
 
 test-mmu: test_mmu.c ../src/mmu.c ../src/mmu.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \

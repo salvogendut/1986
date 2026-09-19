@@ -1,5 +1,7 @@
 #include "c128.h"
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 /* Frame counter for the z80.c debug instrumentation (ONE_K_TRACE_IM1). */
 int c128_frame_count = 0;
@@ -9,6 +11,8 @@ int c128_frame_count = 0;
 static u8 io_read(C128 *c, u16 addr) {
     if (addr >= 0xD000 && addr < 0xD400) return vic_read(&c->vic, addr);
     if (addr >= 0xD400 && addr < 0xD800) return sid_read(&c->sid, addr);
+    if (addr >= 0xD800 && addr < 0xDC00)
+        return c->mem.color_ram[addr & 0x3FF];   /* colour RAM nibble */
     if (addr >= 0xD500 && addr < 0xD510 && c->mem.mmu.mmio)
         return mmu_read(&c->mem.mmu, addr);
     if (addr >= 0xDC00 && addr < 0xDD00) return cia_read(&c->cia1, addr);
@@ -23,6 +27,10 @@ static u8 io_read(C128 *c, u16 addr) {
 static void io_write(C128 *c, u16 addr, u8 val) {
     if (addr >= 0xD000 && addr < 0xD400) { vic_write(&c->vic, addr, val); return; }
     if (addr >= 0xD400 && addr < 0xD800) { sid_write(&c->sid, addr, val); return; }
+    if (addr >= 0xD800 && addr < 0xDC00) {
+        c->mem.color_ram[addr & 0x3FF] = val & 0x0F;   /* colour RAM nibble */
+        return;
+    }
     if (addr >= 0xD500 && addr < 0xD510 && c->mem.mmu.mmio) {
         mmu_write(&c->mem.mmu, addr, val);
         return;
@@ -70,6 +78,8 @@ void c128_init(C128 *c, Config *cfg) {
     cpu_init(&c->cpu, (CpuBus){ .read = c128_mem_read,
                                 .write = c128_mem_write,
                                 .ctx = c });
+    cpu_attach_mem(&c->cpu, c->mem.ram);
+    c->cpu.fast = c->fast;
     z80_init(&c->z80);
     c->z80_bus = (Z80Bus){ .mem_read = z80_mem_read,
                            .mem_write = z80_mem_write,
@@ -85,7 +95,8 @@ void c128_init(C128 *c, Config *cfg) {
     sid_init(&c->sid);
     kbd_init(&c->kbd);
 
-    c128_reset(c);
+    /* Reset is deferred: the host loads machine ROMs after c128_init(), and
+     * the reset vector must be read from the loaded KERNAL ROM. */
 }
 
 void c128_reset(C128 *c) {
@@ -101,19 +112,13 @@ void c128_reset(C128 *c) {
 }
 
 int c128_frame(C128 *c) {
-    int target = C128_PAL_FRAME_CYCLES;
-    if (c->fast) target *= 2;
-
-    /* Advance the 8502 for one frame worth of cycles. */
-    int cycles = 0;
-    while (cycles < target) {
-        cycles += cpu_step(&c->cpu);
-    }
+    /* Advance the 8502 for one frame worth of cycles (VICE core). */
+    int cycles = cpu_step(&c->cpu);
     c->total_cycles += (u64)cycles;
     c128_frame_count++;
 
     /* Render the VIC-IIe frame. */
-    vic_render(&c->vic, &c->display);
+    vic_render(&c->vic, &c->mem, &c->display);
     return cycles;
 }
 

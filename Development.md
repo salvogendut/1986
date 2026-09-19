@@ -49,37 +49,45 @@ tests/
 - **Function keys** match the siblings: F4 screenshot, F5 reset, F6 capture,
   F8 monitor, F9 overlay, F10 pause, F11 fullscreen, F12 quit.
 
-## CPU: 8502 (6502-like)
+## CPU: 8502 (6502-like) — VICE core
 
-`cpu.c` is a compact, binary-mode interpreter covering the standard opcode
-set (loads/stores, transfers, stack, logic/arithmetic, shifts, branches,
-JMP/JSR/RTS/RTI/BRK, flag ops). Decimal mode is stubbed. Undocumented opcodes
-are treated as 2-cycle NOPs. The intended path is to replace/extend this with
-the reference core from VICE's `src/6510core.c` (`src/mos6510.h`), keeping the
-`CpuBus` read/write interface so the MMU/memory wiring is unchanged.
+The 8502 is VICE's `6510core.c` (the MOS 6510/8502 instruction interpreter),
+ported behind the project's `CpuBus` seam:
 
-## Status: boot test
+- `src/vice/` holds the ported VICE core: `6510core.c`, `6510core.h`,
+  `mos6510.h`, `interrupt.h`/`interrupt.c`, and a thin VICE-compat base
+  (`types.h`, `log.h`, `debug.h`, `alarm.h`, `clkguard.h`, `machine.h`,
+  `mem.h`, `monitor.h`, `traps.h`, ...). These keep VICE's original copyright
+  and GPLv2+ headers (see Development.md and src/vice/).
+- `src/cpu.c` is the host: it defines the VICE base globals, the memory
+  dispatch (`LOAD`/`STORE` routed through `c128_mem_read`/`c128_mem_write`),
+  the machine/monitor/alarm stubs, and the `Cpu8502` wrapper. The core's
+  `maincpu_mainloop` is bounded by a cycle budget so a frame can be stepped.
+- Memory mapping follows VICE's C128 config-register semantics (raw `$D500`
+  -> config index -> RAM/ROM per region) in `mem.c`.
 
-With a real C128DCR ROM set (`roms/kernal.bin` + `roms/basic.bin`), the
-scaffold loads and splits both 32K dumps and the 8502 executes the reset
-vector, runs the KERNAL entry and reaches BASIC's address space (PC=$6101).
-It is not a stable boot yet: the compact 8502 subset (which treats
-undocumented/omitted opcodes as NOPs) and the simplified MMU config are not
-yet complete enough to keep the KERNAL's control flow intact. That is the
-first real milestone below.
+## Status: boots the KERNAL
 
+With a real C128DCR ROM set (`roms/kernal.bin`, `roms/basic.bin`,
+`roms/chargen.bin`), the 8502 executes the reset vector (`$FF3D`), runs the
+KERNAL cold start (initialises the MMU at `$D500`), renders the boot screen
+(border/background + 40x25 text via screen RAM, colour RAM and chargen), and
+reaches the KERNAL's machine-monitor `BREAK` display. It does not yet reach
+BASIC `READY`: the KERNAL's jump into BASIC-lo (`$4000`) needs the full C128
+MMU banking and the keyboard/CIA/timer I/O the KERNAL drives, which is the
+next milestone.
+
+Visual check (saves a PPM at frame 60):
 ```bash
-SDL_VIDEODRIVER=dummy C128_BOOT_TRACE=1 ./1986 --rom roms
+SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
 ```
 
 ## Roadmap
 
-1. **Boot the KERNAL** — port the full VICE 8502 core (`src/6510core.c` /
-   `src/mos6510.h`) behind the existing `CpuBus` interface and wire the C128
-   MMU banking (see VICE `src/c128/c128mem.c` + `c128mmu.c`) so the KERNAL
-   boots to the READY prompt.
-2. **VIC-IIe raster** — replace the test pattern with a per-line renderer
-   reading screen RAM, colour RAM, and character ROM.
+1. **Boot to BASIC READY** — finish the C128 MMU banking (full `c128mem.c`
+   config semantics incl. BASIC-lo at `$4000`) and wire the CIA keyboard scan
+   + raster IRQ so the KERNAL runs its main loop to the `READY` prompt.
+2. **VIC-IIe raster** — per-line raster/IRQ timing and sprite/bitmap modes.
 3. **CIA timers + IRQs** — drive raster IRQs and the keyboard scan.
 4. **VDC 8563** — render the 80-column framebuffer.
 5. **SID audio** — three-voice render + SDL3 audio stream.

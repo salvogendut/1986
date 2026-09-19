@@ -24,6 +24,8 @@ roms/*
 /configure
 /src/.deps/
 /src/.dirstamp
+/src/vice/.deps/
+/src/vice/.dirstamp
 /1986
 
 # dist tarballs produced by `make dist`

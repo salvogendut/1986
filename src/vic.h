@@ -1,18 +1,20 @@
 #pragma once
 #include "types.h"
 #include "display.h"
+#include "mem.h"
 
 /*
  * MOS 8564 VIC-IIe (40-column video chip) for the C128.
  *
- * The VIC-IIe drives the 320x200 display in 40-column mode. This scaffold
- * renders a static test frame (border + background + a small colour grid)
- * until the full raster/character pipeline is wired to the character ROM and
- * the 40x25 screen RAM.
+ * The VIC-IIe drives the 320x200 display in 40-column mode (40x25
+ * characters, 8x8 glyphs from the character ROM, colour from the nibble RAM
+ * at $D800). The raster counter is derived from the CPU cycle count so the
+ * KERNAL's raster-wait loops see the scanline advance.
  */
 
 #define VIC_CHARS_X  40
 #define VIC_CHARS_Y  25
+#define VIC_RASTER_LINES  312   /* PAL: 312 raster lines per frame */
 
 typedef struct {
     u8  border_color;
@@ -33,4 +35,4 @@ void vic_reset(Vic *v);
 void vic_write(Vic *v, u16 addr, u8 val);
 u8   vic_read(Vic *v, u16 addr);
 /* Render one full frame (raster 0..199) into the display buffer. */
-void vic_render(Vic *v, Display *d);
+void vic_render(Vic *v, Mem *m, Display *d);

@@ -5,11 +5,11 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_CANONICAL_HOST
 AM_INIT_AUTOMAKE([foreign -Wall -Werror subdir-objects])
 
-# C compiler — require C11
+# C compiler — require C11 (GNU extensions are used by the VICE-derived core)
 AC_PROG_CC
-AX_CHECK_COMPILE_FLAG([-std=c11],
-    [AM_CFLAGS="$AM_CFLAGS -std=c11"],
-    [AC_MSG_ERROR([C11-capable compiler required])])
+AX_CHECK_COMPILE_FLAG([-std=gnu11],
+    [AM_CFLAGS="$AM_CFLAGS -std=gnu11"],
+    [AC_MSG_ERROR([GNU C11-capable compiler required])])
 AC_SUBST([AM_CFLAGS])
 
 # pkg-config

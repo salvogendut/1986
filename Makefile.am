@@ -19,6 +19,8 @@ dist_man1_MANS = 1986.1
 	src/sid.c \
 	src/z80.c \
 	src/z80dis.c \
+	src/vice/maincpu.c \
+	src/vice/interrupt.c \
 	src/paste.c \
 	src/monitor.c \
 	src/gifcap.c \
@@ -47,7 +49,24 @@ noinst_HEADERS = \
 	src/monitor.h \
 	src/gifcap.h \
 	src/leds.h \
-	src/notify.h
+	src/notify.h \
+	src/vice/vice.h \
+	src/vice/types.h \
+	src/vice/log.h \
+	src/vice/debug.h \
+	src/vice/lib.h \
+	src/vice/maincpu.h \
+	src/vice/interrupt.h \
+	src/vice/alarm.h \
+	src/vice/clkguard.h \
+	src/vice/machine.h \
+	src/vice/mem.h \
+	src/vice/monitor.h \
+	src/vice/traps.h \
+	src/vice/snapshot.h \
+	src/vice/h6809regs.h \
+	src/vice/mos6510.h \
+	src/vice/6510core.h
 
 1986_CFLAGS = $(AM_CFLAGS) $(SDL3_CFLAGS) -Wall -Wextra \
 	-DROM_INSTALL_DIR=\"$(pkgdatadir)/roms\" \

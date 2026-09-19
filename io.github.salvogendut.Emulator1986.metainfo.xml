@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>io.github.salvogendut.Emulator1986</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>GPL-3.0-or-later</project_license>
+  <project_license>GPL-2.0-or-later</project_license>
   <name>1986</name>
   <summary>Commodore C128DCR emulator</summary>
   <description>
