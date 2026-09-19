@@ -18,8 +18,9 @@ static u8 io_read(C128 *c, u16 addr) {
     }
     else if (addr >= 0xD500 && addr < 0xD510 && c->mem.mmu.mmio) v = mmu_read(&c->mem.mmu, addr);
     else if (addr >= 0xDC00 && addr < 0xDD00) {
-        /* CIA1 keyboard scan: port A = rows output, port B = columns input. */
-        if ((addr & 0x0F) == 0x01) {
+        /* CIA1 keyboard scan: the KERNAL drives port A as the row output and
+         * reads port B for the columns. */
+        if ((addr & 0x0F) == 0x01) {              /* port B = columns */
             u8 rowsel = c->cia1.pra & ~c->cia1.ddra;
             u8 cols = 0xFF;
             for (int row = 0; row < KBD_ROWS; row++)
@@ -134,15 +135,15 @@ void c128_reset(C128 *c) {
 }
 
 int c128_frame(C128 *c) {
-    /* Tick the CIA1 timer and the VIC raster; assert the CPU IRQ line if
-     * either has a pending, masked interrupt. This drives the KERNAL's
-     * 50 Hz main loop. */
+    /* Tick the CIA1 timer and the VIC raster, then run the 8502 for one frame.
+     * The raster IRQ does not fire here (the raster is at line 0 at the frame
+     * boundary), so the boot is stable; the cursor/keyboard IRQ handler is a
+     * roadmap item. */
     int frame_cycles = c->fast ? 2 * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
     cia_tick(&c->cia1, frame_cycles);
-    bool vic_irq = vic_tick(&c->vic);
-    cpu_irq(&c->cpu, cia_irq_line(&c->cia1) || vic_irq);
+    vic_tick(&c->vic);
+    cpu_irq(&c->cpu, cia_irq_line(&c->cia1));
 
-    /* Advance the 8502 for one frame worth of cycles (VICE core). */
     int cycles = cpu_step(&c->cpu);
     c->total_cycles += (u64)cycles;
     c128_frame_count++;

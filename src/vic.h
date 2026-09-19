@@ -30,6 +30,8 @@ typedef struct {
     u8  irq_status;    /* $D019 (bit 0 = raster, bit 7 = IRQ line) */
     u8  irq_mask;      /* $D01A (bit 0 = raster IRQ enable) */
     u8  raster_irq_line; /* raster line for the IRQ compare */
+    u8  raster_irq_fired; /* raster IRQ already asserted this frame */
+    unsigned prev_raster; /* previous raster line (for wrap detection) */
     u64  cycles;       /* raster cycle counter */
 } Vic;
 

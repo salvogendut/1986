@@ -234,6 +234,16 @@ int cpu_step(Cpu8502 *cpu) {
     return (int)(maincpu_clk - before);
 }
 
+/* Run up to `budget` cycles (for chunked raster stepping). */
+int cpu_step_budget(Cpu8502 *cpu, int budget) {
+    maincpu_clk_limit = maincpu_clk + budget;
+    CLOCK before = maincpu_clk;
+    maincpu_mainloop();
+    maincpu_clk_limit = 0;
+    cpu->cycles += (u64)(maincpu_clk - before);
+    return (int)(maincpu_clk - before);
+}
+
 void cpu_irq(Cpu8502 *cpu, bool level) {
     (void)cpu;
     if (maincpu_int_status)

@@ -95,6 +95,16 @@ text renderer draws screen RAM, colour RAM and chargen. The 8502's `$00/$01`
 port (the PLA) is decoded: `data_read = (data & dir) | ~dir`, and its low bits
 select the CPU/VIC colour-RAM banks (`$D800`).
 
+**Cursor blink / keyboard scan (blocked).** The KERNAL drives its 50 Hz main
+loop from the VIC raster IRQ (`$D01A=0x01`, `$D012=0xFF`). The raster IRQ
+machinery (`vic_tick`, `cpu_step_budget`) is in place, but firing it makes the
+KERNAL's IRQ handler overflow the stack (`SP=0x00` -> `$0000`) after a few
+frames — the same IRQ-handler imbalance that blocked `READY.` earlier. Because
+SCNKEY (keyboard scan) and the cursor update run in that IRQ handler, input and
+the blinking cursor are blocked until the handler runs without corrupting the
+stack. This needs the IRQ handler to dispatch correctly against the CIA/VIC
+status registers (roadmap item 1).
+
 Visual check (saves a PPM at frame 60):
 ```bash
 SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
@@ -102,18 +112,21 @@ SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
 
 ## Roadmap
 
-1. **Keyboard input** — wire host keys into the C128 keyboard matrix so
+1. **Fix the IRQ handler stack imbalance** so the 50 Hz VIC raster IRQ can run
+   the KERNAL's cursor update and SCNKEY without overflowing the stack — this
+   unblocks the blinking cursor and host keyboard input at `READY.`.
+2. **Keyboard input** — wire host keys into the C128 keyboard matrix so
    commands can be typed at the `READY.` prompt.
-2. **PLA / GO 64** — chargen select (bit 6 of `$01`) and the full C64-mode
+3. **PLA / GO 64** — chargen select (bit 6 of `$01`) and the full C64-mode
    memory model for GO 64 (`$01` -> `mmu_set_config64` in VICE).
-3. **VIC-IIe raster** — per-line raster/IRQ timing and sprite/bitmap modes.
-4. **CIA timers + IRQs** — full timer/port emulation (timer B cascade, TOD,
+4. **VIC-IIe raster** — per-line raster/IRQ timing and sprite/bitmap modes.
+5. **CIA timers + IRQs** — full timer/port emulation (timer B cascade, TOD,
    serial).
-5. **VDC 8563** — render the 80-column framebuffer.
-6. **SID audio** — three-voice render + SDL3 audio stream.
-7. **1571 drives** — disk images (D64/D81), the C128's fast serial.
-8. **CP/M mode** — switch the bus to the Z80 and map the CP/M RAM bank.
-9. **Media / capture / polish** — snapshots, more keyboard matrix, full
+6. **VDC 8563** — render the 80-column framebuffer.
+7. **SID audio** — three-voice render + SDL3 audio stream.
+8. **1571 drives** — disk images (D64/D81), the C128's fast serial.
+9. **CP/M mode** — switch the bus to the Z80 and map the CP/M RAM bank.
+10. **Media / capture / polish** — snapshots, more keyboard matrix, full
    keyboard layout, real 2 MHz timing.
 
 ## Build and test

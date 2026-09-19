@@ -30,6 +30,8 @@ void vic_reset(Vic *v) {
     v->irq_status = 0;
     v->irq_mask = 0;
     v->raster_irq_line = 0;
+    v->raster_irq_fired = 0;
+    v->prev_raster = 0;
     v->cycles = 0;
 }
 
@@ -75,16 +77,22 @@ u8 vic_read(Vic *v, u16 addr) {
     }
 }
 
-/* Check the raster IRQ compare once per frame. */
+/* Advance raster/IRQ state. Called each raster-line chunk; asserts the raster
+ * IRQ once when the raster crosses the compare line. Returns true if the IRQ
+ * line is asserted. */
 bool vic_tick(Vic *v) {
     unsigned raster = vic_raster(v);
-    if ((raster & 0xFF) == (v->raster_irq_line & 0xFF)) {
-        if (v->irq_status & 0x01) {
-            /* already pending */
-        } else {
-            v->irq_status |= 0x01;   /* raster IRQ flag */
-        }
+
+    /* Frame wrapped (raster went past the end): clear the fired latch. */
+    if (raster < v->prev_raster)
+        v->raster_irq_fired = 0;
+
+    if ((raster & 0xFF) == (v->raster_irq_line & 0xFF) && !v->raster_irq_fired) {
+        v->irq_status |= 0x01;   /* raster IRQ flag */
+        v->raster_irq_fired = 1;
     }
+    v->prev_raster = raster;
+
     if (v->irq_status & v->irq_mask & 0x01)
         v->irq_status |= 0x80;       /* IRQ line */
     else

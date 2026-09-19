@@ -73,6 +73,16 @@ bool kbd_map_scancode(int scancode, int *row, int *col) {
         case SDL_SCANCODE_7: *row = 3; *col = 0; return true;
         case SDL_SCANCODE_8: *row = 3; *col = 3; return true;
         case SDL_SCANCODE_9: *row = 4; *col = 0; return true;
+        case SDL_SCANCODE_KP_0: *row = 4; *col = 3; return true;
+        case SDL_SCANCODE_KP_1: *row = 6; *col = 7; return true;
+        case SDL_SCANCODE_KP_2: *row = 7; *col = 3; return true;
+        case SDL_SCANCODE_KP_3: *row = 0; *col = 0; return true;
+        case SDL_SCANCODE_KP_4: *row = 1; *col = 3; return true;
+        case SDL_SCANCODE_KP_5: *row = 2; *col = 0; return true;
+        case SDL_SCANCODE_KP_6: *row = 2; *col = 3; return true;
+        case SDL_SCANCODE_KP_7: *row = 3; *col = 0; return true;
+        case SDL_SCANCODE_KP_8: *row = 3; *col = 3; return true;
+        case SDL_SCANCODE_KP_9: *row = 4; *col = 0; return true;
         default: break;
     }
 
@@ -89,6 +99,10 @@ bool kbd_map_scancode(int scancode, int *row, int *col) {
         case SDL_SCANCODE_LEFTBRACKET:  *row = 5; *col = 6; return true; /* @ */
         case SDL_SCANCODE_RIGHTBRACKET: *row = 6; *col = 3; return true; /* £ */
         case SDL_SCANCODE_GRAVE:     *row = 5; *col = 0; return true;    /* + */
+        case SDL_SCANCODE_KP_PLUS:   *row = 5; *col = 0; return true;    /* + */
+        case SDL_SCANCODE_KP_MINUS:  *row = 5; *col = 3; return true;    /* - */
+        case SDL_SCANCODE_KP_MULTIPLY: *row = 6; *col = 0; return true;  /* * */
+        case SDL_SCANCODE_KP_DIVIDE: *row = 6; *col = 6; return true;    /* / */
         default: break;
     }
 
