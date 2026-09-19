@@ -82,10 +82,15 @@ ALL RIGHTS RESERVED
 
 The KERNAL's IEC serial-bus (disk) routines are intercepted with ROM traps
 (`cpu_install_serial_traps`, mirroring VICE's `serial_trap_ready`) so the boot
-does not block on the serial port. After the banner the boot enters the C128
-machine monitor (`BREAK`) — the KERNAL jumps into a C128 RAM/ROM bank above
-bank 1 that the simplified 2-bank MMU maps incorrectly, so the CPU fetches a
-`0x00` (BRK). Reaching `READY.` needs the full 16-bank MMU.
+does not block on the serial port. After the banner the boot reaches the
+KERNAL's screen-editor main loop, which runs the 50 Hz IRQ correctly, but over
+many frames the stack corrupts: an `RTI` eventually returns to a bad address
+(`$081B`, an empty bank) and the CPU fetches a `0x00` (BRK), dropping into the
+C128 machine monitor (`BREAK`). The corruption comes from the KERNAL's main
+loop needing the full CIA keyboard scan / VIC raster hardware (currently
+stubbed), not just the CPU + memory. Reaching `READY.` requires implementing
+the CIA keyboard scan and VIC raster IRQ so the editor loop runs without
+drifting the stack.
 
 Visual check (saves a PPM at frame 60):
 ```bash
@@ -94,9 +99,9 @@ SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
 
 ## Roadmap
 
-1. **Boot to BASIC READY** — implement the C128 16-bank MMU (the KERNAL jumps
-   into a bank above 1 after the banner, which the simplified 2-bank model
-   maps wrong), then wire the CIA keyboard scan so `READY.` appears.
+1. **Boot to BASIC READY** — implement the CIA keyboard scan and VIC raster
+   IRQ so the KERNAL's screen-editor main loop runs without corrupting the
+   stack (currently an `RTI` returns to a bad bank and the monitor appears).
 2. **VIC-IIe raster** — per-line raster/IRQ timing and sprite/bitmap modes.
 3. **CIA timers + IRQs** — full timer/port emulation and the keyboard matrix.
 4. **VDC 8563** — render the 80-column framebuffer.
