@@ -10,6 +10,56 @@
 
 #define MEDIA_ITEM_COUNT 3
 
+/* Advanced section rows. */
+#define ADV_SMOOTHING      0
+#define ADV_REAL_CRT       1
+#define ADV_CRT_SCANLINES  2
+#define ADV_ONE_DISPLAY    3
+#define ADV_GIF_WIDTH      4
+#define ADV_GIF_FPS        5
+#define ADV_GIF_ENCODER    6
+#define ADV_TAPE_AUDIO     7
+#define ADV_TAPE_VIDEO     8
+#define ADV_NOTIFICATIONS  9
+#define ADV_DEBUG          10
+#define ADV_JOY_HIDAPI     11
+#define ADV_RESET          12
+#define ADV_VERSION        13
+#define ADV_ROWS           14
+
+static int cycle_gif_width(int width) {
+    switch (width) {
+        case 384: return 320;
+        case 320: return 160;
+        case 160: return 640;
+        default:  return 384;
+    }
+}
+
+static int cycle_gif_fps(int fps) {
+    switch (fps) {
+        case 25: return 20;
+        case 20: return 10;
+        case 10: return 5;
+        default: return 25;
+    }
+}
+
+static void cycle_notify_mode(Config *cfg) {
+    int m = (int)cfg->notify_mode + 1;
+    if (m > NOTIFY_MODE_CONSOLE) m = NOTIFY_MODE_OFF;
+    cfg->notify_mode = (NotifyMode)m;
+    notify_set_mode(cfg->notify_mode);
+}
+
+static const char *notify_mode_name(NotifyMode m) {
+    switch (m) {
+        case NOTIFY_MODE_OFF:    return "off";
+        case NOTIFY_MODE_SCREEN: return "screen";
+        default:                 return "console";
+    }
+}
+
 static void overlay_file_callback(void *userdata, const char * const *files,
                                   int filter);
 
@@ -132,7 +182,7 @@ static int section_rows(const Overlay *ov, OvSection s) {
     switch (s) {
         case OV_GENERAL:  return 2;   /* Tinker, ROMS PATH */
         case OV_MEDIA:    return 3;   /* Disk, Tape, Cartridge */
-        case OV_ADVANCED: return 3;   /* Real CRT, scanlines, One Display */
+        case OV_ADVANCED: return ADV_ROWS;
         default:          return 0;
     }
 }
@@ -163,13 +213,49 @@ static void overlay_activate(Overlay *ov) {
             open_media_dialog(ov, ov->row);
             break;
         case OV_ADVANCED:
-            if (ov->row == 0) {
-                ov->cfg->crt_enabled = !ov->cfg->crt_enabled;
-            } else if (ov->row == 1) {
-                ov->cfg->crt_scanlines += 5;
-                if (ov->cfg->crt_scanlines > 95) ov->cfg->crt_scanlines = 0;
-            } else {
-                ov->cfg->one_display = !ov->cfg->one_display;
+            switch (ov->row) {
+                case ADV_SMOOTHING:
+                    ov->cfg->smoothing = !ov->cfg->smoothing;
+                    break;
+                case ADV_REAL_CRT:
+                    ov->cfg->crt_enabled = !ov->cfg->crt_enabled;
+                    break;
+                case ADV_CRT_SCANLINES:
+                    ov->cfg->crt_scanlines += 5;
+                    if (ov->cfg->crt_scanlines > 95) ov->cfg->crt_scanlines = 0;
+                    break;
+                case ADV_ONE_DISPLAY:
+                    ov->cfg->one_display = !ov->cfg->one_display;
+                    break;
+                case ADV_GIF_WIDTH:
+                    ov->cfg->gif_width = cycle_gif_width(ov->cfg->gif_width);
+                    break;
+                case ADV_GIF_FPS:
+                    ov->cfg->gif_fps = cycle_gif_fps(ov->cfg->gif_fps);
+                    break;
+                case ADV_GIF_ENCODER:
+                    ov->cfg->gif_ffmpeg = !ov->cfg->gif_ffmpeg;
+                    break;
+                case ADV_TAPE_AUDIO:
+                    ov->cfg->tape_audio_monitor = !ov->cfg->tape_audio_monitor;
+                    break;
+                case ADV_TAPE_VIDEO:
+                    ov->cfg->tape_video_monitor = !ov->cfg->tape_video_monitor;
+                    break;
+                case ADV_NOTIFICATIONS:
+                    cycle_notify_mode(ov->cfg);
+                    break;
+                case ADV_DEBUG:
+                    ov->cfg->debug_overlay = !ov->cfg->debug_overlay;
+                    break;
+                case ADV_JOY_HIDAPI:
+                    ov->cfg->joystick_hidapi = !ov->cfg->joystick_hidapi;
+                    break;
+                case ADV_RESET:
+                    config_set_defaults(ov->cfg);
+                    break;
+                default:
+                    break;
             }
             break;
         default:
@@ -363,15 +449,54 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
             y += OV_LINE_H;
         }
     } else {
-        char sline[64];
+        char sline[64], gline[64];
+        const char *version =
+#ifdef PACKAGE_VERSION
+            PACKAGE_VERSION;
+#else
+            "unknown";
+#endif
         snprintf(sline, sizeof(sline), "%d%%%s", ov->cfg->crt_scanlines,
                  ov->cfg->crt_enabled ? "" : " (inactive)");
+        snprintf(gline, sizeof(gline), "%dx%d", ov->cfg->gif_width,
+                 (ov->cfg->gif_width * 5) / 8);
+
+        draw_row(r, lw, y, "Smoothing", ov->cfg->smoothing ? "On" : "Off",
+                 ov->row == ADV_SMOOTHING); y += OV_LINE_H;
         draw_row(r, lw, y, "Real CRT", ov->cfg->crt_enabled ? "On" : "Off",
-                 ov->row == 0); y += OV_LINE_H;
-        draw_row(r, lw, y, "CRT scanlines", sline, ov->row == 1);
-        y += OV_LINE_H;
+                 ov->row == ADV_REAL_CRT); y += OV_LINE_H;
+        draw_row(r, lw, y, "CRT scanlines", sline,
+                 ov->row == ADV_CRT_SCANLINES); y += OV_LINE_H;
         draw_row(r, lw, y, "One Display", ov->cfg->one_display ? "On" : "Off",
-                 ov->row == 2);
+                 ov->row == ADV_ONE_DISPLAY); y += OV_LINE_H;
+        draw_row(r, lw, y, "GIF resolution", gline,
+                 ov->row == ADV_GIF_WIDTH); y += OV_LINE_H;
+        {
+            char fps[32];
+            snprintf(fps, sizeof(fps), "%d fps", ov->cfg->gif_fps);
+            draw_row(r, lw, y, "GIF frame rate", fps,
+                     ov->row == ADV_GIF_FPS);
+        }
+        y += OV_LINE_H;
+        draw_row(r, lw, y, "GIF encoder",
+                 ov->cfg->gif_ffmpeg ? "FFmpeg optimize" : "built-in",
+                 ov->row == ADV_GIF_ENCODER); y += OV_LINE_H;
+        draw_row(r, lw, y, "Tape Audio Monitor",
+                 ov->cfg->tape_audio_monitor ? "On" : "Off",
+                 ov->row == ADV_TAPE_AUDIO); y += OV_LINE_H;
+        draw_row(r, lw, y, "Tape Video Monitor",
+                 ov->cfg->tape_video_monitor ? "On" : "Off",
+                 ov->row == ADV_TAPE_VIDEO); y += OV_LINE_H;
+        draw_row(r, lw, y, "Notifications", notify_mode_name(ov->cfg->notify_mode),
+                 ov->row == ADV_NOTIFICATIONS); y += OV_LINE_H;
+        draw_row(r, lw, y, "Debug", ov->cfg->debug_overlay ? "On" : "Off",
+                 ov->row == ADV_DEBUG); y += OV_LINE_H;
+        draw_row(r, lw, y, "Joystick HIDAPI",
+                 ov->cfg->joystick_hidapi ? "On" : "Off",
+                 ov->row == ADV_JOY_HIDAPI); y += OV_LINE_H;
+        draw_row(r, lw, y, "Reset defaults", NULL,
+                 ov->row == ADV_RESET); y += OV_LINE_H;
+        draw_row(r, lw, y, "Version", version, ov->row == ADV_VERSION);
     }
 
     /* Footer. */

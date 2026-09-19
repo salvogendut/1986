@@ -29,6 +29,11 @@ void config_set_defaults(Config *cfg) {
     cfg->cart_path[0] = '\0';
     cfg->tinker = false;
     cfg->one_display = false;
+    cfg->notify_mode = NOTIFY_MODE_SCREEN;
+    cfg->tape_audio_monitor = false;
+    cfg->tape_video_monitor = false;
+    cfg->debug_overlay = false;
+    cfg->joystick_hidapi = false;
 }
 
 /* Resolve the config file location: $HOME/.config/1986/1986.conf, falling
@@ -92,6 +97,11 @@ static void parse_line(Config *cfg, const char *line) {
     }
     else if (!strcasecmp(key, "tinker"))      cfg->tinker = atoi(value) != 0;
     else if (!strcasecmp(key, "one_display")) cfg->one_display = atoi(value) != 0;
+    else if (!strcasecmp(key, "notify_mode")) cfg->notify_mode = (NotifyMode)atoi(value);
+    else if (!strcasecmp(key, "tape_audio_monitor")) cfg->tape_audio_monitor = atoi(value) != 0;
+    else if (!strcasecmp(key, "tape_video_monitor")) cfg->tape_video_monitor = atoi(value) != 0;
+    else if (!strcasecmp(key, "debug_overlay"))      cfg->debug_overlay = atoi(value) != 0;
+    else if (!strcasecmp(key, "joystick_hidapi"))    cfg->joystick_hidapi = atoi(value) != 0;
 }
 
 bool config_load(Config *cfg, const char *path) {
@@ -132,6 +142,11 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "cart = %s\n", cfg->cart_path);
     fprintf(f, "tinker = %d\n", cfg->tinker ? 1 : 0);
     fprintf(f, "one_display = %d\n", cfg->one_display ? 1 : 0);
+    fprintf(f, "notify_mode = %d\n", (int)cfg->notify_mode);
+    fprintf(f, "tape_audio_monitor = %d\n", cfg->tape_audio_monitor ? 1 : 0);
+    fprintf(f, "tape_video_monitor = %d\n", cfg->tape_video_monitor ? 1 : 0);
+    fprintf(f, "debug_overlay = %d\n", cfg->debug_overlay ? 1 : 0);
+    fprintf(f, "joystick_hidapi = %d\n", cfg->joystick_hidapi ? 1 : 0);
     fclose(f);
     return true;
 }

@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
+#include "notify.h"   /* NotifyMode */
 
 #define CONFIG_PATH_MAX  512
 #define CONFIG_NAME      "1986.conf"
@@ -39,6 +40,11 @@ typedef struct {
     /* Tinker-gated Advanced overlay section. */
     bool       tinker;              /* enable the Advanced section */
     bool       one_display;         /* single display (VIC/VDC) — wired later */
+    NotifyMode notify_mode;         /* Notifications: off/screen/console */
+    bool       tape_audio_monitor;  /* stub */
+    bool       tape_video_monitor;  /* stub */
+    bool       debug_overlay;       /* stub */
+    bool       joystick_hidapi;     /* stub */
 } Config;
 
 void config_set_defaults(Config *cfg);
