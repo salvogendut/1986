@@ -35,6 +35,14 @@ void vic_reset(Vic *v) {
     v->cycles = 0;
 }
 
+/* Re-evaluate the VIC IRQ line (bit 7) from the pending masked flags. */
+static void vic_irq_line_update(Vic *v) {
+    if (v->irq_status & v->irq_mask & 0x01)
+        v->irq_status |= 0x80;
+    else
+        v->irq_status &= 0x7F;
+}
+
 void vic_write(Vic *v, u16 addr, u8 val) {
     switch (addr & 0x3F) {
         case 0x11: v->vmode = val; break;
@@ -44,8 +52,9 @@ void vic_write(Vic *v, u16 addr, u8 val) {
                    v->screen_addr = (u16)((val & 0xF0) << 6);
                    v->char_addr = (u16)((val & 0x0E) << 9);
                    break;
-        case 0x19: v->irq_status &= (u8)~(val & 0x1F); break;   /* clear IRQ status bits */
-        case 0x1A: v->irq_mask = val & 0x1F; break;
+        case 0x19: v->irq_status &= (u8)~(val & 0x1F); vic_irq_line_update(v);
+                   break;
+        case 0x1A: v->irq_mask = val & 0x1F; vic_irq_line_update(v); break;
         case 0x20: v->border_color = val & 0x0F; break;
         case 0x21: v->bg_color[0] = val & 0x0F; break;
         case 0x22: v->bg_color[1] = val & 0x0F; break;
@@ -93,10 +102,7 @@ bool vic_tick(Vic *v) {
     }
     v->prev_raster = raster;
 
-    if (v->irq_status & v->irq_mask & 0x01)
-        v->irq_status |= 0x80;       /* IRQ line */
-    else
-        v->irq_status &= 0x7F;
+    vic_irq_line_update(v);
     return (v->irq_status & 0x80) != 0;
 }
 

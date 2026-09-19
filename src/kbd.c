@@ -24,10 +24,12 @@ u8 kbd_matrix(const Kbd *k, int row) {
 }
 
 /*
- * Map an SDL scancode onto the C64/C128 keyboard matrix (8 rows x 8 cols).
- * The KERNAL's SCNKEY converts the (row,col) to the correct screen code, so
- * these positions must match the C64 matrix exactly. Rows are port A bits
- * (0-7), columns are port B bits (0-7).
+ * Map an SDL scancode onto the C128 keyboard matrix (8 rows x 8 cols).
+ *
+ * Row/column positions match VICE's C128 sdl_pos.vkm exactly. The KERNAL's
+ * SCNKEY converts the scanned (row,col) into the correct screen code, so the
+ * positions must be exactly right. Rows are driven by CIA1 port A (active
+ * low), columns are read on CIA1 port B (active low).
  */
 bool kbd_map_scancode(int scancode, int *row, int *col) {
     /* Letters */
@@ -64,72 +66,54 @@ bool kbd_map_scancode(int scancode, int *row, int *col) {
     /* Digits */
     switch (scancode) {
         case SDL_SCANCODE_0: *row = 4; *col = 3; return true;
-        case SDL_SCANCODE_1: *row = 6; *col = 7; return true;
+        case SDL_SCANCODE_1: *row = 7; *col = 0; return true;
         case SDL_SCANCODE_2: *row = 7; *col = 3; return true;
-        case SDL_SCANCODE_3: *row = 0; *col = 0; return true;
+        case SDL_SCANCODE_3: *row = 1; *col = 0; return true;
         case SDL_SCANCODE_4: *row = 1; *col = 3; return true;
         case SDL_SCANCODE_5: *row = 2; *col = 0; return true;
         case SDL_SCANCODE_6: *row = 2; *col = 3; return true;
         case SDL_SCANCODE_7: *row = 3; *col = 0; return true;
         case SDL_SCANCODE_8: *row = 3; *col = 3; return true;
         case SDL_SCANCODE_9: *row = 4; *col = 0; return true;
-        case SDL_SCANCODE_KP_0: *row = 4; *col = 3; return true;
-        case SDL_SCANCODE_KP_1: *row = 6; *col = 7; return true;
-        case SDL_SCANCODE_KP_2: *row = 7; *col = 3; return true;
-        case SDL_SCANCODE_KP_3: *row = 0; *col = 0; return true;
-        case SDL_SCANCODE_KP_4: *row = 1; *col = 3; return true;
-        case SDL_SCANCODE_KP_5: *row = 2; *col = 0; return true;
-        case SDL_SCANCODE_KP_6: *row = 2; *col = 3; return true;
-        case SDL_SCANCODE_KP_7: *row = 3; *col = 0; return true;
-        case SDL_SCANCODE_KP_8: *row = 3; *col = 3; return true;
-        case SDL_SCANCODE_KP_9: *row = 4; *col = 0; return true;
         default: break;
     }
 
     /* Punctuation / symbols */
     switch (scancode) {
-        case SDL_SCANCODE_PERIOD:    *row = 5; *col = 4; return true;
-        case SDL_SCANCODE_COMMA:     *row = 5; *col = 7; return true;
-        case SDL_SCANCODE_SEMICOLON: *row = 6; *col = 1; return true;
-        case SDL_SCANCODE_APOSTROPHE: *row = 5; *col = 5; return true;   /* : */
-        case SDL_SCANCODE_SLASH:     *row = 6; *col = 6; return true;
-        case SDL_SCANCODE_BACKSLASH: *row = 6; *col = 1; return true;    /* ; */
-        case SDL_SCANCODE_MINUS:     *row = 5; *col = 3; return true;
-        case SDL_SCANCODE_EQUALS:    *row = 6; *col = 4; return true;
+        case SDL_SCANCODE_MINUS:     *row = 5; *col = 0; return true;    /* + */
+        case SDL_SCANCODE_EQUALS:    *row = 5; *col = 3; return true;    /* - */
         case SDL_SCANCODE_LEFTBRACKET:  *row = 5; *col = 6; return true; /* @ */
-        case SDL_SCANCODE_RIGHTBRACKET: *row = 6; *col = 3; return true; /* £ */
-        case SDL_SCANCODE_GRAVE:     *row = 5; *col = 0; return true;    /* + */
-        case SDL_SCANCODE_KP_PLUS:   *row = 5; *col = 0; return true;    /* + */
-        case SDL_SCANCODE_KP_MINUS:  *row = 5; *col = 3; return true;    /* - */
-        case SDL_SCANCODE_KP_MULTIPLY: *row = 6; *col = 0; return true;  /* * */
-        case SDL_SCANCODE_KP_DIVIDE: *row = 6; *col = 6; return true;    /* / */
+        case SDL_SCANCODE_RIGHTBRACKET: *row = 6; *col = 1; return true; /* * */
+        case SDL_SCANCODE_SEMICOLON:    *row = 5; *col = 5; return true; /* : */
+        case SDL_SCANCODE_APOSTROPHE:   *row = 6; *col = 2; return true; /* ; */
+        case SDL_SCANCODE_BACKSLASH:    *row = 6; *col = 5; return true; /* = */
+        case SDL_SCANCODE_SLASH:        *row = 6; *col = 7; return true;
+        case SDL_SCANCODE_COMMA:        *row = 5; *col = 7; return true;
+        case SDL_SCANCODE_PERIOD:       *row = 5; *col = 4; return true;
+        case SDL_SCANCODE_GRAVE:        *row = 7; *col = 1; return true; /* Left Arrow */
         default: break;
     }
 
     /* Special keys */
     switch (scancode) {
-        case SDL_SCANCODE_RETURN:  *row = 0; *col = 1; return true;
-        case SDL_SCANCODE_SPACE:   *row = 7; *col = 4; return true;
+        case SDL_SCANCODE_RETURN:   *row = 0; *col = 1; return true;
+        case SDL_SCANCODE_SPACE:    *row = 7; *col = 4; return true;
         case SDL_SCANCODE_BACKSPACE: *row = 0; *col = 0; return true;   /* DEL */
-        case SDL_SCANCODE_LSHIFT:  *row = 1; *col = 7; return true;
-        case SDL_SCANCODE_RSHIFT:  *row = 6; *col = 2; return true;
-        case SDL_SCANCODE_LCTRL:   *row = 7; *col = 2; return true;
-        case SDL_SCANCODE_TAB:     *row = 6; *col = 0; return true;     /* CTRL+? placeholder */
-        case SDL_SCANCODE_ESCAPE:  *row = 7; *col = 7; return true;     /* RUN/STOP */
-        case SDL_SCANCODE_F1:      *row = 0; *col = 4; return true;
-        case SDL_SCANCODE_F2:      *row = 0; *col = 4; return true;     /* F1 + shift */
-        case SDL_SCANCODE_F3:      *row = 0; *col = 5; return true;
-        case SDL_SCANCODE_F4:      *row = 0; *col = 5; return true;
-        case SDL_SCANCODE_F5:      *row = 0; *col = 6; return true;
-        case SDL_SCANCODE_F6:      *row = 0; *col = 6; return true;
-        case SDL_SCANCODE_F7:      *row = 0; *col = 3; return true;
-        case SDL_SCANCODE_F8:      *row = 0; *col = 3; return true;
-        case SDL_SCANCODE_UP:      *row = 6; *col = 5; return true;
-        case SDL_SCANCODE_DOWN:    *row = 0; *col = 7; return true;
-        case SDL_SCANCODE_LEFT:    *row = 7; *col = 1; return true;
-        case SDL_SCANCODE_RIGHT:   *row = 0; *col = 2; return true;
-        case SDL_SCANCODE_HOME:    *row = 7; *col = 0; return true;
-        case SDL_SCANCODE_END:     *row = 7; *col = 0; return true;
+        case SDL_SCANCODE_LSHIFT:   *row = 1; *col = 7; return true;
+        case SDL_SCANCODE_RSHIFT:   *row = 6; *col = 4; return true;
+        case SDL_SCANCODE_LCTRL:    *row = 7; *col = 5; return true;    /* CBM */
+        case SDL_SCANCODE_RCTRL:    *row = 7; *col = 5; return true;    /* CBM */
+        case SDL_SCANCODE_TAB:      *row = 7; *col = 2; return true;    /* CTRL */
+        case SDL_SCANCODE_ESCAPE:   *row = 7; *col = 7; return true;    /* RUN/STOP */
+        case SDL_SCANCODE_F1:       *row = 0; *col = 4; return true;    /* F1 */
+        case SDL_SCANCODE_F2:       *row = 0; *col = 5; return true;    /* F3 */
+        case SDL_SCANCODE_F3:       *row = 0; *col = 6; return true;    /* F5 */
+        case SDL_SCANCODE_F4:       *row = 0; *col = 3; return true;    /* F7 */
+        case SDL_SCANCODE_UP:       *row = 0; *col = 7; return true;    /* cursor up/down */
+        case SDL_SCANCODE_DOWN:     *row = 0; *col = 7; return true;
+        case SDL_SCANCODE_LEFT:     *row = 0; *col = 2; return true;    /* cursor left/right */
+        case SDL_SCANCODE_RIGHT:    *row = 0; *col = 2; return true;
+        case SDL_SCANCODE_HOME:     *row = 6; *col = 3; return true;    /* CLR/HOME */
         default: return false;
     }
 }
