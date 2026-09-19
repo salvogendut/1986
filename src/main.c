@@ -149,13 +149,20 @@ int main(int argc, char **argv) {
     if (cfg.fullscreen) SDL_SetWindowFullscreen(c.display.window, true);
 
     /* Load ROMs into the machine (optional at this stage). Default to the
-     * directory containing the executable when no ROM dir is configured. */
+     * executable's directory's "roms" subdirectory when no ROM dir is
+     * configured. */
     {
+        char rom_default[CONFIG_PATH_MAX];
         const char *dir = cfg.rom_dir[0] ? cfg.rom_dir : NULL;
         const char *base = NULL;
         if (!dir) {
             base = SDL_GetBasePath();
-            dir = base ? base : ROM_INSTALL_DIR;
+            if (base) {
+                snprintf(rom_default, sizeof(rom_default), "%s/roms", base);
+                dir = rom_default;
+            } else {
+                dir = ROM_INSTALL_DIR;
+            }
         }
         int n = mem_load_c128_roms(&c.mem, dir);
         if (n == 0) {
