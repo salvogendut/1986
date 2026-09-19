@@ -12,7 +12,10 @@ static u8 io_read(C128 *c, u16 addr) {
     u8 v;
     if (addr >= 0xD000 && addr < 0xD400) v = vic_read(&c->vic, addr);
     else if (addr >= 0xD400 && addr < 0xD800) v = sid_read(&c->sid, addr);
-    else if (addr >= 0xD800 && addr < 0xDC00) v = c->mem.color_ram[addr & 0x3FF];
+    else if (addr >= 0xD800 && addr < 0xDC00) {
+        unsigned bank = c->mem.pla_data & 0x01;   /* CPU colour-RAM bank */
+        v = c->mem.color_ram[bank * 0x400 + (addr & 0x3FF)];
+    }
     else if (addr >= 0xD500 && addr < 0xD510 && c->mem.mmu.mmio) v = mmu_read(&c->mem.mmu, addr);
     else if (addr >= 0xDC00 && addr < 0xDD00) {
         /* CIA1 keyboard scan: port A = rows output, port B = columns input. */
@@ -38,7 +41,8 @@ static void io_write(C128 *c, u16 addr, u8 val) {
     if (addr >= 0xD000 && addr < 0xD400) { vic_write(&c->vic, addr, val); return; }
     if (addr >= 0xD400 && addr < 0xD800) { sid_write(&c->sid, addr, val); return; }
     if (addr >= 0xD800 && addr < 0xDC00) {
-        c->mem.color_ram[addr & 0x3FF] = val & 0x0F;   /* colour RAM nibble */
+        unsigned bank = c->mem.pla_data & 0x01;   /* CPU colour-RAM bank */
+        c->mem.color_ram[bank * 0x400 + (addr & 0x3FF)] = val & 0x0F;
         return;
     }
     if (addr >= 0xD500 && addr < 0xD510 && c->mem.mmu.mmio) {
@@ -54,6 +58,14 @@ static void io_write(C128 *c, u16 addr, u8 val) {
     }
 }
 
+/* Decode the 8502 $01 port (the PLA). The effective port value is
+ * (data & dir) | ~dir; its low bits select the colour-RAM banks and chargen. */
+static void pla_update(C128 *c) {
+    u8 data = c->cpu.io_port & c->cpu.io_ddr;
+    u8 dir  = c->cpu.io_ddr;
+    c->mem.pla_data = (u8)(data | ~dir);
+}
+
 u8 c128_mem_read(void *ctx, u16 addr) {
     C128 *c = ctx;
     /* 8502 on-chip I/O port at $0000 (DDR) and $0001 (port) drives the MMU. */
@@ -65,8 +77,8 @@ u8 c128_mem_read(void *ctx, u16 addr) {
 
 void c128_mem_write(void *ctx, u16 addr, u8 val) {
     C128 *c = ctx;
-    if (addr == 0x0000) { c->cpu.io_ddr = val; return; }
-    if (addr == 0x0001) { c->cpu.io_port = val; return; }
+    if (addr == 0x0000) { c->cpu.io_ddr = val; pla_update(c); return; }
+    if (addr == 0x0001) { c->cpu.io_port = val; pla_update(c); return; }
     if (addr >= 0xD000 && addr < 0xE000) { io_write(c, addr, val); return; }
     mem_write(&c->mem, addr, val);
 }

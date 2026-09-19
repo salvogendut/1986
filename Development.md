@@ -91,7 +91,9 @@ This is driven by:
 - Both IRQ sources wired to the CPU, driving the KERNAL's 50 Hz main loop.
 
 The CIA1 keyboard scan is wired (port A rows / port B columns). The 40x25
-text renderer draws screen RAM, colour RAM and chargen.
+text renderer draws screen RAM, colour RAM and chargen. The 8502's `$00/$01`
+port (the PLA) is decoded: `data_read = (data & dir) | ~dir`, and its low bits
+select the CPU/VIC colour-RAM banks (`$D800`).
 
 Visual check (saves a PPM at frame 60):
 ```bash
@@ -102,14 +104,16 @@ SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
 
 1. **Keyboard input** — wire host keys into the C128 keyboard matrix so
    commands can be typed at the `READY.` prompt.
-2. **VIC-IIe raster** — per-line raster/IRQ timing and sprite/bitmap modes.
-3. **CIA timers + IRQs** — full timer/port emulation (timer B cascade, TOD,
+2. **PLA / GO 64** — chargen select (bit 6 of `$01`) and the full C64-mode
+   memory model for GO 64 (`$01` -> `mmu_set_config64` in VICE).
+3. **VIC-IIe raster** — per-line raster/IRQ timing and sprite/bitmap modes.
+4. **CIA timers + IRQs** — full timer/port emulation (timer B cascade, TOD,
    serial).
-4. **VDC 8563** — render the 80-column framebuffer.
-5. **SID audio** — three-voice render + SDL3 audio stream.
-6. **1571 drives** — disk images (D64/D81), the C128's fast serial.
-7. **CP/M mode** — switch the bus to the Z80 and map the CP/M RAM bank.
-8. **Media / capture / polish** — snapshots, more keyboard matrix, full
+5. **VDC 8563** — render the 80-column framebuffer.
+6. **SID audio** — three-voice render + SDL3 audio stream.
+7. **1571 drives** — disk images (D64/D81), the C128's fast serial.
+8. **CP/M mode** — switch the bus to the Z80 and map the CP/M RAM bank.
+9. **Media / capture / polish** — snapshots, more keyboard matrix, full
    keyboard layout, real 2 MHz timing.
 
 ## Build and test

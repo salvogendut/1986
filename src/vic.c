@@ -122,7 +122,8 @@ void vic_render(Vic *v, Mem *m, Display *d) {
         for (int cx = 0; cx < VIC_CHARS_X; cx++) {
             u16 cell = (u16)(screen_base + cy * VIC_CHARS_X + cx);
             u8 ch = (cell < 0x1000) ? m->ram[cell] : 0;
-            u8 col = m->color_ram[(cy * VIC_CHARS_X + cx) & 0x3FF] & 0x0F;
+            unsigned cbank = (m->pla_data >> 1) & 0x01;   /* VIC colour-RAM bank */
+            u8 col = m->color_ram[cbank * 0x400 + ((cy * VIC_CHARS_X + cx) & 0x3FF)] & 0x0F;
             u32 fg = VIC_COLORS[col];
             /* Glyph: 8 bytes per character from the character ROM. */
             const u8 *glyph = &m->chargen[(u16)(ch << 3)];

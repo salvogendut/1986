@@ -31,7 +31,8 @@ typedef struct {
     u8   z80bios[ROM_Z80BIOS];
     u8   kernal[ROM_KERNAL];
     u8   chargen[ROM_CHARGEN];
-    u8   color_ram[0x400];   /* $D800-$DBFF nibbles */
+    u8   color_ram[0x800];   /* $D800-$DBFF nibbles, two 1K banks */
+    u8   pla_data;           /* 8502 $01 port decoded value (PLA output) */
 } Mem;
 
 void mem_init(Mem *m);

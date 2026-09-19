@@ -7,6 +7,7 @@
 void mem_init(Mem *m) {
     memset(m, 0, sizeof(*m));
     mmu_init(&m->mmu);
+    m->pla_data = 0xFF;   /* all $01 port lines floating high until written */
 }
 
 void mem_reset(Mem *m) {
@@ -45,7 +46,7 @@ static bool cfg_8000_is_rom(unsigned cfg) {
 /* $E000-$FFFF: KERNAL ROM when bits 3-5 of the config are clear (configs
  * 0-7 and 64-71). */
 static bool cfg_e000_is_rom(unsigned cfg) {
-    return (cfg & 0x38) == 0x00 || (cfg & 0x38) == 0x40;
+    return (cfg & 0x38) == 0x00;
 }
 
 u8 mem_read(Mem *m, u16 addr) {
