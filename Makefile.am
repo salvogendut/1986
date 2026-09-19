@@ -88,6 +88,6 @@ dist_metainfo_DATA = io.github.salvogendut.Emulator1986.metainfo.xml
 
 # Files shipped in the dist tarball but not built (license, docs, examples).
 EXTRA_DIST = Makefile LICENSE Development.md USAGE.md CONTROLS.md INSTALL.md \
-	1986.conf.example packaging/io.github.salvogendut.Emulator1986.yml \
+	ROADMAP.md 1986.conf.example packaging/io.github.salvogendut.Emulator1986.yml \
 	roms/README tests/Makefile tests/test_cpu.c tests/test_mmu.c \
 	tests/test_config.c tests/test_gifcap.c

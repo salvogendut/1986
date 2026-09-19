@@ -33,7 +33,8 @@ This tree currently boots a runnable skeleton:
 It does **not** yet boot the KERNAL/BASIC: the ROM pipeline, real VIC raster,
 VDC rendering, CIA timers, SID audio, and the 1571 drives are TODO.
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for the roadmap.
+See [DEVELOPMENT.md](Development.md) for technical notes and
+[ROADMAP.md](ROADMAP.md) for the forward plan.
 
 ## Build from source
 
