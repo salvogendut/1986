@@ -165,10 +165,11 @@ int c128_frame(C128 *c) {
     c128_frame_count++;
 
     /* The KERNAL clears the VDC chargen (writes 0xFF) during its 80-col setup
-     * but does not copy the glyphs, so load the 80-column character generator
+     * but does not copy the glyphs, so load the character generator (the same
+     * one VICE's KERNAL copies to the VDC, i.e. the chargen at offset 0)
      * ourselves shortly after boot (and after each reset). */
     if (!c->vdc_chargen_loaded && c128_frame_count > 8) {
-        memcpy(&c->vdc.ram[0x2000], &c->mem.chargen[0x800], 0x800);
+        memcpy(&c->vdc.ram[0x2000], &c->mem.chargen[0x000], 0x800);
         c->vdc_chargen_loaded = true;
     }
 

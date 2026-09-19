@@ -174,8 +174,8 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
             u16 idx = (u16)(row * cols + col);
             u8 c = v->ram[(v->screen_adr + idx) & 0xFFFF];
             u8 attr = attr_mode ? v->ram[(v->attribute_adr + idx) & 0xFFFF] : 0;
-            u32 c_fg = attr_mode ? VDC_COLORS[(attr >> 4) & 0x0F] : fg;
-            u32 c_bg = attr_mode ? VDC_COLORS[attr & 0x0F] : bg;
+            u32 c_fg = attr_mode ? VDC_COLORS[attr & 0x0F] : fg;
+            u32 c_bg = bg;
             bool rev = reverse_screen || (attr_mode && (attr & VDC_ATTR_REVERSE));
             u16 co = (u16)((v->chargen_adr + (u16)(c * v->bytes_per_char)) & 0xFFFF);
             u8 glyph[VDC_CHAR_HEIGHT];
