@@ -31,7 +31,8 @@ u8 kbd_matrix(const Kbd *k, int row) {
  * positions must be exactly right. Rows are driven by CIA1 port A (active
  * low), columns are read on CIA1 port B (active low).
  */
-bool kbd_map_scancode(int scancode, int *row, int *col) {
+bool kbd_map_scancode(int scancode, int *row, int *col, bool *shift) {
+    *shift = false;
     /* Letters */
     switch (scancode) {
         case SDL_SCANCODE_A: *row = 1; *col = 2; return true;
@@ -101,18 +102,23 @@ bool kbd_map_scancode(int scancode, int *row, int *col) {
         case SDL_SCANCODE_BACKSPACE: *row = 0; *col = 0; return true;   /* DEL */
         case SDL_SCANCODE_LSHIFT:   *row = 1; *col = 7; return true;
         case SDL_SCANCODE_RSHIFT:   *row = 6; *col = 4; return true;
-        case SDL_SCANCODE_LCTRL:    *row = 7; *col = 5; return true;    /* CBM */
-        case SDL_SCANCODE_RCTRL:    *row = 7; *col = 5; return true;    /* CBM */
-        case SDL_SCANCODE_TAB:      *row = 7; *col = 2; return true;    /* CTRL */
+        case SDL_SCANCODE_LCTRL:    *row = 7; *col = 2; return true;    /* CONTROL */
+        case SDL_SCANCODE_RCTRL:    *row = 7; *col = 2; return true;    /* CONTROL */
+        case SDL_SCANCODE_LALT:     *row = 7; *col = 5; return true;    /* Commodore (CBM) */
+        case SDL_SCANCODE_RALT:     *row = 7; *col = 5; return true;    /* Commodore (CBM) */
         case SDL_SCANCODE_ESCAPE:   *row = 7; *col = 7; return true;    /* RUN/STOP */
-        case SDL_SCANCODE_F1:       *row = 0; *col = 4; return true;    /* F1 */
-        case SDL_SCANCODE_F2:       *row = 0; *col = 5; return true;    /* F3 */
-        case SDL_SCANCODE_F3:       *row = 0; *col = 6; return true;    /* F5 */
-        case SDL_SCANCODE_F4:       *row = 0; *col = 3; return true;    /* F7 */
-        case SDL_SCANCODE_UP:       *row = 0; *col = 7; return true;    /* cursor up/down */
-        case SDL_SCANCODE_DOWN:     *row = 0; *col = 7; return true;
-        case SDL_SCANCODE_LEFT:     *row = 0; *col = 2; return true;    /* cursor left/right */
-        case SDL_SCANCODE_RIGHT:    *row = 0; *col = 2; return true;
+        case SDL_SCANCODE_F1:       *row = 0; *col = 4; return true;    /* C128 F1 */
+        case SDL_SCANCODE_F2:       *row = 0; *col = 4; *shift = true; return true;    /* C128 F2 (shifted F1) */
+        case SDL_SCANCODE_F3:       *row = 0; *col = 5; return true;    /* C128 F3 */
+        case SDL_SCANCODE_F4:       *row = 0; *col = 5; *shift = true; return true;    /* C128 F4 */
+        case SDL_SCANCODE_F5:       *row = 0; *col = 6; return true;    /* C128 F5 */
+        case SDL_SCANCODE_F6:       *row = 0; *col = 6; *shift = true; return true;    /* C128 F6 */
+        case SDL_SCANCODE_F7:       *row = 0; *col = 3; return true;    /* C128 F7 */
+        case SDL_SCANCODE_F8:       *row = 0; *col = 3; *shift = true; return true;    /* C128 F8 */
+        case SDL_SCANCODE_UP:       *row = 0; *col = 7; *shift = true; return true;    /* cursor up (shifted Down) */
+        case SDL_SCANCODE_DOWN:     *row = 0; *col = 7; return true;                   /* cursor down */
+        case SDL_SCANCODE_LEFT:     *row = 0; *col = 2; *shift = true; return true;    /* cursor left (shifted Right) */
+        case SDL_SCANCODE_RIGHT:    *row = 0; *col = 2; return true;                   /* cursor right */
         case SDL_SCANCODE_HOME:     *row = 6; *col = 3; return true;    /* CLR/HOME */
         default: return false;
     }

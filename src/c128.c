@@ -172,6 +172,10 @@ u64 c128_cycles_to_ns(const C128 *c, int cycles) {
 
 void c128_key_event(C128 *c, int scancode, bool down) {
     int row, col;
-    if (kbd_map_scancode(scancode, &row, &col))
-        kbd_set(&c->kbd, row, col, down);
+    bool shift;
+    if (!kbd_map_scancode(scancode, &row, &col, &shift)) return;
+    /* Up/Left are the Shifted Down/Right C128 keys: press Shift alongside so
+     * the four PC arrow keys work independently. */
+    if (shift) kbd_set(&c->kbd, KBD_SHIFT_ROW, KBD_SHIFT_COL, down);
+    kbd_set(&c->kbd, row, col, down);
 }
