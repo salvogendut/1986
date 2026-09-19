@@ -86,6 +86,11 @@ bool overlay_handle_event(Overlay *ov, SDL_Event *ev) {
     if (ev->type != SDL_EVENT_KEY_DOWN)
         return ov->visible;   /* consume everything while open */
 
+    /* Ignore auto-repeat: holding F9 (or an arrow key) would otherwise toggle
+     * the overlay on and off (or jump rows/sections) several times. */
+    if (ev->key.repeat)
+        return ov->visible;
+
     SDL_Scancode sc = ev->key.scancode;
 
     /* F9 always toggles the overlay. */
