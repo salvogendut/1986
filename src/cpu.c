@@ -240,6 +240,14 @@ int cpu_step_budget(Cpu8502 *cpu, int budget) {
     CLOCK before = maincpu_clk;
     maincpu_mainloop();
     maincpu_clk_limit = 0;
+
+    /* Mirror the register file back into the Cpu8502 for the machine. */
+    cpu->pc = (u16)maincpu_regs.pc;
+    cpu->a = maincpu_regs.a;
+    cpu->x = maincpu_regs.x;
+    cpu->y = maincpu_regs.y;
+    cpu->sp = maincpu_regs.sp;
+    cpu->p = maincpu_regs.p;
     cpu->cycles += (u64)(maincpu_clk - before);
     return (int)(maincpu_clk - before);
 }

@@ -21,7 +21,9 @@ static u8 io_read(C128 *c, u16 addr) {
         /* CIA1 keyboard scan: the KERNAL drives port A as the row output and
          * reads port B for the columns. */
         if ((addr & 0x0F) == 0x01) {              /* port B = columns */
-            u8 rowsel = c->cia1.pra & ~c->cia1.ddra;
+            /* Row select is the driven port A value: PRA | ~DDRA (VICE's old_pa).
+             * A row is scanned while its bit is low. */
+            u8 rowsel = c->cia1.pra | ~c->cia1.ddra;
             u8 cols = 0xFF;
             for (int row = 0; row < KBD_ROWS; row++)
                 if ((rowsel & (1 << row)) == 0) cols &= kbd_matrix(&c->kbd, row);
@@ -135,22 +137,26 @@ void c128_reset(C128 *c) {
 }
 
 int c128_frame(C128 *c) {
-    /* Tick the CIA1 timer and the VIC raster, then run the 8502 for one frame.
-     * The raster IRQ does not fire here (the raster is at line 0 at the frame
-     * boundary), so the boot is stable; the cursor/keyboard IRQ handler is a
-     * roadmap item. */
+    /* Run the 8502 in raster-line chunks (63 cycles each), ticking the VIC
+     * between chunks so the raster IRQ fires when the raster crosses the
+     * compare line (VICE's alarm-based timing). */
     int frame_cycles = c->fast ? 2 * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
-    cia_tick(&c->cia1, frame_cycles);
-    vic_tick(&c->vic);
-    cpu_irq(&c->cpu, cia_irq_line(&c->cia1));
-
-    int cycles = cpu_step(&c->cpu);
-    c->total_cycles += (u64)cycles;
+    int remaining = frame_cycles;
+    int total = 0;
+    while (remaining > 0) {
+        int chunk = (remaining > 63) ? 63 : remaining;
+        total += cpu_step_budget(&c->cpu, chunk);
+        remaining -= chunk;
+        cia_tick(&c->cia1, chunk);
+        bool vic_irq = vic_tick(&c->vic);
+        cpu_irq(&c->cpu, cia_irq_line(&c->cia1) || vic_irq);
+    }
+    c->total_cycles += (u64)total;
     c128_frame_count++;
 
     /* Render the VIC-IIe frame. */
     vic_render(&c->vic, &c->mem, &c->display);
-    return cycles;
+    return total;
 }
 
 u64 c128_cycles_to_ns(const C128 *c, int cycles) {
