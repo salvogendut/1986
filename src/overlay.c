@@ -120,6 +120,63 @@ void overlay_init(Overlay *ov, Config *cfg, C128 *c128) {
     ov->dialog_kind = OV_DIALOG_NONE;
 }
 
+/* The Advanced section is only reachable while Tinker is on. */
+static bool section_available(const Overlay *ov, OvSection s) {
+    if (s == OV_ADVANCED) return ov->cfg->tinker;
+    return true;
+}
+
+/* Number of selectable rows in each section. */
+static int section_rows(const Overlay *ov, OvSection s) {
+    (void)ov;
+    switch (s) {
+        case OV_GENERAL:  return 2;   /* Tinker, ROMS PATH */
+        case OV_MEDIA:    return 3;   /* Disk, Tape, Cartridge */
+        case OV_ADVANCED: return 3;   /* Real CRT, scanlines, One Display */
+        default:          return 0;
+    }
+}
+
+static void change_section(Overlay *ov, int dir) {
+    int s = ov->section;
+    do {
+        s = (s + dir + OV_SECTION_COUNT) % OV_SECTION_COUNT;
+    } while (!section_available(ov, (OvSection)s));
+    ov->section = (OvSection)s;
+    ov->row = 0;
+}
+
+/* Enter on the current row. */
+static void overlay_activate(Overlay *ov) {
+    switch (ov->section) {
+        case OV_GENERAL:
+            if (ov->row == 0) {
+                ov->cfg->tinker = !ov->cfg->tinker;
+                /* Leaving Tinker off hides Advanced; fall back to General. */
+                if (!ov->cfg->tinker && ov->section == OV_ADVANCED)
+                    ov->section = OV_GENERAL;
+            } else {
+                open_rom_dialog(ov);
+            }
+            break;
+        case OV_MEDIA:
+            open_media_dialog(ov, ov->row);
+            break;
+        case OV_ADVANCED:
+            if (ov->row == 0) {
+                ov->cfg->crt_enabled = !ov->cfg->crt_enabled;
+            } else if (ov->row == 1) {
+                ov->cfg->crt_scanlines += 5;
+                if (ov->cfg->crt_scanlines > 95) ov->cfg->crt_scanlines = 0;
+            } else {
+                ov->cfg->one_display = !ov->cfg->one_display;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
 void overlay_quit(Overlay *ov) {
     (void)ov;
 }
@@ -155,24 +212,17 @@ bool overlay_handle_event(Overlay *ov, SDL_Event *ev) {
 
     switch (sc) {
         case SDL_SCANCODE_LEFT:
-        case SDL_SCANCODE_RIGHT: {
-            int dir = (sc == SDL_SCANCODE_RIGHT) ? 1 : -1;
-            ov->section = (OvSection)((ov->section + dir + OV_SECTION_COUNT)
-                                      % OV_SECTION_COUNT);
-            ov->row = 0;
+        case SDL_SCANCODE_RIGHT:
+            change_section(ov, (sc == SDL_SCANCODE_RIGHT) ? 1 : -1);
             break;
-        }
         case SDL_SCANCODE_UP:
             if (ov->row > 0) ov->row--;
             break;
         case SDL_SCANCODE_DOWN:
-            if (ov->row < MEDIA_ITEM_COUNT - 1) ov->row++;
+            if (ov->row < section_rows(ov, ov->section) - 1) ov->row++;
             break;
         case SDL_SCANCODE_RETURN:
-            if (ov->section == OV_MEDIA)
-                open_media_dialog(ov, ov->row);
-            else
-                open_rom_dialog(ov);
+            overlay_activate(ov);
             break;
         case SDL_SCANCODE_ESCAPE:
             overlay_close(ov);
@@ -264,9 +314,11 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
     SDL_SetRenderDrawColor(r, 0x30, 0x40, 0x60, 255);
     SDL_FRect tabbar = { 10, 10, (float)lw - 20, 22 };
     SDL_RenderFillRect(r, &tabbar);
-    static const char *const names[OV_SECTION_COUNT] = { "General", "Media" };
+    static const char *const names[OV_SECTION_COUNT] =
+        { "General", "Media", "Advanced" };
     float tx = 20;
     for (int s = 0; s < OV_SECTION_COUNT; s++) {
+        if (!section_available(ov, (OvSection)s)) continue;
         bool active = (s == (int)ov->section);
         SDL_SetRenderDrawColor(r, active ? 0xFF : 0xC0,
                                active ? 0xFF : 0xC0,
@@ -294,10 +346,12 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, lw, y, "Emulator", PACKAGE_VERSION, false); y += OV_LINE_H;
 #endif
         y += OV_LINE_H;
+        draw_row(r, lw, y, "Tinker", ov->cfg->tinker ? "On" : "Off",
+                 ov->row == 0); y += OV_LINE_H;
         char rd[CONFIG_PATH_MAX];
         rom_path_display(ov, rd, sizeof(rd));
-        draw_row(r, lw, y, "ROMS PATH", rd, true);
-    } else {
+        draw_row(r, lw, y, "ROMS PATH", rd, ov->row == 1);
+    } else if (ov->section == OV_MEDIA) {
         for (int i = 0; i < MEDIA_ITEM_COUNT; i++) {
             const char *path = media_path(ov, i);
             char vbuf[CONFIG_PATH_MAX + 8];
@@ -308,11 +362,21 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
             draw_row(r, lw, y, media_label(i), vbuf, i == ov->row);
             y += OV_LINE_H;
         }
+    } else {
+        char sline[64];
+        snprintf(sline, sizeof(sline), "%d%%%s", ov->cfg->crt_scanlines,
+                 ov->cfg->crt_enabled ? "" : " (inactive)");
+        draw_row(r, lw, y, "Real CRT", ov->cfg->crt_enabled ? "On" : "Off",
+                 ov->row == 0); y += OV_LINE_H;
+        draw_row(r, lw, y, "CRT scanlines", sline, ov->row == 1);
+        y += OV_LINE_H;
+        draw_row(r, lw, y, "One Display", ov->cfg->one_display ? "On" : "Off",
+                 ov->row == 2);
     }
 
     /* Footer. */
     SDL_SetRenderDrawColor(r, 0xAA, 0xAA, 0xAA, 255);
-    const char *footer = "Left/Right section  Up/Down select  Enter choose file  F9/Esc close";
+    const char *footer = "Left/Right section  Up/Down select  Enter toggle/choose  F9/Esc close";
     SDL_RenderDebugText(r, (float)((lw - (int)strlen(footer) * 8) / 2),
                         (float)(lh - 20), footer);
 

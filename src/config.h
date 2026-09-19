@@ -35,6 +35,10 @@ typedef struct {
     char       disk_path[CONFIG_PATH_MAX];  /* Disk Drive .d64 image */
     char       tape_path[CONFIG_PATH_MAX];  /* Tape .tap image */
     char       cart_path[CONFIG_PATH_MAX];  /* Cartridge .crt image */
+
+    /* Tinker-gated Advanced overlay section. */
+    bool       tinker;              /* enable the Advanced section */
+    bool       one_display;         /* single display (VIC/VDC) — wired later */
 } Config;
 
 void config_set_defaults(Config *cfg);
