@@ -133,11 +133,17 @@ void c128_reset(C128 *c) {
     cpu_reset(&c->cpu);
     vic_reset(&c->vic);
     vdc_reset(&c->vdc);
+    c->vdc_chargen_loaded = false;
+    /* Load the 80-column VDC character generator (second half of the 4K
+     * chargen ROM) into VDC RAM at the default chargen address. */
+    memcpy(&c->vdc.ram[0x2000], &c->mem.chargen[0x800], 0x800);
     cia_reset(&c->cia1);
     cia_reset(&c->cia2);
     sid_reset(&c->sid);
     kbd_reset(&c->kbd);
     c->paused = false;
+    /* Preserve the 40/80 column choice across resets. */
+    c->mem.mmu.col4080 = !c->col_mode_80;
 }
 
 int c128_frame(C128 *c) {
@@ -157,6 +163,14 @@ int c128_frame(C128 *c) {
     }
     c->total_cycles += (u64)total;
     c128_frame_count++;
+
+    /* The KERNAL clears the VDC chargen (writes 0xFF) during its 80-col setup
+     * but does not copy the glyphs, so load the 80-column character generator
+     * ourselves shortly after boot (and after each reset). */
+    if (!c->vdc_chargen_loaded && c128_frame_count > 8) {
+        memcpy(&c->vdc.ram[0x2000], &c->mem.chargen[0x800], 0x800);
+        c->vdc_chargen_loaded = true;
+    }
 
     /* Render the VIC-IIe frame (40-column) and the VDC 8563 (80-column)
      * framebuffer every frame. The active display is selected from the
@@ -218,10 +232,11 @@ static void migrate_vdc_to_vic(C128 *c) {
 /* Toggle the 40/80 column mode: flip the MMU sense key, the KERNAL mode flag
  * ($00D7) and migrate the text screen to the newly-selected display. */
 void c128_switch_4080(C128 *c) {
-    c->mem.mmu.col4080 = !c->mem.mmu.col4080;
-    c->mem.ram[0xD7] = c->mem.mmu.col4080 ? 0x00 : 0x80;
-    if (c->mem.mmu.col4080)
-        migrate_vdc_to_vic(c);   /* switched to 40-col VIC */
-    else
+    c->col_mode_80 = !c->col_mode_80;
+    c->mem.mmu.col4080 = !c->col_mode_80;
+    c->mem.ram[0xD7] = c->col_mode_80 ? 0x80 : 0x00;
+    if (c->col_mode_80)
         migrate_vic_to_vdc(c);   /* switched to 80-col VDC */
+    else
+        migrate_vdc_to_vic(c);   /* switched to 40-col VIC */
 }

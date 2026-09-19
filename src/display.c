@@ -334,6 +334,35 @@ void display_save_ppm(Display *d, const char *path) {
     fclose(f);
 }
 
+/* Save whichever output is currently active: the VIC-II (40-col) or the VDC
+ * (80-col) framebuffer, matching what is on screen. */
+void display_save_ppm_active(Display *d, const char *path) {
+    const u32 *px;
+    int w, h;
+    if (d->vdc_active) {
+        px = d->vdc_pixels;
+        w = VDC_SCREEN_W;
+        h = VDC_SCREEN_H;
+    } else {
+        px = d->pixels;
+        w = C128_SCREEN_W;
+        h = C128_SCREEN_H;
+    }
+    FILE *f = fopen(path, "wb");
+    if (!f) return;
+    fprintf(f, "P6\n%d %d\n255\n", w, h);
+    for (int i = 0; i < w * h; i++) {
+        u32 p = px[i];
+        unsigned char rgb[3] = {
+            (unsigned char)((p >> 16) & 0xFF),
+            (unsigned char)((p >>  8) & 0xFF),
+            (unsigned char)( p        & 0xFF),
+        };
+        fwrite(rgb, 1, 3, f);
+    }
+    fclose(f);
+}
+
 u32 display_hash(Display *d) {
     const u32 *px = display_crt_pixels(d);
     u32 h = 2166136261u;

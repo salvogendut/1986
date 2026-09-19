@@ -176,9 +176,8 @@ int main(int argc, char **argv) {
     }
 
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */
+    c.col_mode_80 = true;   /* boot into 80-column (VDC) mode */
     c128_reset(&c);
-    /* Boot into 80-column (VDC) mode so the VDC shows the boot banner. */
-    c.mem.mmu.col4080 = false;
 
     /* Patch the KERNAL ROM with the IEC serial traps (like VICE) so the boot
      * does not block waiting for the serial/disk bus. */
@@ -291,7 +290,7 @@ int main(int argc, char **argv) {
                     tmp[sizeof(tmp) - 1] = '\0';
                     snprintf(path, sizeof(path), "%s_%ld.ppm",
                              basename(tmp), (long)time(NULL));
-                    display_save_ppm(&c.display, path);
+                    display_save_ppm_active(&c.display, path);
                 } else if (ev.key.scancode == SDL_SCANCODE_F5) {
                     c128_reset(&c);
                 } else if (ev.key.scancode == SDL_SCANCODE_F6) {

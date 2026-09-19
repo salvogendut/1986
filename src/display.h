@@ -65,6 +65,7 @@ void display_finalize_frame(Display *d, u32 blank); /* fill pixels not scanned t
 void display_upload(Display *d);   /* update texture + blit to renderer (no flip) */
 void display_flip(Display *d);     /* SDL_RenderPresent */
 void display_save_ppm(Display *d, const char *path);
+void display_save_ppm_active(Display *d, const char *path);  /* saves the active output (VIC or VDC) */
 u32  display_hash(Display *d);
 void display_set_smoothing(Display *d, bool smooth);
 void display_set_crt(Display *d, bool enabled, int scanlines, int brightness,

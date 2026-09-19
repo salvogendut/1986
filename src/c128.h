@@ -34,6 +34,8 @@ typedef struct {
     Config *cfg;
     bool    paused;
     bool    fast;        /* 8502 at 2 MHz (C128 fast mode) */
+    bool    col_mode_80; /* persistent 40/80 mode: true = 80-col (survives reset) */
+    bool    vdc_chargen_loaded; /* the 80-col VDC chargen has been loaded */
     u64     total_cycles;
 } C128;
 
