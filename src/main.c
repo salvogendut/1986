@@ -177,6 +177,8 @@ int main(int argc, char **argv) {
 
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */
     c128_reset(&c);
+    /* Boot into 80-column (VDC) mode so the VDC shows the boot banner. */
+    c.mem.mmu.col4080 = false;
 
     /* Patch the KERNAL ROM with the IEC serial traps (like VICE) so the boot
      * does not block waiting for the serial/disk bus. */
@@ -304,9 +306,11 @@ int main(int argc, char **argv) {
                         else snprintf(path, sizeof(path), "1986-capture.gif");
                         videocap_start(path, cfg.gif_width, cfg.gif_fps);
                     }
-                } else if (ev.key.scancode == SDL_SCANCODE_F10) {
+                } else if (ev.key.scancode == SDL_SCANCODE_F7) {
                     paused = !paused;
                     c.paused = paused;
+                } else if (ev.key.scancode == SDL_SCANCODE_F10) {
+                    c128_switch_4080(&c);   /* toggle 40-col VIC <-> 80-col VDC */
                 } else if (ev.key.scancode == SDL_SCANCODE_V &&
                            (SDL_GetModState() & SDL_KMOD_CTRL)) {
                     char *text = SDL_GetClipboardText();

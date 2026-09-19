@@ -42,6 +42,7 @@ void c128_reset(C128 *c);
 int  c128_frame(C128 *c);      /* run one frame; returns CPU cycles consumed */
 u64  c128_cycles_to_ns(const C128 *c, int cycles);
 void c128_key_event(C128 *c, int scancode, bool down);
+void c128_switch_4080(C128 *c);   /* toggle 40-column VIC <-> 80-column VDC */
 u8   c128_mem_read(void *ctx, u16 addr);
 void c128_mem_write(void *ctx, u16 addr, u8 val);
 
