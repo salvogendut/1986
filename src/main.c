@@ -110,11 +110,14 @@ int main(int argc, char **argv) {
         else if (argv[i][0] == '-') { usage(argv[0]); return 1; }
     }
 
-    /* Load user config (overrides defaults; command-line flags above still win). */
+    /* Load user config (overrides defaults; command-line flags above still
+     * win). If there is no config file yet, create one with the defaults so
+     * it exists for later runs. */
     {
         char cfg_path[CONFIG_PATH_MAX];
         config_path(cfg_path, sizeof(cfg_path));
-        config_load(&cfg, cfg_path);
+        if (!config_load(&cfg, cfg_path))
+            config_save(&cfg, cfg_path);
     }
     if (rom_dir) snprintf(cfg.rom_dir, sizeof(cfg.rom_dir), "%s", rom_dir);
     g_boot_trace = getenv("C128_BOOT_TRACE") != NULL;
