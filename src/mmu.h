@@ -20,6 +20,9 @@
 typedef struct {
     u8  mcr;      /* memory configuration register */
     u8  prefig;   /* pre-configuration register */
+    u8  pcr2;     /* preconfiguration register $D502 */
+    u8  pcr3;     /* preconfiguration register $D503 */
+    u8  pcr4;     /* preconfiguration register $D504 */
     u8  ram_bank; /* low nibble of $D506 */
     u8  rom_bank; /* high nibble of $D506 */
     u8  mode;     /* $D507 */
@@ -34,3 +37,5 @@ void mmu_init(Mmu *mmu);
 void mmu_reset(Mmu *mmu);
 void mmu_write(Mmu *mmu, u16 addr, u8 val);
 u8   mmu_read(const Mmu *mmu, u16 addr);
+u8   mmu_ffxx_read(const Mmu *mmu, u16 addr);         /* $FF00-$FF04 mirror */
+void mmu_ffxx_write(Mmu *mmu, u16 addr, u8 val);

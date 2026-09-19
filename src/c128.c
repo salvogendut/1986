@@ -11,7 +11,7 @@ int c128_frame_count = 0;
 static u8 io_read(C128 *c, u16 addr) {
     u8 v;
     if (addr >= 0xD000 && addr < 0xD400) v = vic_read(&c->vic, addr);
-    else if (addr >= 0xD400 && addr < 0xD800) v = sid_read(&c->sid, addr);
+    else if (addr >= 0xD400 && addr < 0xD500) v = sid_read(&c->sid, addr);
     else if (addr >= 0xD800 && addr < 0xDC00) {
         unsigned bank = c->mem.pla_data & 0x01;   /* CPU colour-RAM bank */
         v = c->mem.color_ram[bank * 0x400 + (addr & 0x3FF)];
@@ -42,15 +42,17 @@ static u8 io_read(C128 *c, u16 addr) {
 
 static void io_write(C128 *c, u16 addr, u8 val) {
     if (addr >= 0xD000 && addr < 0xD400) { vic_write(&c->vic, addr, val); return; }
-    if (addr >= 0xD400 && addr < 0xD800) { sid_write(&c->sid, addr, val); return; }
+    if (addr >= 0xD400 && addr < 0xD500) { sid_write(&c->sid, addr, val); return; }
     if (addr >= 0xD800 && addr < 0xDC00) {
         unsigned bank = c->mem.pla_data & 0x01;   /* CPU colour-RAM bank */
         c->mem.color_ram[bank * 0x400 + (addr & 0x3FF)] = val & 0x0F;
         return;
     }
-    if (addr >= 0xD500 && addr < 0xD510 && c->mem.mmu.mmio) {
-        mmu_write(&c->mem.mmu, addr, val);
-        return;
+    if (addr >= 0xD500 && addr < 0xD510) {
+        if (c->mem.mmu.mmio) {
+            mmu_write(&c->mem.mmu, addr, val);
+            return;
+        }
     }
     if (addr >= 0xDC00 && addr < 0xDD00) { cia_write(&c->cia1, addr, val); return; }
     if (addr >= 0xDD00 && addr < 0xDE00) { cia_write(&c->cia2, addr, val); return; }
@@ -74,6 +76,7 @@ u8 c128_mem_read(void *ctx, u16 addr) {
     /* 8502 on-chip I/O port at $0000 (DDR) and $0001 (port) drives the MMU. */
     if (addr == 0x0000) return c->cpu.io_ddr;
     if (addr == 0x0001) return c->cpu.io_port;
+    if (addr >= 0xFF00 && addr <= 0xFF04) return mmu_ffxx_read(&c->mem.mmu, addr);
     if (addr >= 0xD000 && addr < 0xE000) return io_read(c, addr);
     return mem_read(&c->mem, addr);
 }
@@ -82,6 +85,7 @@ void c128_mem_write(void *ctx, u16 addr, u8 val) {
     C128 *c = ctx;
     if (addr == 0x0000) { c->cpu.io_ddr = val; pla_update(c); return; }
     if (addr == 0x0001) { c->cpu.io_port = val; pla_update(c); return; }
+    if (addr >= 0xFF00 && addr <= 0xFF04) { mmu_ffxx_write(&c->mem.mmu, addr, val); return; }
     if (addr >= 0xD000 && addr < 0xE000) { io_write(c, addr, val); return; }
     mem_write(&c->mem, addr, val);
 }

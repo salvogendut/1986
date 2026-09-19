@@ -14,9 +14,13 @@ void mem_reset(Mem *m) {
     mmu_reset(&m->mmu);
 }
 
-static u16 bank_off(const Mem *m, u16 addr) {
-    u8 bank = m->mmu.ram_bank & 0x01;
-    return (u16)((bank << 16) | addr);
+static u32 bank_off(const Mem *m, u16 addr) {
+    /* CR bits 6-7 select the RAM bank (00/01 = bank 0/1 for the 128K C128).
+     * The 1K common area ($0000-$03FF, incl. zero page and page 1) is always
+     * bank 0 (RCR default = 1K lower common). */
+    u8 bank = (m->mmu.mcr >> 6) & 0x01;
+    if (addr < 0x400) bank = 0;
+    return ((u32)bank << 16) | addr;
 }
 
 /* Derive the C128 memory-config index from the raw $D500 config register,
@@ -43,10 +47,10 @@ static bool cfg_4000_is_rom(unsigned cfg) {
 static bool cfg_8000_is_rom(unsigned cfg) {
     return (cfg & 7) == 0 || (cfg & 7) == 1;
 }
-/* $E000-$FFFF: KERNAL ROM when bits 3-5 of the config are clear (configs
- * 0-7 and 64-71). */
+/* $E000-$FFFF: KERNAL ROM when the $C000-$FFFF selector (config bits 3-4)
+ * is 0. The RAM-bank bit (config bit 5) does not affect ROM selection. */
 static bool cfg_e000_is_rom(unsigned cfg) {
-    return (cfg & 0x38) == 0x00;
+    return (cfg & 0x18) == 0x00;
 }
 
 u8 mem_read(Mem *m, u16 addr) {
@@ -75,17 +79,10 @@ u8 mem_read(Mem *m, u16 addr) {
 }
 
 void mem_write(Mem *m, u16 addr, u8 val) {
-    unsigned cfg = c128_config(m);
-
-    /* ROM windows are read-only while mapped. */
-    bool rom = false;
-    if (addr >= 0x4000 && addr < 0x8000)   rom = cfg_4000_is_rom(cfg);
-    else if (addr >= 0x8000 && addr < 0xC000) rom = cfg_8000_is_rom(cfg);
-    else if (addr >= 0xC000 && addr < 0xD000) rom = true;   /* EDITOR */
-    else if (addr >= 0xE000)                rom = cfg_e000_is_rom(cfg);
-    if (rom) return;
-
-    m->ram[bank_off(m, addr)] = val;
+    /* ROM windows are read-only for reads, but writes pass through to the
+     * RAM (bank) underneath (the C128's "RAM behind ROM" behaviour). */
+    u32 off = bank_off(m, addr);
+    m->ram[off] = val;
 }
 
 /* Read up to cap bytes; returns the byte count (0 on failure). */
