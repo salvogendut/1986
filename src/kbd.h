@@ -19,6 +19,9 @@
  * shift when the user presses an arrow key. */
 #define KBD_SHIFT_ROW 6
 #define KBD_SHIFT_COL 4
+/* LEFT Shift matrix position (the PC Shift key). */
+#define KBD_LSHIFT_ROW 1
+#define KBD_LSHIFT_COL 7
 
 typedef struct {
     u8 matrix[KBD_ROWS];   /* bit n set = key at (row, col n) pressed */

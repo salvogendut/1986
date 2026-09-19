@@ -171,6 +171,7 @@ int main(int argc, char **argv) {
     bool fullscreen = cfg.fullscreen;
     bool paused = false;
     int  mouse_captured = 0;
+    bool pc_shift_held = false;
     uint64_t next_frame = 0;
 
     while (running) {
@@ -208,6 +209,9 @@ int main(int argc, char **argv) {
                 bool shift = (ev.key.mod & SDL_KMOD_SHIFT) != 0;
                 bool fkey  = (ev.key.scancode >= SDL_SCANCODE_F1 &&
                               ev.key.scancode <= SDL_SCANCODE_F8);
+                if (ev.key.scancode == SDL_SCANCODE_LSHIFT ||
+                    ev.key.scancode == SDL_SCANCODE_RSHIFT)
+                    pc_shift_held = true;
                 bool key_plus  = (ev.key.scancode == SDL_SCANCODE_EQUALS ||
                                   ev.key.scancode == SDL_SCANCODE_KP_PLUS);
                 bool key_minus = (ev.key.scancode == SDL_SCANCODE_MINUS ||
@@ -227,9 +231,19 @@ int main(int argc, char **argv) {
                     continue;
                 }
                 /* Shift+F1-F8 press the C128 function keys (they're the
-                 * emulator's plain F-key shortcuts otherwise). */
+                 * emulator's plain F-key shortcuts otherwise). The held PC
+                 * Shift must NOT also apply as a C128 Shift, or F1 would read
+                 * as F2; override it with the function key's own Shift. */
                 if (fkey && shift) {
-                    c128_key_event(&c, ev.key.scancode, true);
+                    int row, col;
+                    bool need_shift;
+                    if (kbd_map_scancode(ev.key.scancode, &row, &col, &need_shift)) {
+                        kbd_set(&c.kbd, KBD_LSHIFT_ROW, KBD_LSHIFT_COL, false);
+                        kbd_set(&c.kbd, KBD_SHIFT_ROW, KBD_SHIFT_COL, false);
+                        if (need_shift)
+                            kbd_set(&c.kbd, KBD_SHIFT_ROW, KBD_SHIFT_COL, true);
+                        kbd_set(&c.kbd, row, col, true);
+                    }
                     continue;
                 }
                 if (ev.key.scancode == SDL_SCANCODE_F12) {
@@ -279,10 +293,27 @@ int main(int argc, char **argv) {
                     c128_key_event(&c, ev.key.scancode, true);
                 }
             } else if (ev.type == SDL_EVENT_KEY_UP) {
+                if (ev.key.scancode == SDL_SCANCODE_LSHIFT ||
+                    ev.key.scancode == SDL_SCANCODE_RSHIFT)
+                    pc_shift_held = false;
                 if (ev.key.scancode == SDL_SCANCODE_PRINTSCREEN)
                     c.mem.mmu.col4080 = true;   /* 40/80 key released */
-                /* Release function keys too (harmless if not held). */
-                c128_key_event(&c, ev.key.scancode, false);
+                bool fkey = (ev.key.scancode >= SDL_SCANCODE_F1 &&
+                             ev.key.scancode <= SDL_SCANCODE_F8);
+                if (fkey) {
+                    /* Release a Shift+Fn key, restoring the PC Shift if it is
+                     * still held (so a following letter stays shifted). */
+                    int row, col;
+                    bool need_shift;
+                    if (kbd_map_scancode(ev.key.scancode, &row, &col, &need_shift)) {
+                        kbd_set(&c.kbd, row, col, false);
+                        kbd_set(&c.kbd, KBD_SHIFT_ROW, KBD_SHIFT_COL, false);
+                        if (pc_shift_held)
+                            kbd_set(&c.kbd, KBD_LSHIFT_ROW, KBD_LSHIFT_COL, true);
+                    }
+                } else {
+                    c128_key_event(&c, ev.key.scancode, false);
+                }
             }
         }
 
