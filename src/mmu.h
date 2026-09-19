@@ -25,6 +25,8 @@ typedef struct {
     u8  mode;     /* $D507 */
     u8  vdc_bank; /* $D50D */
     u8  vdc_ctrl; /* $D50E */
+    u8  mcr5;     /* $D505 mode configuration register (low nibble) */
+    bool col4080; /* 40/80 column key: true = 40-col (default) */
     bool mmio;    /* true when $D500 block is mapped in */
 } Mmu;
 
