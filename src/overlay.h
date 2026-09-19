@@ -25,11 +25,6 @@ typedef struct {
     Config      *cfg;
     C128        *c128;
 
-    /* Selected media files (shown in Media, not yet connected to a device). */
-    char disk_path[CONFIG_PATH_MAX];
-    char tape_path[CONFIG_PATH_MAX];
-    char cart_path[CONFIG_PATH_MAX];
-
     /* Pending native file-dialog result (set by the SDL dialog callback). */
     OvDialogKind dialog_kind;
     bool         dialog_ready;

@@ -111,7 +111,11 @@ int main(int argc, char **argv) {
     }
 
     /* Load user config (overrides defaults; command-line flags above still win). */
-    config_load(&cfg, CONFIG_NAME);
+    {
+        char cfg_path[CONFIG_PATH_MAX];
+        config_path(cfg_path, sizeof(cfg_path));
+        config_load(&cfg, cfg_path);
+    }
     if (rom_dir) snprintf(cfg.rom_dir, sizeof(cfg.rom_dir), "%s", rom_dir);
     g_boot_trace = getenv("C128_BOOT_TRACE") != NULL;
     if (getenv("C128_SAVE_PPM"))

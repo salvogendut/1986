@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 void config_set_defaults(Config *cfg) {
     memset(cfg, 0, sizeof(*cfg));
@@ -22,6 +24,25 @@ void config_set_defaults(Config *cfg) {
     cfg->gif_fps = 25;
     cfg->gif_ffmpeg = false;
     cfg->rom_dir[0] = '\0';
+    cfg->disk_path[0] = '\0';
+    cfg->tape_path[0] = '\0';
+    cfg->cart_path[0] = '\0';
+}
+
+/* Resolve the config file location: $HOME/.config/1986/1986.conf, falling
+ * back to a relative "1986.conf" if HOME is unset. Creates the directory. */
+void config_path(char *out, size_t sz) {
+    const char *home = getenv("HOME");
+    if (home && *home) {
+        char dir[CONFIG_PATH_MAX];
+        snprintf(dir, sizeof(dir), "%s/.config", home);
+        mkdir(dir, 0755);
+        snprintf(dir, sizeof(dir), "%s/.config/1986", home);
+        mkdir(dir, 0755);
+        snprintf(out, sz, "%s/.config/1986/%s", home, CONFIG_NAME);
+        return;
+    }
+    snprintf(out, sz, "%s", CONFIG_NAME);
 }
 
 /* Very small INI-style parser: one `key = value` per line, '#' comments. */
@@ -58,6 +79,15 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "rom_dir")) {
         snprintf(cfg->rom_dir, sizeof(cfg->rom_dir), "%s", value);
     }
+    else if (!strcasecmp(key, "disk")) {
+        snprintf(cfg->disk_path, sizeof(cfg->disk_path), "%s", value);
+    }
+    else if (!strcasecmp(key, "tape")) {
+        snprintf(cfg->tape_path, sizeof(cfg->tape_path), "%s", value);
+    }
+    else if (!strcasecmp(key, "cart")) {
+        snprintf(cfg->cart_path, sizeof(cfg->cart_path), "%s", value);
+    }
 }
 
 bool config_load(Config *cfg, const char *path) {
@@ -93,6 +123,9 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "gif_fps = %d\n", cfg->gif_fps);
     fprintf(f, "gif_ffmpeg = %d\n", cfg->gif_ffmpeg ? 1 : 0);
     fprintf(f, "rom_dir = %s\n", cfg->rom_dir);
+    fprintf(f, "disk = %s\n", cfg->disk_path);
+    fprintf(f, "tape = %s\n", cfg->tape_path);
+    fprintf(f, "cart = %s\n", cfg->cart_path);
     fclose(f);
     return true;
 }

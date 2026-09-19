@@ -12,6 +12,14 @@
 static void overlay_file_callback(void *userdata, const char * const *files,
                                   int filter);
 
+/* Persist the current config and hide the overlay. */
+static void overlay_close(Overlay *ov) {
+    char path[CONFIG_PATH_MAX];
+    config_path(path, sizeof(path));
+    config_save(ov->cfg, path);
+    ov->visible = false;
+}
+
 static const char *const MODELS[] = { "C128DCR", "C128", "C128D" };
 
 static const char *media_label(int row) {
@@ -30,9 +38,9 @@ static const char *media_extension(int row) {
 
 /* The selected file path (or NULL) for a Media row. */
 static const char *media_path(const Overlay *ov, int row) {
-    if (row == 0) return ov->disk_path;
-    if (row == 1) return ov->tape_path;
-    return ov->cart_path;
+    if (row == 0) return ov->cfg->disk_path;
+    if (row == 1) return ov->cfg->tape_path;
+    return ov->cfg->cart_path;
 }
 
 static void open_media_dialog(Overlay *ov, int row) {
@@ -100,7 +108,7 @@ bool overlay_handle_event(Overlay *ov, SDL_Event *ev) {
             ov->section = OV_GENERAL;
             ov->row     = 0;
         } else {
-            ov->visible = false;
+            overlay_close(ov);
         }
         return true;
     }
@@ -127,7 +135,7 @@ bool overlay_handle_event(Overlay *ov, SDL_Event *ev) {
                 open_media_dialog(ov, ov->row);
             break;
         case SDL_SCANCODE_ESCAPE:
-            ov->visible = false;
+            overlay_close(ov);
             break;
         default:
             break;
@@ -152,11 +160,15 @@ void overlay_tick(Overlay *ov) {
     ov->dialog_kind = OV_DIALOG_NONE;
 
     char *dest = NULL;
-    if (kind == OV_DIALOG_DISK)      dest = ov->disk_path;
-    else if (kind == OV_DIALOG_TAPE) dest = ov->tape_path;
-    else if (kind == OV_DIALOG_CART) dest = ov->cart_path;
-    if (dest)
+    if (kind == OV_DIALOG_DISK)      dest = ov->cfg->disk_path;
+    else if (kind == OV_DIALOG_TAPE) dest = ov->cfg->tape_path;
+    else if (kind == OV_DIALOG_CART) dest = ov->cfg->cart_path;
+    if (dest) {
         snprintf(dest, CONFIG_PATH_MAX, "%s", ov->dialog_path);
+        char path[CONFIG_PATH_MAX];
+        config_path(path, sizeof(path));
+        config_save(ov->cfg, path);
+    }
 }
 
 static void overlay_file_callback(void *userdata, const char * const *files,
