@@ -137,7 +137,8 @@ void display_upload(Display *d) {
     int area_h = wh - bar_h;
     if (area_h < 1) area_h = 1;
 
-    /* Fit 320x200 into (ww x area_h) maintaining WINDOW_W:WINDOW_H (2:1). */
+    /* Fit the 384x272 VIC-II screen (with border) into (ww x area_h),
+     * maintaining the WINDOW_W:WINDOW_H aspect ratio. */
     int dst_w = ww;
     int dst_h = area_h;
     if (dst_w * WINDOW_H > dst_h * WINDOW_W)

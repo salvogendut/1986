@@ -10,10 +10,14 @@
  * a separate path (see vdc.c) that may be composited here later.
  */
 
-#define C128_SCREEN_W       320   /* VIC-IIe visible pixels */
-#define C128_SCREEN_H       200   /* VIC-IIe visible pixels */
-#define WINDOW_W            640   /* 2x display width */
-#define WINDOW_H            400   /* 2x display height */
+#define C128_SCREEN_W       384   /* VIC-IIe full screen (320 text + 32+32 border) */
+#define C128_SCREEN_H       272   /* VIC-IIe full screen (PAL normal, 35+200+37 border) */
+#define VIC_TEXT_W          320   /* VIC-IIe visible text area */
+#define VIC_TEXT_H          200
+#define VIC_TEXT_X          32    /* text area origin (left border) */
+#define VIC_TEXT_Y          35    /* text area origin (top border) */
+#define WINDOW_W            768   /* 2x display width */
+#define WINDOW_H            544   /* 2x display height */
 #define LED_BAR_HEIGHT      22    /* drive-activity LED strip below the C128 area */
 #define WINDOW_H_TOTAL      (WINDOW_H + LED_BAR_HEIGHT)
 

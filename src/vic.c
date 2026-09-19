@@ -106,31 +106,25 @@ bool vic_tick(Vic *v) {
     return (v->irq_status & 0x80) != 0;
 }
 
-/* Render the 40x25 character screen into the display buffer. */
+/* Render the 40x25 character screen into the display buffer, with the VIC-IIe
+ * border around the text area. Characters are drawn 1:1 (8x8 pixels each). */
 void vic_render(Vic *v, Mem *m, Display *d) {
     u32 border = VIC_COLORS[v->border_color & 0x0F];
     u32 bg = VIC_COLORS[v->bg_color[0] & 0x0F];
 
-    /* Fill with border colour. */
+    /* Fill the whole screen with the border colour. */
     for (int i = 0; i < C128_SCREEN_W * C128_SCREEN_H; i++)
         d->pixels[i] = border;
 
-    /* Inner text area (with a small border margin). */
-    int bx = 4, by = 4;
-    int bw = C128_SCREEN_W - 8, bh = C128_SCREEN_H - 8;
-    for (int y = by; y < by + bh; y++) {
-        for (int x = bx; x < bx + bw; x++) {
+    /* Text area (bg colour). */
+    for (int y = VIC_TEXT_Y; y < VIC_TEXT_Y + VIC_TEXT_H; y++) {
+        for (int x = VIC_TEXT_X; x < VIC_TEXT_X + VIC_TEXT_W; x++)
             d->pixels[y * C128_SCREEN_W + x] = bg;
-        }
     }
 
-    /* 40x25 characters, 8x8 pixels each, fitted into the text area. */
+    /* 40x25 characters, 8x8 pixels each. */
     unsigned screen_base = (v->screen_addr & 0x3FFF) & 0x3C00;  /* page-aligned, <=16K */
     if (screen_base < 0x400) screen_base = 0x400;
-    int cell_w = bw / VIC_CHARS_X;
-    int cell_h = bh / VIC_CHARS_Y;
-    if (cell_w < 1) cell_w = 1;
-    if (cell_h < 1) cell_h = 1;
 
     for (int cy = 0; cy < VIC_CHARS_Y; cy++) {
         for (int cx = 0; cx < VIC_CHARS_X; cx++) {
@@ -143,12 +137,11 @@ void vic_render(Vic *v, Mem *m, Display *d) {
             const u8 *glyph = &m->chargen[(u16)(ch << 3)];
             for (int py = 0; py < 8; py++) {
                 u8 bits = glyph[py];
+                int dy = VIC_TEXT_Y + cy * 8 + py;
                 for (int px = 0; px < 8; px++) {
                     if (bits & (0x80 >> px)) {
-                        int dx = bx + cx * cell_w + px * cell_w / 8;
-                        int dy = by + cy * cell_h + py * cell_h / 8;
-                        if (dx < bx + bw && dy < by + bh)
-                            d->pixels[dy * C128_SCREEN_W + dx] = fg;
+                        int dx = VIC_TEXT_X + cx * 8 + px;
+                        d->pixels[dy * C128_SCREEN_W + dx] = fg;
                     }
                 }
             }
