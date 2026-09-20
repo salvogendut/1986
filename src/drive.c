@@ -62,6 +62,7 @@ typedef struct {
     int  cmd_done;               /* a complete command (0x0D) was received */
     u8   resp[65536];            /* the prepared response (directory PRG/file) */
     int  resp_len, resp_pos;
+    int  status_pos;             /* position in the 2-byte status response */
     int  opened;                 /* a data channel is open */
     char filename[64];           /* the requested filename */
     int  want_dir;               /* the "$" directory was requested */
@@ -144,7 +145,8 @@ static void smart_attention(Drive *d, u8 b) {
         s->talking = 1; s->listening = 0;
     } else if ((b & 0xF0) == 0x60) {   /* SECONDARY */
         s->secondary = b & 0x0F;
-        if (s->talking && s->secondary != 15) { s->resp_pos = 0; s->opened = 1; }
+        if (s->talking && s->secondary == 15) s->status_pos = 0;
+        else if (s->talking) { s->resp_pos = 0; s->opened = 1; }
     } else if (b == 0x3F) {            /* UNLISTEN */
         s->listening = 0;
         if (s->cmd_done) {
@@ -174,8 +176,10 @@ static int smart_receive(Drive *d, u8 *byte) {
     SmartDrive *s = d->impl;
     leds_ping(LED_FDC_A);   /* disk activity */
     if (s->secondary == 15) {
-        /* Status channel: report OK (0x00 0x00) once. */
-        if (s->resp_pos < 2) { *byte = 0x00; s->resp_pos++; return 1; }
+        /* Command channel: the directory PRG is read here (a directory was
+         * built), otherwise the status (0x00 0x00) is returned. */
+        if (s->resp_pos < s->resp_len) { *byte = s->resp[s->resp_pos++]; return 1; }
+        if (s->status_pos < 2) { *byte = 0x00; s->status_pos++; return 1; }
         return 0;
     }
     if (s->resp_pos < s->resp_len) { *byte = s->resp[s->resp_pos++]; return 1; }
