@@ -5,7 +5,7 @@ CPPFLAGS ?=
 SDL3_CFLAGS ?= $(shell pkg-config --cflags sdl3)
 SDL3_LIBS ?= $(shell pkg-config --libs sdl3)
 
-TESTS = test-cpu test-mmu test-config test-gifcap
+TESTS = test-cpu test-mmu test-config test-gifcap test-d64
 
 .PHONY: all check clean
 
@@ -27,11 +27,16 @@ test-gifcap: test_gifcap.c ../src/gifcap.c ../src/gifcap.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_gifcap.c ../src/gifcap.c -o $@
 
+test-d64: test_d64.c ../src/d64.c ../src/d64.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
+		test_d64.c ../src/d64.c -o $@
+
 check: $(TESTS)
 	./test-cpu
 	./test-mmu
 	./test-config
 	./test-gifcap
+	./test-d64
 
 clean:
 	rm -f $(TESTS)

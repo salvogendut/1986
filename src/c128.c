@@ -123,6 +123,7 @@ void c128_init(C128 *c, Config *cfg) {
     cia_init(&c->cia2);
     sid_init(&c->sid);
     kbd_init(&c->kbd);
+    drive_init(&c->drive, cfg);
 
     /* Reset is deferred: the host loads machine ROMs after c128_init(), and
      * the reset vector must be read from the loaded KERNAL ROM. */
@@ -143,6 +144,7 @@ void c128_reset(C128 *c) {
     cia_reset(&c->cia2);
     sid_reset(&c->sid);
     kbd_reset(&c->kbd);
+    drive_reset(&c->drive);
     c->paused = false;
     c->frames_since_reset = 0;
     /* Preserve the 40/80 column choice across resets. */
@@ -244,4 +246,22 @@ void c128_switch_4080(C128 *c) {
         migrate_vic_to_vdc(c);   /* switched to 80-col VDC */
     else
         migrate_vdc_to_vic(c);   /* switched to 40-col VIC */
+}
+
+/* --- IEC serial-bus forwarding to the pluggable drive. ------------------- */
+
+void c128_iec_attention(void *ctx, u8 b) {
+    C128 *c = ctx;
+    if (c->drive.ops && c->drive.ops->attention) c->drive.ops->attention(&c->drive, b);
+}
+
+void c128_iec_send(void *ctx, u8 byte) {
+    C128 *c = ctx;
+    if (c->drive.ops && c->drive.ops->send) c->drive.ops->send(&c->drive, byte);
+}
+
+int c128_iec_receive(void *ctx, u8 *byte) {
+    C128 *c = ctx;
+    if (c->drive.ops && c->drive.ops->receive) return c->drive.ops->receive(&c->drive, byte);
+    return 0;
 }

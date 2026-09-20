@@ -9,6 +9,7 @@
 #include "cia.h"
 #include "sid.h"
 #include "kbd.h"
+#include "drive.h"
 #include "config.h"
 #include <stdbool.h>
 
@@ -31,6 +32,7 @@ typedef struct {
     Cia     cia1, cia2;
     Sid     sid;
     Kbd     kbd;
+    Drive   drive;
     Config *cfg;
     bool    paused;
     bool    fast;        /* 8502 at 2 MHz (C128 fast mode) */
@@ -46,6 +48,11 @@ int  c128_frame(C128 *c);      /* run one frame; returns CPU cycles consumed */
 u64  c128_cycles_to_ns(const C128 *c, int cycles);
 void c128_key_event(C128 *c, int scancode, bool down);
 void c128_switch_4080(C128 *c);   /* toggle 40-column VIC <-> 80-column VDC */
+
+/* IEC serial-bus forwarding (installed via cpu_install_iec_traps). */
+void c128_iec_attention(void *ctx, u8 b);
+void c128_iec_send(void *ctx, u8 byte);
+int  c128_iec_receive(void *ctx, u8 *byte);
 u8   c128_mem_read(void *ctx, u16 addr);
 void c128_mem_write(void *ctx, u16 addr, u8 val);
 

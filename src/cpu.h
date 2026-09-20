@@ -60,3 +60,18 @@ void cpu_nmi(Cpu8502 *cpu, bool level);
 void cpu_pc(Cpu8502 *cpu, u16 pc);
 u64  cpu_cycles(void);                /* total cycles executed (for raster sync) */
 void cpu_install_serial_traps(u8 *kernal); /* patch the KERNAL ROM with IEC traps */
+
+/* IEC (serial-bus) trap callbacks, invoked by the KERNAL's patched routines.
+ * The C128 core installs a handler that forwards to the pluggable drive. */
+typedef struct {
+    void *ctx;
+    void (*attention)(void *ctx, u8 b);    /* LISTEN/TALK/secondary on the bus */
+    void (*send)(void *ctx, u8 byte);      /* C128 sends a command byte */
+    int  (*receive)(void *ctx, u8 *byte);  /* drive returns a byte; the return
+                                            * value is 0 = no byte, 1 = a data
+                                            * byte, or 2 = the final (EOI) byte */
+} IecCallbacks;
+
+/* Patch the KERNAL's IEC routines and install the callbacks. Pass cb=NULL to
+ * just patch the serial-ready routines (boot). */
+void cpu_install_iec_traps(u8 *kernal, const IecCallbacks *cb);

@@ -37,6 +37,10 @@ typedef struct {
     char       tape_path[CONFIG_PATH_MAX];  /* Tape .tap image */
     char       cart_path[CONFIG_PATH_MAX];  /* Cartridge .crt image */
 
+    /* Disk drive (Commodore 1571). */
+    int        drive_unit;        /* IEC device number (8-11) */
+    int        drive_type;        /* DRIVE_TYPE_* (1571) */
+
     /* Tinker-gated Advanced overlay section. */
     bool       tinker;              /* enable the Advanced section */
     bool       one_display;         /* unified display (VIC/VDC share one window) */
