@@ -188,7 +188,7 @@ void vic_render(Vic *v, Mem *m, Display *d) {
             u8 col = m->color_ram[cbank * 0x400 + ((cy * VIC_CHARS_X + cx) & 0x3FF)] & 0x0F;
             u32 fg = VIC_COLORS[col];
             /* Glyph: 8 bytes per character from the character ROM. */
-            const u8 *glyph = &m->chargen[(u16)(ch << 3)];
+            const u8 *glyph = &m->chargen[0x1000 + (u16)(ch << 3)];
             for (int py = 0; py < 8; py++) {
                 u8 bits = glyph[py];
                 int dy = VIC_TEXT_Y + cy * 8 + py;

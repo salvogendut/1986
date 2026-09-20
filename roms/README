@@ -13,7 +13,8 @@
 #                 from the C128DCR ROM chip (e.g. MAME 318023-02.u32):
 #                   [0x0000..0x3FFF]  BASIC low -> $4000-$7FFF
 #                   [0x4000..0x7FFF]  BASIC high-> $8000-$BFFF
-#   chargen.bin  0x1000 bytes — the C128 character generator (optional)
+#   chargen.bin  0x2000 bytes — C64 + native-C128 character banks (optional;
+#                               legacy 0x1000-byte dumps are also accepted)
 #
 # These ROMs are copyright Commodore and are not redistributed here. Obtain
 # them from a source you are entitled to use (for example by dumping your own

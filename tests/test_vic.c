@@ -56,6 +56,18 @@ int main(void) {
     CHECK(pixel(display, 6, 0) == 0x706DEB && pixel(display, 7, 0) == 0x706DEB,
           "multicolor 11 uses colour RAM");
 
+    /* Native C128 text mode uses the upper 4K half of the 8K character ROM. */
+    vic_reset(&vic);
+    mem->ram[0x0400] = 0x01;
+    mem->color_ram[0] = 0x01;
+    mem->chargen[0x0008] = 0x00;
+    mem->chargen[0x1008] = 0x80;
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xFFFFFF,
+          "native C128 text uses upper character-ROM bank");
+    CHECK(pixel(display, 1, 0) == 0x000000,
+          "character glyph preserves clear pixels");
+
     free(display);
     free(mem);
     if (failures == 0) { printf("test-vic: OK\n"); return 0; }

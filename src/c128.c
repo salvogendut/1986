@@ -77,7 +77,8 @@ u8 c128_mem_read(void *ctx, u16 addr) {
     if (addr == 0x0000) return c->cpu.io_ddr;
     if (addr == 0x0001) return c->cpu.io_port;
     if (addr >= 0xFF00 && addr <= 0xFF04) return mmu_ffxx_read(&c->mem.mmu, addr);
-    if (addr >= 0xD000 && addr < 0xE000) return io_read(c, addr);
+    if (addr >= 0xD000 && addr < 0xE000 && mem_io_visible(&c->mem))
+        return io_read(c, addr);
     return mem_read(&c->mem, addr);
 }
 
@@ -86,7 +87,10 @@ void c128_mem_write(void *ctx, u16 addr, u8 val) {
     if (addr == 0x0000) { c->cpu.io_ddr = val; pla_update(c); return; }
     if (addr == 0x0001) { c->cpu.io_port = val; pla_update(c); return; }
     if (addr >= 0xFF00 && addr <= 0xFF04) { mmu_ffxx_write(&c->mem.mmu, addr, val); return; }
-    if (addr >= 0xD000 && addr < 0xE000) { io_write(c, addr, val); return; }
+    if (addr >= 0xD000 && addr < 0xE000 && mem_io_visible(&c->mem)) {
+        io_write(c, addr, val);
+        return;
+    }
     mem_write(&c->mem, addr, val);
 }
 

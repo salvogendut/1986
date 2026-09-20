@@ -21,7 +21,7 @@
 #define ROM_EDITOR    0x1000
 #define ROM_Z80BIOS   0x1000
 #define ROM_KERNAL    0x2000
-#define ROM_CHARGEN   0x1000
+#define ROM_CHARGEN   0x2000   /* C64 and native-C128 4K character banks */
 
 typedef struct {
     Mmu  mmu;
@@ -39,9 +39,12 @@ void mem_init(Mem *m);
 void mem_reset(Mem *m);
 u8   mem_read(Mem *m, u16 addr);
 void mem_write(Mem *m, u16 addr, u8 val);
+/* CR bit 0 is active-low: zero exposes I/O at $D000-$DFFF. */
+bool mem_io_visible(const Mem *m);
 
 /* Load a C128DCR ROM set from a directory. Expects the VICE-split files:
  *   kernal.bin (0x4000: EDITOR+Z80BIOS+KERNAL), basic.bin (0x8000:
- *   BASIC lo+hi) and optionally chargen.bin (0x1000). A single-file 32K
- *   kernal dump is also accepted. Returns the number of ROMs loaded. */
+ *   BASIC lo+hi) and optionally chargen.bin (0x2000; legacy 0x1000 images
+ *   are mirrored into both banks). A single-file 32K kernal dump is also
+ *   accepted. Returns the number of ROMs loaded. */
 int  mem_load_c128_roms(Mem *m, const char *dir);
