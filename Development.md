@@ -19,7 +19,7 @@ src/
   cpu.*       - MOS 8502 (6502-like) interpreter
   mem.*       - C128 memory map (RAM banks + ROM + I/O window)
   mmu.*       - C128 MMU registers ($D500 block, $00/$01 port)
-  vic.*       - MOS 8564 VIC-IIe (40-column) — test pattern for now
+  vic.*       - MOS 8564 VIC-IIe (40-column text, bitmap, and sprites)
   vdc.*       - MOS 8563 VDC (80-column) register file
   cia.*       - MOS 6526 CIA1/CIA2 register file
   sid.*       - MOS 6581/8580 SID register file
@@ -102,6 +102,14 @@ select the CPU/VIC colour-RAM banks (`$D800`). Native C128 MMU CR bit 0 also
 switches `$D000-$DFFF` between I/O and the C128 character-ROM bank, which is
 required by BASIC 7's bitmap `CHAR` routine.
 
+The VIC-IIe renderer also implements all eight hardware sprites. Sprite
+pointers follow the active screen matrix (`$07F8` in the normal text layout,
+`$1FF8` in BASIC graphics mode); data fetches use the CIA2-selected 16K window
+inside the 64K RAM bank selected by `$D506`. Standard/multicolor pixels,
+X/Y expansion, graphics priority, sprite ordering, and both collision/IRQ
+latches are modeled. This is sufficient for BASIC 7 `SPRITE`, `SPRCOLOR`,
+`SPRSAV`, and `MOVSPR` output.
+
 ## Disk-drive architecture
 
 `virtual_drive.c` is a fast logical IEC device used by the patched KERNAL
@@ -134,7 +142,8 @@ SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
    line-level IEC connection.
 3. **PLA / GO 64** — chargen select (bit 6 of `$01`) and the full C64-mode
    memory model for GO 64 (`$01` -> `mmu_set_config64` in VICE).
-4. **VIC-IIe raster** — per-line raster/IRQ timing and sprite/bitmap modes.
+4. **VIC-IIe raster** — per-line register effects, border opening and the
+   remaining character/bitmap modes.
 5. **CIA timers + IRQs** — full timer/port emulation (timer B cascade, TOD,
    serial).
 6. **VDC 8563** — render the 80-column framebuffer.

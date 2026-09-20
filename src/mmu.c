@@ -9,8 +9,7 @@ void mmu_reset(Mmu *mmu) {
     mmu->pcr2 = 0x00;
     mmu->pcr3 = 0x00;
     mmu->pcr4 = 0x00;
-    mmu->ram_bank = 0x00;
-    mmu->rom_bank = 0x00;
+    mmu->rcr = 0x00;
     mmu->mode = 0x00;     /* 1 MHz, 8502 active */
     mmu->vdc_bank = 0x00;
     mmu->vdc_ctrl = 0x00;
@@ -27,7 +26,7 @@ void mmu_write(Mmu *mmu, u16 addr, u8 val) {
         case 0x03: mmu->pcr3 = val; break;
         case 0x04: mmu->pcr4 = val; break;
         case 0x05: mmu->mcr5 = (val & 0x7F) | 0x30; break;
-        case 0x06: mmu->ram_bank = val & 0x0F; mmu->rom_bank = (val >> 4) & 0x0F; break;
+        case 0x06: mmu->rcr = val; break;
         case 0x07: mmu->mode = val; break;
         case 0x0D: mmu->vdc_bank = val & 0x03; break;
         case 0x0E: mmu->vdc_ctrl = val; break;
@@ -44,7 +43,7 @@ u8 mmu_read(const Mmu *mmu, u16 addr) {
         case 0x04: return mmu->pcr4;
         case 0x05: /* MCR: bit 7 = 40/80 key, bits 4-5 = GAME/EXROM, low nibble = mode */
             return (u8)((mmu->mcr5 & 0x0F) | (mmu->col4080 ? 0x80 : 0) | 0x10 | 0x20);
-        case 0x06: return (u8)((mmu->rom_bank << 4) | mmu->ram_bank);
+        case 0x06: return mmu->rcr;
         case 0x07: return mmu->mode;
         case 0x0D: return mmu->vdc_bank;
         case 0x0E: return mmu->vdc_ctrl;
