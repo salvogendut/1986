@@ -150,6 +150,9 @@ int main(int argc, char **argv) {
     display_set_one_display(&c.display, cfg.one_display);
     if (cfg.fullscreen) SDL_SetWindowFullscreen(c.display.window, true);
 
+    /* Disk-drive activity LED at the bottom of the window. */
+    leds_set_enabled(LED_FDC_A, true);
+
     /* Load ROMs into the machine (optional at this stage). Default to the
      * executable's directory's "roms" subdirectory when no ROM dir is
      * configured. */
@@ -173,6 +176,13 @@ int main(int argc, char **argv) {
         } else {
             fprintf(stderr, "1986: loaded %d ROM image(s) from '%s'\n", n, dir);
         }
+        /* Load the 1571 drive DOS ROM and attach the configured disk image. */
+        if (drive_load_rom(&c.drive, dir) != 0)
+            fprintf(stderr, "1986: no 1571 drive ROM (dos1571.bin) in '%s'\n", dir);
+        else
+            fprintf(stderr, "1986: loaded 1571 drive ROM from '%s'\n", dir);
+        if (cfg.disk_path[0] && drive_attach_disk(&c.drive, cfg.disk_path) != 0)
+            fprintf(stderr, "1986: could not attach disk '%s'\n", cfg.disk_path);
     }
 
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */

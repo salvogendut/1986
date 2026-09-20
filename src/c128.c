@@ -123,6 +123,7 @@ void c128_init(C128 *c, Config *cfg) {
     cia_init(&c->cia2);
     sid_init(&c->sid);
     kbd_init(&c->kbd);
+    drive_init(&c->drive, cfg);
 
     /* Reset is deferred: the host loads machine ROMs after c128_init(), and
      * the reset vector must be read from the loaded KERNAL ROM. */
@@ -143,6 +144,7 @@ void c128_reset(C128 *c) {
     cia_reset(&c->cia2);
     sid_reset(&c->sid);
     kbd_reset(&c->kbd);
+    drive_reset(&c->drive);
     c->paused = false;
     c->frames_since_reset = 0;
     /* Preserve the 40/80 column choice across resets. */

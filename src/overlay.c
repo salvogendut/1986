@@ -8,7 +8,7 @@
 #define OV_LINE_H     20
 #define OV_VALUE_X    140
 
-#define MEDIA_ITEM_COUNT 3
+#define MEDIA_ITEM_COUNT 4
 
 /* Advanced section rows. */
 #define ADV_SMOOTHING           0
@@ -86,22 +86,23 @@ static const char *const MODELS[] = { "C128DCR", "C128", "C128D" };
 
 static const char *media_label(int row) {
     static const char *const labels[MEDIA_ITEM_COUNT] = {
-        "Disk Drive", "Tape", "Cartridge"
+        "Disk Drive", "Disk image", "Tape", "Cartridge"
     };
     return labels[row];
 }
 
 static const char *media_extension(int row) {
     static const char *const exts[MEDIA_ITEM_COUNT] = {
-        ".d64", ".tap", ".crt"
+        ".d64", ".d64", ".tap", ".crt"
     };
     return exts[row];
 }
 
 /* The selected file path (or NULL) for a Media row. */
 static const char *media_path(const Overlay *ov, int row) {
-    if (row == 0) return ov->cfg->disk_path;
-    if (row == 1) return ov->cfg->tape_path;
+    if (row == 0) return NULL;               /* Drive unit number (cycled) */
+    if (row == 1) return ov->cfg->disk_path;
+    if (row == 2) return ov->cfg->tape_path;
     return ov->cfg->cart_path;
 }
 
@@ -144,10 +145,10 @@ static void open_media_dialog(Overlay *ov, int row) {
         { "All files",      "*"       },
     };
     const SDL_DialogFileFilter *filters = disk_filters;
-    if (row == 0) {
+    if (row == 1) {
         ov->dialog_kind = OV_DIALOG_DISK;
         filters = disk_filters;
-    } else if (row == 1) {
+    } else if (row == 2) {
         ov->dialog_kind = OV_DIALOG_TAPE;
         filters = tape_filters;
     } else {
@@ -192,7 +193,7 @@ static int section_rows(const Overlay *ov, OvSection s) {
     (void)ov;
     switch (s) {
         case OV_GENERAL:  return 2;   /* Tinker, ROMS PATH */
-        case OV_MEDIA:    return 3;   /* Disk, Tape, Cartridge */
+        case OV_MEDIA:    return 4;   /* Disk Drive, Disk image, Tape, Cartridge */
         case OV_ADVANCED: return ADV_ROWS;
         default:          return 0;
     }
@@ -221,7 +222,13 @@ static void overlay_activate(Overlay *ov) {
             }
             break;
         case OV_MEDIA:
-            open_media_dialog(ov, ov->row);
+            if (ov->row == 0) {
+                /* Cycle the disk drive device number (8-11). */
+                ov->cfg->drive_unit++;
+                if (ov->cfg->drive_unit > 11) ov->cfg->drive_unit = 8;
+            } else {
+                open_media_dialog(ov, ov->row);
+            }
             break;
         case OV_ADVANCED:
             switch (ov->row) {
@@ -459,12 +466,17 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, lw, y, "ROMS PATH", rd, ov->row == 1);
     } else if (ov->section == OV_MEDIA) {
         for (int i = 0; i < MEDIA_ITEM_COUNT; i++) {
-            const char *path = media_path(ov, i);
             char vbuf[CONFIG_PATH_MAX + 8];
-            if (path && path[0])
-                snprintf(vbuf, sizeof(vbuf), "%s (%s)", media_extension(i), path);
-            else
-                snprintf(vbuf, sizeof(vbuf), "<none> (%s)", media_extension(i));
+            if (i == 0) {
+                /* Disk Drive: show the IEC device number. */
+                snprintf(vbuf, sizeof(vbuf), "#%d", ov->cfg->drive_unit);
+            } else {
+                const char *path = media_path(ov, i);
+                if (path && path[0])
+                    snprintf(vbuf, sizeof(vbuf), "%s (%s)", media_extension(i), path);
+                else
+                    snprintf(vbuf, sizeof(vbuf), "<none> (%s)", media_extension(i));
+            }
             draw_row(r, lw, y, media_label(i), vbuf, i == ov->row);
             y += OV_LINE_H;
         }

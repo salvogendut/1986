@@ -9,6 +9,7 @@
 #include "cia.h"
 #include "sid.h"
 #include "kbd.h"
+#include "drive.h"
 #include "config.h"
 #include <stdbool.h>
 
@@ -31,6 +32,7 @@ typedef struct {
     Cia     cia1, cia2;
     Sid     sid;
     Kbd     kbd;
+    Drive   drive;
     Config *cfg;
     bool    paused;
     bool    fast;        /* 8502 at 2 MHz (C128 fast mode) */

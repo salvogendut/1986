@@ -27,6 +27,8 @@ void config_set_defaults(Config *cfg) {
     cfg->disk_path[0] = '\0';
     cfg->tape_path[0] = '\0';
     cfg->cart_path[0] = '\0';
+    cfg->drive_unit = 8;
+    cfg->drive_type = 1571;   /* Commodore 1571 */
     cfg->tinker = false;
     cfg->one_display = false;
     cfg->display_change_reset = false;
@@ -96,6 +98,8 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "cart")) {
         snprintf(cfg->cart_path, sizeof(cfg->cart_path), "%s", value);
     }
+    else if (!strcasecmp(key, "drive_unit")) cfg->drive_unit = atoi(value);
+    else if (!strcasecmp(key, "drive_type")) cfg->drive_type = atoi(value);
     else if (!strcasecmp(key, "tinker"))      cfg->tinker = atoi(value) != 0;
     else if (!strcasecmp(key, "one_display")) cfg->one_display = atoi(value) != 0;
     else if (!strcasecmp(key, "display_change_reset")) cfg->display_change_reset = atoi(value) != 0;
@@ -142,6 +146,8 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "disk = %s\n", cfg->disk_path);
     fprintf(f, "tape = %s\n", cfg->tape_path);
     fprintf(f, "cart = %s\n", cfg->cart_path);
+    fprintf(f, "drive_unit = %d\n", cfg->drive_unit);
+    fprintf(f, "drive_type = %d\n", cfg->drive_type);
     fprintf(f, "tinker = %d\n", cfg->tinker ? 1 : 0);
     fprintf(f, "one_display = %d\n", cfg->one_display ? 1 : 0);
     fprintf(f, "display_change_reset = %d\n", cfg->display_change_reset ? 1 : 0);
