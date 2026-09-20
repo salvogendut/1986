@@ -109,25 +109,34 @@ DWORD traps_handler(void) {
             const C128Trap *t = &g_serial_traps[i];
             switch (t->kind) {
                 case TRAP_ATTENTION:
-                    if (g_iec.attention) g_iec.attention(g_iec.ctx, (u8)maincpu_regs.a);
+                    /* The KERNAL passes serial-bus bytes through BSOUR ($95),
+                     * not in A.  Match VICE's serial_trap_attention(). */
+                    if (g_iec.attention) g_iec.attention(g_iec.ctx, cpu_mem_read(0x95));
                     maincpu_set_carry(0);
                     maincpu_set_interrupt(0);
                     break;
                 case TRAP_SEND:
-                    if (g_iec.send) g_iec.send(g_iec.ctx, (u8)maincpu_regs.a);
+                    /* SerialSendByte uses the same KERNAL bus buffer. */
+                    if (g_iec.send) g_iec.send(g_iec.ctx, cpu_mem_read(0x95));
                     maincpu_set_carry(0);
                     maincpu_set_interrupt(0);
                     break;
                 case TRAP_RECEIVE: {
                     u8 b = 0;
                     int st = g_iec.receive ? g_iec.receive(g_iec.ctx, &b) : 0;
+                    /* C128 serial_trap_init() uses $A4 as its input temp. */
+                    cpu_mem_write(0xA4, b);
                     maincpu_set_a(b);
+                    maincpu_set_sign((b & 0x80) != 0);
+                    maincpu_set_zero(b == 0);
                     /* The KERNAL's serial-receive routine signals end-of-input
                      * (EOI) through the status byte at $90 (bit 0x40), which
                      * READST ($FFB7) returns. On the final byte of a stream we
                      * set that bit, like VICE's serial_trap_receive does. */
                     if (st == 2)
                         cpu_mem_write(0x90, (u8)(cpu_mem_read(0x90) | 0x40));
+                    else if (st == 0)
+                        cpu_mem_write(0x90, (u8)(cpu_mem_read(0x90) | 0x80));
                     maincpu_set_carry(0);
                     maincpu_set_interrupt(0);
                     break;

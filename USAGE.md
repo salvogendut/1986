@@ -12,13 +12,18 @@
 | `--fullscreen` | Start fullscreen. |
 | `--fast` | Run the 8502 at 2 MHz (C128 fast mode). |
 | `--rom DIR` | Directory holding the machine ROM images. |
+| `--disk PATH` | Attach a D64 image at launch. |
 | `--gif-out PATH` | Start recording a GIF at launch. |
+| `--paste TEXT` | Inject text through the emulated keyboard. |
+| `--paste-at N` | Delay `--paste` until emulated frame N. |
+| `--frames N` | Exit after N emulated frames. |
 | `--help` | Show help. |
 
 ## Configuration
 
-Settings are read from `1986.conf` in the current directory (or written there
-by the options overlay). See [`1986.conf.example`](1986.conf.example).
+Settings are read from `~/.config/1986/1986.conf` (or from `1986.conf` when
+`HOME` is unset) and written by the options overlay. See
+[`1986.conf.example`](1986.conf.example).
 
 ## ROM layout
 

@@ -3,15 +3,15 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/* Commodore 1541/1571 .d64 disk image (raw, decoded sectors).
+/* Commodore 1541-compatible .d64 disk image (raw, decoded sectors).
  *
  * The .d64 is a linear image of 256-byte sectors. Tracks 1-17 have 21
- * sectors, 18-24 have 19, 25-30 have 18 and 31-35 have 17. A 1571 image may
- * carry a second side (tracks 36-70) with the same layout. The directory is
- * at track 18, sector 1 (side 0).
+ * sectors, 18-24 have 19, 25-30 have 18 and 31-35 have 17. Double-sided 1571
+ * media uses the distinct D71 format and will be handled by a separate image
+ * implementation. The directory is at track 18, sector 1.
  */
 
-#define D64_MAX_TRACKS   70
+#define D64_MAX_TRACKS   35
 #define D64_SECTOR_BYTES 256
 
 typedef struct {
@@ -53,3 +53,8 @@ int  d64_read_directory_entries(const D64 *d, D64DirEntry *ents, int cap);
  * count. Returns 0 on success. */
 int  d64_read_bam(const D64 *d, char *name, size_t name_cap,
                   char id[2], u8 *dos_type, int *free_blocks);
+
+/* Build the byte stream returned for a "$" directory request. The format is
+ * VICE/CBM-DOS compatible: a 32-byte header, fixed 32-byte file records, and
+ * a 31-byte BLOCKS FREE record. Returns its length, or 0 on failure. */
+size_t d64_build_directory_program(const D64 *d, u8 *out, size_t cap);

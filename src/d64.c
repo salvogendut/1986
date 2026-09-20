@@ -4,6 +4,7 @@
 #include <string.h>
 
 int d64_track_sectors(int track) {
+    if (track < 1 || track > D64_MAX_TRACKS) return 0;
     if (track <= 17) return 21;
     if (track <= 24) return 19;
     if (track <= 30) return 18;
@@ -11,6 +12,7 @@ int d64_track_sectors(int track) {
 }
 
 int d64_track_offset(int track) {
+    if (track < 1 || track > D64_MAX_TRACKS + 1) return -1;
     int off = 0;
     for (int t = 1; t < track && t <= D64_MAX_TRACKS; t++)
         off += d64_track_sectors(t) * D64_SECTOR_BYTES;
@@ -33,12 +35,19 @@ int d64_open(D64 *d, const char *path) {
 
     d->size = (size_t)sz;
 
-    /* 35-track image = 174848 bytes (plus optional 2732-byte error block). */
+    /* 35-track image = 683 sectors, optionally followed by one error byte per
+     * sector. D71 is deliberately not accepted as a large D64. */
     size_t base35 = (size_t)d64_track_offset(36);
-    if (d->size >= base35) { d->tracks = 35; d->has_errors = d->size >= base35 + 683 * 4; }
-    else if (d->size >= 174848) { d->tracks = 35; d->has_errors = d->size >= 177632; }
-    else if (d->size >= 699392) { d->tracks = 70; d->has_errors = d->size >= 699392 + 1366 * 4; }
-    else { d64_close(d); return -1; }
+    if (d->size == base35) {
+        d->tracks = 35;
+        d->has_errors = false;
+    } else if (d->size == base35 + 683) {
+        d->tracks = 35;
+        d->has_errors = true;
+    } else {
+        d64_close(d);
+        return -1;
+    }
     return 0;
 }
 
@@ -88,8 +97,7 @@ static int d64_scan_directory(const D64 *d, D64DirEntry *ents, int cap) {
         for (int i = 0; i < 256; i += 32) {
             D64DirEntry e;
             if (d64_decode_slot(sec + i, &e) != 0) continue;
-            if (count < cap) ents[count] = e;
-            count++;
+            if (count < cap) ents[count++] = e;
         }
         track = sec[0]; sector = sec[1];
     }
@@ -122,13 +130,85 @@ int d64_read_bam(const D64 *d, char *name, size_t name_cap,
     if (free_blocks) {
         int total = 0;
         for (int trk = 1; trk <= d->tracks; trk++) {
+            if (trk == 18) continue; /* directory track is not user capacity */
+            const u8 *bam = sec + 4 + (trk - 1) * 4;
             int sectors = d64_track_sectors(trk);
-            u8 *bam = sec + 4 + (trk - 1) * 4;
-            int free = bam[1] | (bam[2] << 8);
             for (int s = 0; s < sectors; s++)
-                if (free & (1 << s)) total++;
+                if (bam[1 + s / 8] & (1u << (s & 7))) total++;
         }
         *free_blocks = total;
     }
     return 0;
+}
+
+static const char *const filetype_name[8] = {
+    "DEL", "SEQ", "PRG", "USR", "REL", "CBM", "DIR", "???"
+};
+
+size_t d64_build_directory_program(const D64 *d, u8 *out, size_t cap) {
+    if (!d || !d->data || !out) return 0;
+
+    u8 bam[256];
+    if (d64_read_sector(d, 18, 0, bam) != 0) return 0;
+
+    D64DirEntry ents[512];
+    int count = d64_read_directory_entries(d, ents, 512);
+    size_t need = 32u + (size_t)count * 32u + 31u;
+    if (cap < need) return 0;
+
+    /* Header record. The first two bytes are the BASIC load address. */
+    u8 *record = out;
+    memset(record, 0x20, 32);
+    record[0] = 0x01; record[1] = 0x04;
+    record[2] = 0x01; record[3] = 0x01;
+    record[4] = 0x00; record[5] = 0x00;
+    record[6] = 0x12;
+    record[7] = '"';
+    for (int i = 0; i < 16; i++)
+        record[8 + i] = bam[0x90 + i] == 0xA0 ? 0x20 : bam[0x90 + i];
+    record[24] = '"';
+    record[25] = ' ';
+    for (int i = 0; i < 5; i++) {
+        u8 b = bam[0xA2 + i];
+        record[26 + i] = b == 0xA0 ? 0x20 : b;
+    }
+    record[31] = 0;
+
+    /* VICE emits each file as one fixed-width 32-byte BASIC record. */
+    for (int i = 0; i < count; i++) {
+        const D64DirEntry *e = &ents[i];
+        record = out + 32u + (size_t)i * 32u;
+        memset(record, 0x20, 32);
+        record[0] = 0x01; record[1] = 0x01;
+        record[2] = (u8)e->blocks;
+        record[3] = (u8)(e->blocks >> 8);
+
+        int quote = 5;
+        if (e->blocks < 100) quote++;
+        if (e->blocks < 10) quote++;
+        record[quote] = '"';
+        size_t len = strlen(e->name);
+        if (len > 16) len = 16;
+        memcpy(record + quote + 1, e->name, len);
+        record[quote + 1 + len] = '"';
+
+        int name_field = quote + 1;
+        record[name_field + 17] = e->closed ? ' ' : '*';
+        memcpy(record + name_field + 18, filetype_name[e->type & 7], 3);
+        record[name_field + 21] = e->locked ? '<' : ' ';
+        record[31] = 0;
+    }
+
+    int free_blocks = 0;
+    char name[17], id[2];
+    d64_read_bam(d, name, sizeof(name), id, NULL, &free_blocks);
+    record = out + 32u + (size_t)count * 32u;
+    memset(record, 0x20, 31);
+    record[0] = 0x01; record[1] = 0x01;
+    record[2] = (u8)free_blocks;
+    record[3] = (u8)(free_blocks >> 8);
+    memcpy(record + 4, "BLOCKS FREE.", 12);
+    record[29] = 0;
+    record[30] = 0;
+    return need;
 }

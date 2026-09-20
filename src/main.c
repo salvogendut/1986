@@ -78,7 +78,11 @@ static void usage(const char *argv0) {
         "  --fullscreen     start fullscreen\n"
         "  --fast           run the 8502 at 2 MHz\n"
         "  --rom DIR        directory holding the machine ROM images\n"
+        "  --disk PATH      attach a D64 image at launch\n"
         "  --gif-out PATH   start recording a GIF at launch\n"
+        "  --paste TEXT     inject text through the keyboard matrix\n"
+        "  --paste-at N     delay --paste until emulated frame N\n"
+        "  --frames N       exit after N emulated frames\n"
         "  --help           this message\n"
         "\n"
         "  F4     Screenshot (PPM)\n"
@@ -98,8 +102,10 @@ int main(int argc, char **argv) {
     Config cfg;
     config_set_defaults(&cfg);
     const char *rom_dir = NULL;
+    const char *disk_path = NULL;
     const char *gif_out = NULL;
     const char *paste_arg = NULL;
+    long paste_frame = 0;
     long frames_arg = -1;
 
     for (int i = 1; i < argc; i++) {
@@ -107,8 +113,10 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--fullscreen")) cfg.fullscreen = true;
         else if (!strcmp(argv[i], "--fast")) cfg.fast = true;
         else if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom_dir = argv[++i];
+        else if (!strcmp(argv[i], "--disk") && i + 1 < argc) disk_path = argv[++i];
         else if (!strcmp(argv[i], "--gif-out") && i + 1 < argc) gif_out = argv[++i];
         else if (!strcmp(argv[i], "--paste") && i + 1 < argc) paste_arg = argv[++i];
+        else if (!strcmp(argv[i], "--paste-at") && i + 1 < argc) paste_frame = atol(argv[++i]);
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames_arg = atol(argv[++i]);
         else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
         else if (argv[i][0] == '-') { usage(argv[0]); return 1; }
@@ -124,6 +132,7 @@ int main(int argc, char **argv) {
             config_save(&cfg, cfg_path);
     }
     if (rom_dir) snprintf(cfg.rom_dir, sizeof(cfg.rom_dir), "%s", rom_dir);
+    if (disk_path) snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s", disk_path);
     g_boot_trace = getenv("C128_BOOT_TRACE") != NULL;
     if (getenv("C128_SAVE_PPM"))
         g_save_ppm = strdup(getenv("C128_SAVE_PPM"));
@@ -180,11 +189,8 @@ int main(int argc, char **argv) {
         } else {
             fprintf(stderr, "1986: loaded %d ROM image(s) from '%s'\n", n, dir);
         }
-        /* Load the 1571 drive DOS ROM and attach the configured disk image. */
-        if (drive_load_rom(&c.drive, dir) != 0)
-            fprintf(stderr, "1986: no 1571 drive ROM (dos1571.bin) in '%s'\n", dir);
-        else
-            fprintf(stderr, "1986: loaded 1571 drive ROM from '%s'\n", dir);
+        /* Virtual-drive mode reads the image directly and deliberately does
+         * not load a 1571 ROM. A future true-drive module will own that ROM. */
         if (cfg.disk_path[0] && drive_attach_disk(&c.drive, cfg.disk_path) != 0)
             fprintf(stderr, "1986: could not attach disk '%s'\n", cfg.disk_path);
     }
@@ -210,7 +216,11 @@ int main(int argc, char **argv) {
     Monitor *monitor = monitor_create(&c);
     Paste paste;
     paste_init(&paste);
-    if (paste_arg) paste_text(&paste, paste_arg);
+    bool paste_started = false;
+    if (paste_arg && paste_frame <= 0) {
+        paste_text(&paste, paste_arg);
+        paste_started = true;
+    }
 
     if (gif_out) videocap_start(gif_out, cfg.gif_width, cfg.gif_fps);
 
@@ -368,6 +378,10 @@ int main(int argc, char **argv) {
         }
 
         /* --- Paste injection (one key per frame) --- */
+        if (paste_arg && !paste_started && c128_frame_count >= paste_frame) {
+            paste_text(&paste, paste_arg);
+            paste_started = true;
+        }
         paste_tick(&paste, &c.kbd);
 
         /* --- Overlay (process async file-dialog results) --- */
@@ -396,7 +410,7 @@ int main(int argc, char **argv) {
 
             /* One-shot frame capture (C128_SAVE_PPM=<path>) for visual debug. */
             if (g_save_ppm && c128_frame_count == g_save_ppm_frame) {
-                display_save_ppm(&c.display, g_save_ppm);
+                display_save_ppm_active(&c.display, g_save_ppm);
                 g_save_ppm = NULL;
             }
 
