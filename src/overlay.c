@@ -11,21 +11,22 @@
 #define MEDIA_ITEM_COUNT 3
 
 /* Advanced section rows. */
-#define ADV_SMOOTHING      0
-#define ADV_REAL_CRT       1
-#define ADV_CRT_SCANLINES  2
-#define ADV_ONE_DISPLAY    3
-#define ADV_GIF_WIDTH      4
-#define ADV_GIF_FPS        5
-#define ADV_GIF_ENCODER    6
-#define ADV_TAPE_AUDIO     7
-#define ADV_TAPE_VIDEO     8
-#define ADV_NOTIFICATIONS  9
-#define ADV_DEBUG          10
-#define ADV_JOY_HIDAPI     11
-#define ADV_RESET          12
-#define ADV_VERSION        13
-#define ADV_ROWS           14
+#define ADV_SMOOTHING           0
+#define ADV_REAL_CRT            1
+#define ADV_CRT_SCANLINES       2
+#define ADV_ONE_DISPLAY         3
+#define ADV_DISPLAY_CHANGE_RESET 4
+#define ADV_GIF_WIDTH           5
+#define ADV_GIF_FPS             6
+#define ADV_GIF_ENCODER         7
+#define ADV_TAPE_AUDIO          8
+#define ADV_TAPE_VIDEO          9
+#define ADV_NOTIFICATIONS       10
+#define ADV_DEBUG               11
+#define ADV_JOY_HIDAPI          12
+#define ADV_RESET               13
+#define ADV_VERSION             14
+#define ADV_ROWS                15
 
 static int cycle_gif_width(int width) {
     switch (width) {
@@ -241,6 +242,9 @@ static void overlay_activate(Overlay *ov) {
                     ov->cfg->one_display = !ov->cfg->one_display;
                     display_set_one_display(&ov->c128->display,
                                             ov->cfg->one_display);
+                    break;
+                case ADV_DISPLAY_CHANGE_RESET:
+                    ov->cfg->display_change_reset = !ov->cfg->display_change_reset;
                     break;
                 case ADV_GIF_WIDTH:
                     ov->cfg->gif_width = cycle_gif_width(ov->cfg->gif_width);
@@ -483,8 +487,11 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
                  ov->row == ADV_REAL_CRT); y += OV_LINE_H;
         draw_row(r, lw, y, "CRT scanlines", sline,
                  ov->row == ADV_CRT_SCANLINES); y += OV_LINE_H;
-        draw_row(r, lw, y, "One Display", ov->cfg->one_display ? "On" : "Off",
+        draw_row(r, lw, y, "Unified Display", ov->cfg->one_display ? "On" : "Off",
                  ov->row == ADV_ONE_DISPLAY); y += OV_LINE_H;
+        draw_row(r, lw, y, "Display Change reset",
+                 ov->cfg->display_change_reset ? "On" : "Off",
+                 ov->row == ADV_DISPLAY_CHANGE_RESET); y += OV_LINE_H;
         draw_row(r, lw, y, "GIF resolution", gline,
                  ov->row == ADV_GIF_WIDTH); y += OV_LINE_H;
         {
