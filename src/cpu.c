@@ -77,45 +77,84 @@ void machine_autostart(void) {
 
 /* --- Serial (IEC) ROM traps. VICE intercepts the KERNAL's serial-bus
  * routines so the boot doesn't wait for real hardware; we do the same by
- * patching the KERNAL ROM with TRAP_OPCODE (0x02) at the trap addresses. --- */
+ * patching the KERNAL ROM with TRAP_OPCODE (0x02) at the trap addresses, and
+ * forward LISTEN/TALK/send/receive to the pluggable drive. --- */
+
+typedef enum { TRAP_READY = 0, TRAP_ATTENTION, TRAP_SEND, TRAP_RECEIVE } TrapKind;
 
 typedef struct {
     WORD addr;     /* address patched with TRAP_OPCODE */
     WORD resume;   /* address to resume at after the trap */
+    int  kind;
 } C128Trap;
 
 static const C128Trap g_serial_traps[] = {
-    { 0xE569, 0xE572 },   /* Serial ready */
-    { 0xE4F5, 0xE572 },   /* Serial ready */
-    { 0xE5BC, 0xE5C3 },   /* Serial ready poll (LDA $DC0D; AND #$08; BEQ) */
+    { 0xE569, 0xE572, TRAP_READY },      /* Serial ready */
+    { 0xE4F5, 0xE572, TRAP_READY },      /* Serial ready */
+    { 0xE5BC, 0xE5C3, TRAP_READY },      /* Serial ready poll */
+    { 0xE355, 0xE5BA, TRAP_ATTENTION },  /* SerialListen */
+    { 0xE37C, 0xE5BA, TRAP_ATTENTION },  /* SerialSaListen */
+    { 0xE38C, 0xE5BA, TRAP_SEND },       /* SerialSendByte */
+    { 0xE43E, 0xE5BA, TRAP_RECEIVE },    /* SerialReceiveByte */
 };
 #define N_SERIAL_TRAPS (sizeof(g_serial_traps) / sizeof(g_serial_traps[0]))
+
+static IecCallbacks g_iec;
 
 DWORD traps_handler(void) {
     unsigned pc = reg_pc;
     for (size_t i = 0; i < N_SERIAL_TRAPS; i++) {
         /* reg_pc is the address just after the fetched TRAP_OPCODE. */
         if (pc == g_serial_traps[i].addr || pc == (unsigned)(g_serial_traps[i].addr + 1)) {
-            /* "Serial ready": report the IEC bus ready. */
-            maincpu_set_a(1);
-            maincpu_set_sign(0);
-            maincpu_set_zero(0);
-            maincpu_set_interrupt(0);
-            maincpu_set_pc(g_serial_traps[i].resume);
+            const C128Trap *t = &g_serial_traps[i];
+            switch (t->kind) {
+                case TRAP_ATTENTION:
+                    if (g_iec.attention) g_iec.attention(g_iec.ctx, (u8)maincpu_regs.a);
+                    maincpu_set_carry(0);
+                    maincpu_set_interrupt(0);
+                    break;
+                case TRAP_SEND:
+                    if (g_iec.send) g_iec.send(g_iec.ctx, (u8)maincpu_regs.a);
+                    maincpu_set_carry(0);
+                    maincpu_set_interrupt(0);
+                    break;
+                case TRAP_RECEIVE: {
+                    u8 b = 0;
+                    int ok = g_iec.receive ? g_iec.receive(g_iec.ctx, &b) : 0;
+                    maincpu_set_a(b);
+                    maincpu_set_carry(ok ? 0 : 1);
+                    maincpu_set_interrupt(0);
+                    break;
+                }
+                case TRAP_READY:
+                default:
+                    maincpu_set_a(1);
+                    maincpu_set_sign(0);
+                    maincpu_set_zero(0);
+                    maincpu_set_interrupt(0);
+                    break;
+            }
+            maincpu_set_pc(t->resume);
             return 0;
         }
     }
     return (DWORD)-1;
 }
 
-/* Patch the KERNAL ROM so the serial traps fire. kernal is the 8K image that
- * maps at $E000-$FFFF. */
-void cpu_install_serial_traps(u8 *kernal) {
+/* Patch the KERNAL ROM so the IEC traps fire. kernal is the 8K image that
+ * maps at $E000-$FFFF. cb may be NULL (only the serial-ready routines are
+ * patched, so the boot does not hang). */
+void cpu_install_iec_traps(u8 *kernal, const IecCallbacks *cb) {
+    if (cb) g_iec = *cb;
     for (size_t i = 0; i < N_SERIAL_TRAPS; i++) {
         unsigned off = g_serial_traps[i].addr - 0xE000;
         if (off < 0x2000)
             kernal[off] = TRAP_OPCODE;
     }
+}
+
+void cpu_install_serial_traps(u8 *kernal) {
+    cpu_install_iec_traps(kernal, NULL);
 }
 
 monitor_interface_t *maincpu_monitor_interface_get(void) {

@@ -247,3 +247,21 @@ void c128_switch_4080(C128 *c) {
     else
         migrate_vdc_to_vic(c);   /* switched to 40-col VIC */
 }
+
+/* --- IEC serial-bus forwarding to the pluggable drive. ------------------- */
+
+void c128_iec_attention(void *ctx, u8 b) {
+    C128 *c = ctx;
+    if (c->drive.ops && c->drive.ops->attention) c->drive.ops->attention(&c->drive, b);
+}
+
+void c128_iec_send(void *ctx, u8 byte) {
+    C128 *c = ctx;
+    if (c->drive.ops && c->drive.ops->send) c->drive.ops->send(&c->drive, byte);
+}
+
+int c128_iec_receive(void *ctx, u8 *byte) {
+    C128 *c = ctx;
+    if (c->drive.ops && c->drive.ops->receive) return c->drive.ops->receive(&c->drive, byte);
+    return 0;
+}

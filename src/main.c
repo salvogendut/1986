@@ -190,8 +190,15 @@ int main(int argc, char **argv) {
     c128_reset(&c);
 
     /* Patch the KERNAL ROM with the IEC serial traps (like VICE) so the boot
-     * does not block waiting for the serial/disk bus. */
-    cpu_install_serial_traps(c.mem.kernal);
+     * does not block waiting for the serial/disk bus, and forward the IEC
+     * (LISTEN/TALK/send/receive) calls to the pluggable disk drive. */
+    IecCallbacks iec = {
+        .ctx = &c,
+        .attention = c128_iec_attention,
+        .send = c128_iec_send,
+        .receive = c128_iec_receive,
+    };
+    cpu_install_iec_traps(c.mem.kernal, &iec);
 
     Overlay overlay;
     overlay_init(&overlay, &cfg, &c);
