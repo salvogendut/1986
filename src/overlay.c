@@ -100,6 +100,25 @@ static bool replace_disk_image(Overlay *ov, const char *path) {
     return true;
 }
 
+static void clear_media_entry(Overlay *ov) {
+    if (ov->section != OV_MEDIA) return;
+
+    if (ov->row == 1) {
+        if (ov->cfg->disk_path[0] || ov->c128->drive.disk_attached)
+            replace_disk_image(ov, NULL);
+        return;
+    }
+
+    char *path = NULL;
+    if (ov->row == 2) path = ov->cfg->tape_path;
+    else if (ov->row == 3) path = ov->cfg->cart_path;
+    if (path && path[0]) {
+        path[0] = '\0';
+        save_config(ov);
+        notify_post("MEDIA ENTRY CLEARED");
+    }
+}
+
 /* Apply the display-affecting config to the live window immediately, so
  * overlay changes take effect without a restart. */
 static void apply_display(const Overlay *ov) {
@@ -365,13 +384,11 @@ bool overlay_handle_event(Overlay *ov, SDL_Event *ev) {
         case SDL_SCANCODE_RETURN:
             overlay_activate(ov);
             break;
+        case SDL_SCANCODE_DELETE:
+            clear_media_entry(ov);
+            break;
         case SDL_SCANCODE_ESCAPE:
-            if (ov->section == OV_MEDIA && ov->row == 1 &&
-                (ov->cfg->disk_path[0] || ov->c128->drive.disk_attached)) {
-                replace_disk_image(ov, NULL);
-            } else {
-                overlay_close(ov);
-            }
+            overlay_close(ov);
             break;
         default:
             break;
@@ -571,10 +588,8 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
 
     /* Footer. */
     SDL_SetRenderDrawColor(r, 0xAA, 0xAA, 0xAA, 255);
-    const char *footer =
-        (ov->section == OV_MEDIA && ov->row == 1 &&
-         (ov->cfg->disk_path[0] || ov->c128->drive.disk_attached))
-        ? "Left/Right section  Up/Down select  Enter choose  Esc eject  F9 close"
+    const char *footer = ov->section == OV_MEDIA
+        ? "Left/Right section  Up/Down select  Enter choose  Del clear  F9/Esc close"
         : "Left/Right section  Up/Down select  Enter toggle/choose  F9/Esc close";
     SDL_RenderDebugText(r, (float)((lw - (int)strlen(footer) * 8) / 2),
                         (float)(lh - 20), footer);
