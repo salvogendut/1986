@@ -109,11 +109,12 @@ static void smart_build_directory(Drive *d) {
         snprintf(lines[nlines++], sizeof(lines[0]), "%d \"%s\" PRG", blk, name);
     }
 
-    /* Load address $0801. */
+    /* Load address: the C128 loads the directory PRG at $0B00 (its BASIC
+     * start for the "LOAD $" form). */
     s->resp_len = 0;
-    s->resp[s->resp_len++] = 0x01;
-    s->resp[s->resp_len++] = 0x08;
-    int base = 0x0801;
+    s->resp[s->resp_len++] = 0x00;
+    s->resp[s->resp_len++] = 0x0B;
+    int base = 0x0B00;
     int off  = 2;                     /* first line begins at base+2 */
     for (int i = 0; i < nlines; i++) {
         int textlen = (int)strlen(lines[i]);
@@ -147,13 +148,10 @@ static void smart_attention(Drive *d, u8 b) {
         s->secondary = b & 0x0F;
         if (s->talking && s->secondary == 15) s->status_pos = 0;
         else if (s->talking) { s->resp_pos = 0; s->opened = 1; }
-    } else if (b == 0x3F) {            /* UNLISTEN */
+    } else if (b == 0x3F) {            /* UNLISTEN: a command has been received */
         s->listening = 0;
-        if (s->cmd_done) {
-            if (s->want_dir) smart_build_directory(d);
-            s->cmd_done = 0;
-        }
-        s->want_dir = 0;
+        if (s->want_dir) smart_build_directory(d);
+        s->cmd_len = 0; s->cmd_done = 0; s->want_dir = 0;
     } else if (b == 0x5F) {            /* UNTALK */
         s->talking = 0;
         s->resp_pos = 0;
@@ -167,9 +165,11 @@ static void smart_send(Drive *d, u8 byte) {
         s->cmd[s->cmd_len++] = byte;
         if (byte == 0x0D) s->cmd_done = 1;
     }
-    /* Detect a directory request: "$" in the command, or "P" (print). */
+    /* Detect a directory request: "$" in the command, or "P", or the C128
+     * DOS "1:13" load-directory command. */
     if (byte == '$') s->want_dir = 1;
     if (s->cmd_len == 1 && (byte == 'P' || byte == 'p')) s->want_dir = 1;
+    if (s->cmd_len == 4 && memcmp(s->cmd, "1:13", 4) == 0) s->want_dir = 1;
 }
 
 static int smart_receive(Drive *d, u8 *byte) {
