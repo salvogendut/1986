@@ -20,6 +20,20 @@ The name "1986" was chosen not only because of the sibling projects and the
 year of the C128DCR's introduction, but also because it was the year I got
 my first computer, at the tender age of 13: a Commodore C128.
 
+## Native C128 scope
+
+1986 deliberately treats the Commodore 128 as a platform in its own right.
+It targets native C128 software, including the VIC-IIe 40-column and VDC
+80-column environments; CP/M mode is also planned. The separate C64
+personality entered with `GO64` or the Commodore-key boot path is intentionally
+out of scope. A C64-mode request is rejected with a clear notification and the
+machine continues in native C128 mode.
+
+The shared VIC-IIe, SID, CIA and IEC hardware will still be implemented as
+accurately as native C128 software requires. This scope decision avoids
+carrying a partial C64 PLA, ROM, cartridge and compatibility implementation in
+a project whose purpose is the C128 itself.
+
 ## Status
 
 The emulator boots the C128 KERNAL and BASIC 7.0 to a usable `READY.` prompt.

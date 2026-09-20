@@ -1,4 +1,5 @@
 #include "c128.h"
+#include "notify.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,6 +52,8 @@ static void io_write(C128 *c, u16 addr, u8 val) {
     if (addr >= 0xD500 && addr < 0xD510) {
         if (c->mem.mmu.mmio) {
             mmu_write(&c->mem.mmu, addr, val);
+            if (mmu_take_c64_request(&c->mem.mmu))
+                notify_post("C64 MODE IS NOT SUPPORTED - USING NATIVE C128 MODE");
             return;
         }
     }

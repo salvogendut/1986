@@ -23,6 +23,19 @@ int main(void) {
     mmu_write(&mmu, 0xD50D, 0x02);
     CHECK(mmu.vdc_bank == 0x02, "VDC bank");
 
+    /* $D505 bit 6 requests the separate C64 personality. The native-C128
+     * emulator rejects it, reports it once, and preserves the other bits. */
+    mmu_write(&mmu, 0xD505, 0x47);
+    CHECK((mmu.mcr5 & 0x40) == 0, "C64 mode request is rejected");
+    CHECK((mmu.mcr5 & 0x0F) == 0x07, "native MCR bits are preserved");
+    CHECK(mmu_take_c64_request(&mmu), "first C64 request is reported");
+    CHECK(!mmu_take_c64_request(&mmu), "C64 request is consumed once");
+    mmu_write(&mmu, 0xD505, 0x47);
+    CHECK(!mmu_take_c64_request(&mmu), "repeated active request is deduplicated");
+    mmu_write(&mmu, 0xD505, 0x07);
+    mmu_write(&mmu, 0xD505, 0x47);
+    CHECK(mmu_take_c64_request(&mmu), "a later C64 request is reported again");
+
     if (failures == 0) { printf("test-mmu: OK\n"); return 0; }
     printf("test-mmu: %d failure(s)\n", failures);
     return 1;

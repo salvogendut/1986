@@ -41,6 +41,18 @@ tests/
   test_d64.c  - D64 directory bytes + virtual IEC channel lifecycle
 ```
 
+## Machine-mode scope
+
+The emulation target is the native C128 platform. C64 compatibility mode is
+not an incremental MMU configuration: it brings a separate ROM personality,
+PLA map, cartridge behavior, startup path, and compatibility surface. It is
+therefore intentionally unsupported. `$D505` bit 6 requests are latched for a
+one-shot user notification and rejected; the KERNAL reset-vector path then
+returns the machine safely to native C128 mode. The boundary remains explicit
+so support could be added later without maintaining a misleading partial mode.
+
+CP/M remains in scope as a native advertised use of the C128 hardware.
+
 ## Reuse from siblings
 
 - **Z80** (`z80.c`, `z80.h`, `z80dis.c`) is copied verbatim from 1984. It is
@@ -140,8 +152,8 @@ SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
    the tested logical IEC/media layer.
 2. **True 1571** — implement the independent drive CPU, chips, mechanism and
    line-level IEC connection.
-3. **PLA / GO 64** — chargen select (bit 6 of `$01`) and the full C64-mode
-   memory model for GO 64 (`$01` -> `mmu_set_config64` in VICE).
+3. **Native PLA accuracy** — finish chargen selection and native C128 memory
+   visibility without adding the separate C64 personality.
 4. **VIC-IIe raster** — per-line register effects, border opening and the
    remaining character/bitmap modes.
 5. **CIA timers + IRQs** — full timer/port emulation (timer B cascade, TOD,

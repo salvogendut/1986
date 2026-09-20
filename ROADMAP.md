@@ -7,6 +7,9 @@ the Z80 core for CP/M mode, and VICE's 8502 (6510-core) instruction set.
 This document is the forward plan. The current status and technical notes are
 in [Development.md](Development.md); controls are in [CONTROLS.md](CONTROLS.md).
 
+The roadmap targets the native C128 platform and eventual CP/M support. The
+separate C64 compatibility personality is intentionally out of scope.
+
 Checkboxes track progress: `[x]` = done, `[ ]` = pending.
 
 ---
@@ -87,20 +90,20 @@ keys behave.
 
 ---
 
-## Milestone 3 — PLA / GO 64  `[ ]`
+## Milestone 3 — Native C128 PLA accuracy  `[ ]`
 
-**Goal.** Finish the 8502 `$00`/`$01` port (the PLA) so the C128's memory
-config and C64 mode are correct.
+**Goal.** Finish the 8502 `$00`/`$01` port and remaining native C128 memory
+visibility rules without introducing a partial C64 personality.
 
 - [x] `data_read = (data & dir) | ~dir` decoded.
 - [x] Low bits select the CPU/VIC colour-RAM banks at `$D800`.
 - [ ] Chargen select: `$01` bit 6 (`mem_update_chargen(pport.data_read & 0x40)`)
   selects the chargen address.
-- [ ] GO 64: `mmu_set_config64((~dir | data) & 0x7)` switches to the C64 memory
-  map; implement a C64-mode `mem_read`/`mem_write` (the C64 PLA).
+- [x] Reject `$D505` C64-mode requests with a one-shot user notification and
+  recover through the native C128 reset path.
 
-**Done when.** `GO 64` boots the C64 kernel; the chargen/colour-RAM bank select
-tracks the KERNAL's `$01` writes.
+**Done when.** Native chargen and colour-RAM visibility track the KERNAL's
+`$01` writes, and unsupported mode requests cannot leave partial MMU state.
 
 ---
 
@@ -111,10 +114,10 @@ tracks the KERNAL's `$01` writes.
 - [x] 40x25 text renderer (screen RAM + colour RAM + chargen).
 - [x] Raster IRQ registers (`$D012`/`$D019`/`$D01A`) + raster-line crossing
   check.
-- [ ] Advance the raster per scanline (63 cycles/line) instead of per frame;
-  fire the raster IRQ at the compare line (tie into Milestone 1).
-- [ ] Bad-lines and VIC memory-fetch for sprites/bitmap.
-- [ ] Sprite collision IRQ (`$D019` bits 1-2).
+- [x] Hires and multicolor bitmap rendering.
+- [x] All eight standard/multicolor sprites, expansion, priority and banking.
+- [x] Sprite collision latches and IRQs (`$D019` bits 1-2).
+- [ ] Bad-lines and per-raster register effects.
 
 **Done when.** Sprites and bitmap/badline demos render correctly.
 
@@ -129,7 +132,8 @@ tracks the KERNAL's `$01` writes.
 - [ ] Timer B (latch, cascade from timer A, `$DC0F`/`$DD0F`).
 - [ ] Time-of-day (TOD) alarm.
 - [ ] Serial shift register (SDR) and the FLAG line.
-- [ ] CIA2 port A VIC-bank bits and the RS-232.
+- [x] CIA2 port A VIC-bank bits.
+- [ ] CIA2 RS-232 behavior.
 
 **Done when.** Timer-driven code (the 50 Hz jiffy clock, TOD reads) behaves.
 

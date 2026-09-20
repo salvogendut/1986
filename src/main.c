@@ -136,6 +136,7 @@ int main(int argc, char **argv) {
     if (rom_dir) snprintf(cfg.rom_dir, sizeof(cfg.rom_dir), "%s", rom_dir);
     if (disk_path) snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s", disk_path);
     g_boot_trace = getenv("C128_BOOT_TRACE") != NULL;
+    g_debug_enabled = g_boot_trace;
     if (getenv("C128_SAVE_PPM"))
         g_save_ppm = strdup(getenv("C128_SAVE_PPM"));
     if (getenv("C128_SAVE_FRAME"))
@@ -439,6 +440,8 @@ int main(int argc, char **argv) {
         overlay_render(&overlay, c.display.renderer);
         if (paused) display_draw_paused_label(&c.display);
         notify_render(c.display.renderer);
+        if (!c.display.one_display && c.display.vdc_renderer)
+            notify_render(c.display.vdc_renderer);
         display_flip(&c.display);
         if (monitor_is_open(monitor)) monitor_render(monitor);
     }

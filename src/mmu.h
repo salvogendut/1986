@@ -28,6 +28,8 @@ typedef struct {
     u8  vdc_bank; /* $D50D */
     u8  vdc_ctrl; /* $D50E */
     u8  mcr5;     /* $D505 mode configuration register (low nibble) */
+    bool c64_request_pending; /* rejected C64-mode transition to report */
+    bool c64_request_active;  /* suppress duplicate reports for one request */
     bool col4080; /* 40/80 column key: true = 40-col (default) */
     bool mmio;    /* true when $D500 block is mapped in */
 } Mmu;
@@ -38,3 +40,6 @@ void mmu_write(Mmu *mmu, u16 addr, u8 val);
 u8   mmu_read(const Mmu *mmu, u16 addr);
 u8   mmu_ffxx_read(const Mmu *mmu, u16 addr);         /* $FF00-$FF04 mirror */
 void mmu_ffxx_write(Mmu *mmu, u16 addr, u8 val);
+/* Consume one rejected $D505 C64-mode request. The emulator deliberately
+ * remains in native C128 mode. */
+bool mmu_take_c64_request(Mmu *mmu);
