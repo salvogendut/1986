@@ -96,3 +96,36 @@ next_sector:
     }
     return count;
 }
+
+/* The disk header lives in the BAM (track 18, sector 0): disk name at
+ * offset 0x90 (PETSCII, 16 bytes), ID at 0xA2, DOS type at 0xA4. The free
+ * block count is derived from the BAM bitmaps (offsets 4..0x8F). */
+int d64_read_bam(const D64 *d, char *name, size_t name_cap,
+                 char id[2], u8 *dos_type, int *free_blocks) {
+    u8 sec[256];
+    if (d64_read_sector(d, 18, 0, sec) != 0) return -1;
+
+    int n = 0;
+    for (int i = 0x90; i < 0xA0 && n < (int)name_cap - 1; i++) {
+        u8 c = sec[i];
+        if (c == 0xA0) break;
+        name[n++] = (c >= 0x20 && c < 0x80) ? (char)c : '?';
+    }
+    name[n] = '\0';
+    id[0] = (char)sec[0xA2];
+    id[1] = (char)sec[0xA3];
+    if (dos_type) *dos_type = sec[0xA4];
+
+    if (free_blocks) {
+        int total = 0;
+        for (int trk = 1; trk <= d->tracks; trk++) {
+            int sectors = d64_track_sectors(trk);
+            u8 *bam = sec + 4 + (trk - 1) * 4;
+            int free = bam[1] | (bam[2] << 8);
+            for (int s = 0; s < sectors; s++)
+                if (free & (1 << s)) total++;
+        }
+        *free_blocks = total;
+    }
+    return 0;
+}

@@ -39,3 +39,8 @@ int  d64_read_sector(const D64 *d, int track, int sector, u8 *buf);
 /* Read the directory into a caller buffer (up to cap entries) as PETSCII
  * filenames with their sizes. Returns the number of entries read. */
 int  d64_read_directory(const D64 *d, char *out, size_t cap);
+
+/* Read the disk header (BAM): the disk name, ID, DOS type and free-block
+ * count. Returns 0 on success. */
+int  d64_read_bam(const D64 *d, char *name, size_t name_cap,
+                  char id[2], u8 *dos_type, int *free_blocks);

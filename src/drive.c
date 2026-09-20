@@ -84,49 +84,95 @@ static void smart_set_unit(Drive *d, int unit) {
     s->device = (u8)unit;
 }
 
-/* Build a BASIC program (directory listing) that loads at $0801. Each line
- * is: link(2) + lineNo(2) + text + 0x00. The link is the ABSOLUTE address of
- * the next line; the last line's link is 0x0000. */
+/* Emit a BASIC PRINT statement that prints `text`, using CHR$(34) for any
+ * literal '"' (a PRINT string literal cannot contain a quote). */
+static void emit_print(u8 *resp, int *len, const char *text) {
+    resp[(*len)++] = 0x98;   /* PRINT */
+    const char *p = text;
+    int first = 1;
+    while (*p) {
+        if (*p == '"') {
+            if (!first) resp[(*len)++] = 0x3B;   /* ";" */
+            resp[(*len)++] = 0xC6; resp[(*len)++] = 0x28;   /* CHR$ ( */
+            resp[(*len)++] = 0x0B; resp[(*len)++] = 0x22;   /* number 34 */
+            resp[(*len)++] = 0x29;                          /* ) */
+            p++;
+            first = 0;
+            continue;
+        }
+        const char *q = p;
+        while (*q && *q != '"') q++;
+        if (!first) resp[(*len)++] = 0x3B;   /* ";" */
+        resp[(*len)++] = 0x22;               /* '"' */
+        while (p < q) resp[(*len)++] = (u8)*p++;
+        resp[(*len)++] = 0x22;               /* '"' */
+        first = 0;
+    }
+    resp[(*len)++] = 0x00;   /* end of line */
+}
+
+/* Build a BASIC program (directory listing) that loads at $0B00. Each line is
+ * a PRINT statement, so RUN shows:
+ *   0 "DISKNAME" 00 2A
+ *   9 "FILE" PRG
+ *   ...
+ *   236 BLOCKS FREE.
+ */
 static void smart_build_directory(Drive *d) {
     SmartDrive *s = d->impl;
-    char out[4096];
-    int  n = drive_directory(d, out, sizeof(out));
-    if (n <= 0) { out[0] = '\0'; }
 
-    /* Collect the line texts. */
+    char diskname[17] = "1986";
+    char id[2] = { 0x00, 0x2A };
+    u8   dos_type = 0x2A;
+    int  free_blocks = 0;
+    if (d->disk_attached)
+        d64_read_bam(&d->d64, diskname, sizeof(diskname), id, &dos_type, &free_blocks);
+
+    /* Collect the line texts (the text PRINT will emit). */
     char lines[4096][96];
     int  nlines = 0;
-    snprintf(lines[nlines++], sizeof(lines[0]), "\"1986\" 00 2A");
+    snprintf(lines[nlines++], sizeof(lines[0]), "0 \"%s\" %02X %02X", diskname,
+             (unsigned char)id[0], (unsigned char)id[1]);
+
+    char out[4096];
+    int  n = drive_directory(d, out, sizeof(out));
     char *p = out;
     while (*p && nlines < 500) {
-        int blk = atoi(p);
+        int blk = atoi(p);              /* file size in bytes */
         while (*p && *p != ' ') p++;
         while (*p == ' ') p++;
         char name[64]; int ni = 0;
         while (*p && *p != '\n' && ni < 60) name[ni++] = *p++;
         name[ni] = '\0';
         while (*p == '\n') p++;
-        snprintf(lines[nlines++], sizeof(lines[0]), "%d \"%s\" PRG", blk, name);
+        snprintf(lines[nlines++], sizeof(lines[0]), "%d \"%s\" PRG", blk / 256, name);
     }
+    snprintf(lines[nlines++], sizeof(lines[0]), "%d BLOCKS FREE.", free_blocks);
 
-    /* Load address: the C128 loads the directory PRG at $0B00 (its BASIC
-     * start for the "LOAD $" form). */
+    /* Load address $0B00. */
     s->resp_len = 0;
     s->resp[s->resp_len++] = 0x00;
     s->resp[s->resp_len++] = 0x0B;
     int base = 0x0B00;
-    int off  = 2;                     /* first line begins at base+2 */
+
+    int off = 2;                        /* first line begins at base+2 */
     for (int i = 0; i < nlines; i++) {
-        int textlen = (int)strlen(lines[i]);
-        int linelen = 5 + textlen;
+        const char *txt = lines[i];
+        /* Build the line into a temp buffer to learn its length. */
+        u8 line[256];
+        int ll = 0;
+        line[ll++] = 0; line[ll++] = 0;               /* link (patched) */
+        u16 lineno = (u16)(10 + i * 10);
+        line[ll++] = (u8)(lineno & 0xFF);
+        line[ll++] = (u8)(lineno >> 8);
+        emit_print(line, &ll, txt);
+        /* line length so far (link is 2 bytes at the start) */
+        int linelen = ll;
         int next_off = off + linelen;
         u16 link = (i + 1 < nlines) ? (u16)(base + next_off) : 0x0000;
-        s->resp[s->resp_len++] = (u8)(link & 0xFF);
-        s->resp[s->resp_len++] = (u8)(link >> 8);
-        s->resp[s->resp_len++] = (u8)(i & 0xFF);
-        s->resp[s->resp_len++] = (u8)(i >> 8);
-        for (int j = 0; j < textlen; j++) s->resp[s->resp_len++] = (u8)lines[i][j];
-        s->resp[s->resp_len++] = 0x00;
+        line[0] = (u8)(link & 0xFF);
+        line[1] = (u8)(link >> 8);
+        for (int j = 0; j < ll; j++) s->resp[s->resp_len++] = line[j];
         off = next_off;
     }
     /* End of program. */
