@@ -72,6 +72,7 @@ void display_set_crt(Display *d, bool enabled, int scanlines, int brightness,
                      int contrast, int red, int green, int blue);
 void display_set_one_display(Display *d, bool one);   /* create/destroy VDC window */
 void display_set_vdc_active(Display *d, bool active); /* select VIC vs VDC (one-window) */
+void display_focus_active(Display *d);                /* focus selected output window */
 bool display_vdc_window_open(const Display *d);
 void display_apply_greyscale(Display *d);
 void display_draw_paused_label(Display *d);

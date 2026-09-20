@@ -27,6 +27,7 @@ typedef struct {
     int        crt_blue;
     C128Model  model;              /* which C128 variant to emulate */
     bool       fast;               /* run the 8502 at 2 MHz (C128 fast mode) */
+    bool       col_mode_80;        /* last selected display: VDC vs VIC-II */
     int        gif_width;          /* F6 GIF capture width */
     int        gif_fps;            /* F6 GIF capture fps */
     bool       gif_ffmpeg;         /* optimize GIF via ffmpeg if present */
@@ -55,6 +56,8 @@ typedef struct {
 void config_set_defaults(Config *cfg);
 bool config_load(Config *cfg, const char *path);   /* returns false if missing */
 bool config_save(const Config *cfg, const char *path);
+/* Reload the on-disk config and update only the persistent display mode. */
+bool config_save_column_mode(const char *path, bool col_mode_80);
 
 /* Resolve the config file location: $HOME/.config/1986/1986.conf (or a
  * relative "1986.conf" if HOME is unset). Creates the directory. */

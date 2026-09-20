@@ -67,8 +67,9 @@ make -C tests check
 
 ## Controls
 
-F4 screenshot, F5 reset, F6 GIF capture, F8 monitor, F9 options, F10 pause,
-F11 fullscreen, F12 quit. See [CONTROLS.md](CONTROLS.md).
+F4 screenshot, F5 reset, F6 GIF capture, F7 pause, F8 monitor, F9 options,
+F10 40/80-column switch, F11 fullscreen, F12 quit. See
+[CONTROLS.md](CONTROLS.md).
 
 ## Usage
 

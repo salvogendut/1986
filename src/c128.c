@@ -149,6 +149,7 @@ void c128_reset(C128 *c) {
     c->frames_since_reset = 0;
     /* Preserve the 40/80 column choice across resets. */
     c->mem.mmu.col4080 = !c->col_mode_80;
+    display_set_vdc_active(&c->display, c->col_mode_80);
 }
 
 int c128_frame(C128 *c) {
@@ -242,6 +243,7 @@ void c128_switch_4080(C128 *c) {
     c->col_mode_80 = !c->col_mode_80;
     c->mem.mmu.col4080 = !c->col_mode_80;
     c->mem.ram[0xD7] = c->col_mode_80 ? 0x80 : 0x00;
+    display_set_vdc_active(&c->display, c->col_mode_80);
     if (c->col_mode_80)
         migrate_vic_to_vdc(c);   /* switched to 80-col VDC */
     else

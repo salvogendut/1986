@@ -147,6 +147,13 @@ void display_set_vdc_active(Display *d, bool active) {
     d->vdc_active = active;
 }
 
+void display_focus_active(Display *d) {
+    SDL_Window *target = d->window;
+    if (!d->one_display && d->vdc_active && d->vdc_window)
+        target = d->vdc_window;
+    if (target) SDL_RaiseWindow(target);
+}
+
 bool display_vdc_window_open(const Display *d) {
     return d->vdc_window != NULL;
 }
@@ -298,7 +305,7 @@ void display_draw_paused_label(Display *d) {
     if (small < 1.0f) small = 1.0f;
 
     const char *main_txt = "PAUSED";
-    const char *hint_txt = "Press F10 to resume";
+    const char *hint_txt = "Press F7 to resume";
 
     SDL_SetRenderDrawBlendMode(d->renderer, SDL_BLENDMODE_NONE);
     SDL_SetRenderDrawColor(d->renderer, 0xFF, 0xFF, 0xFF, 0xFF);

@@ -20,6 +20,7 @@ void config_set_defaults(Config *cfg) {
     cfg->crt_blue = 100;
     cfg->model = C128_MODEL_DCR;
     cfg->fast = false;
+    cfg->col_mode_80 = true;
     cfg->gif_width = 320;
     cfg->gif_fps = 25;
     cfg->gif_ffmpeg = false;
@@ -83,6 +84,7 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "crt_blue"))      cfg->crt_blue = atoi(value);
     else if (!strcasecmp(key, "model"))         cfg->model = (C128Model)atoi(value);
     else if (!strcasecmp(key, "fast"))          cfg->fast = atoi(value) != 0;
+    else if (!strcasecmp(key, "display_columns")) cfg->col_mode_80 = atoi(value) != 40;
     else if (!strcasecmp(key, "gif_width"))     cfg->gif_width = atoi(value);
     else if (!strcasecmp(key, "gif_fps"))       cfg->gif_fps = atoi(value);
     else if (!strcasecmp(key, "gif_ffmpeg"))    cfg->gif_ffmpeg = atoi(value) != 0;
@@ -139,6 +141,7 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "crt_blue = %d\n", cfg->crt_blue);
     fprintf(f, "model = %d\n", (int)cfg->model);
     fprintf(f, "fast = %d\n", cfg->fast ? 1 : 0);
+    fprintf(f, "display_columns = %d\n", cfg->col_mode_80 ? 80 : 40);
     fprintf(f, "gif_width = %d\n", cfg->gif_width);
     fprintf(f, "gif_fps = %d\n", cfg->gif_fps);
     fprintf(f, "gif_ffmpeg = %d\n", cfg->gif_ffmpeg ? 1 : 0);
@@ -158,4 +161,11 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "joystick_hidapi = %d\n", cfg->joystick_hidapi ? 1 : 0);
     fclose(f);
     return true;
+}
+
+bool config_save_column_mode(const char *path, bool col_mode_80) {
+    Config stored;
+    config_load(&stored, path); /* also installs defaults when path is absent */
+    stored.col_mode_80 = col_mode_80;
+    return config_save(&stored, path);
 }

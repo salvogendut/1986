@@ -50,8 +50,9 @@ tests/
 - **display, overlay, gifcap, leds, notify** follow the same conventions as
   1984; the C128-specific constants (`C128_SCREEN_W/H`) are defined in
   `display.h`.
-- **Function keys** match the siblings: F4 screenshot, F5 reset, F6 capture,
-  F8 monitor, F9 overlay, F10 pause, F11 fullscreen, F12 quit.
+- **Function keys** follow the siblings where possible: F4 screenshot, F5
+  reset, F6 capture, F7 pause, F8 monitor, F9 overlay, F10 C128 40/80-column
+  display switch, F11 fullscreen, F12 quit.
 
 ## CPU: 8502 (6502-like) — VICE core
 
