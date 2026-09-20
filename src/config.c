@@ -29,6 +29,7 @@ void config_set_defaults(Config *cfg) {
     cfg->cart_path[0] = '\0';
     cfg->tinker = false;
     cfg->one_display = false;
+    cfg->display_change_reset = false;
     cfg->notify_mode = NOTIFY_MODE_SCREEN;
     cfg->tape_audio_monitor = false;
     cfg->tape_video_monitor = false;
@@ -97,6 +98,7 @@ static void parse_line(Config *cfg, const char *line) {
     }
     else if (!strcasecmp(key, "tinker"))      cfg->tinker = atoi(value) != 0;
     else if (!strcasecmp(key, "one_display")) cfg->one_display = atoi(value) != 0;
+    else if (!strcasecmp(key, "display_change_reset")) cfg->display_change_reset = atoi(value) != 0;
     else if (!strcasecmp(key, "notify_mode")) cfg->notify_mode = (NotifyMode)atoi(value);
     else if (!strcasecmp(key, "tape_audio_monitor")) cfg->tape_audio_monitor = atoi(value) != 0;
     else if (!strcasecmp(key, "tape_video_monitor")) cfg->tape_video_monitor = atoi(value) != 0;
@@ -142,6 +144,7 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "cart = %s\n", cfg->cart_path);
     fprintf(f, "tinker = %d\n", cfg->tinker ? 1 : 0);
     fprintf(f, "one_display = %d\n", cfg->one_display ? 1 : 0);
+    fprintf(f, "display_change_reset = %d\n", cfg->display_change_reset ? 1 : 0);
     fprintf(f, "notify_mode = %d\n", (int)cfg->notify_mode);
     fprintf(f, "tape_audio_monitor = %d\n", cfg->tape_audio_monitor ? 1 : 0);
     fprintf(f, "tape_video_monitor = %d\n", cfg->tape_video_monitor ? 1 : 0);

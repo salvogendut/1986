@@ -310,6 +310,7 @@ int main(int argc, char **argv) {
                     c.paused = paused;
                 } else if (ev.key.scancode == SDL_SCANCODE_F10) {
                     c128_switch_4080(&c);   /* toggle 40-col VIC <-> 80-col VDC */
+                    if (cfg.display_change_reset) c128_reset(&c);
                 } else if (ev.key.scancode == SDL_SCANCODE_V &&
                            (SDL_GetModState() & SDL_KMOD_CTRL)) {
                     char *text = SDL_GetClipboardText();

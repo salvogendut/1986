@@ -39,7 +39,8 @@ typedef struct {
 
     /* Tinker-gated Advanced overlay section. */
     bool       tinker;              /* enable the Advanced section */
-    bool       one_display;         /* single display (VIC/VDC) — wired later */
+    bool       one_display;         /* unified display (VIC/VDC share one window) */
+    bool       display_change_reset;/* reset when switching 40<->80 display */
     NotifyMode notify_mode;         /* Notifications: off/screen/console */
     bool       tape_audio_monitor;  /* stub */
     bool       tape_video_monitor;  /* stub */
