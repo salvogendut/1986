@@ -13,9 +13,8 @@ int main(void) {
     CHECK(mmu.mcr == 0x01, "default MCR");
     CHECK(mmu.mmio, "MMIO mapped by default");
 
-    mmu_write(&mmu, 0xD506, 0x2A);   /* RAM bank 0xA, ROM bank 0x2 */
-    CHECK(mmu.ram_bank == 0x0A, "RAM bank from $D506");
-    CHECK(mmu.rom_bank == 0x02, "ROM bank from $D506");
+    mmu_write(&mmu, 0xD506, 0x2A);   /* RAM configuration register */
+    CHECK(mmu.rcr == 0x2A, "RAM configuration from $D506");
     CHECK(mmu_read(&mmu, 0xD506) == 0x2A, "$D506 readback");
 
     mmu_write(&mmu, 0xD507, 0xC0);   /* 2 MHz + Z80 */

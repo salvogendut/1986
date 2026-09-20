@@ -184,6 +184,14 @@ int c128_frame(C128 *c) {
         c->vdc_chargen_loaded = true;
     }
 
+    /* $D506 bit 6 selects the VIC's 64K RAM bank on a 128K machine; CIA2
+     * port A bits 0-1 select the inverted 16K window inside it. Input pins
+     * float high, matching the 6526's (PRA | ~DDRA) effective port value. */
+    u8 cia2_pa = c->cia2.pra | (u8)~c->cia2.ddra;
+    unsigned vic_bank = ((unsigned)(c->mem.mmu.rcr >> 6) & 0x01) << 2;
+    vic_bank |= (unsigned)(~cia2_pa) & 0x03;
+    vic_set_bank(&c->vic, vic_bank);
+
     /* Render the VIC-IIe frame (40-column) and the VDC 8563 (80-column)
      * framebuffer every frame. The active display is selected from the
      * KERNAL's 40/80 mode flag ($00D7: 0 = 40-col, non-zero = 80-col). */

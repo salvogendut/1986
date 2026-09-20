@@ -15,6 +15,7 @@
 #define VIC_CHARS_X  40
 #define VIC_CHARS_Y  25
 #define VIC_RASTER_LINES  312   /* PAL: 312 raster lines per frame */
+#define VIC_SPRITES  8
 
 typedef struct {
     u8  border_color;
@@ -31,6 +32,19 @@ typedef struct {
     u8  irq_mask;      /* $D01A (bit 0 = raster IRQ enable) */
     u8  raster_irq_line; /* raster line for the IRQ compare */
     u8  raster_irq_fired; /* raster IRQ already asserted this frame */
+    u8  sprite_x[VIC_SPRITES];
+    u8  sprite_y[VIC_SPRITES];
+    u8  sprite_x_msb;       /* $D010 */
+    u8  sprite_enable;      /* $D015 */
+    u8  sprite_y_expand;    /* $D017 */
+    u8  sprite_priority;    /* $D01B: one = behind foreground graphics */
+    u8  sprite_multicolor;  /* $D01C */
+    u8  sprite_x_expand;    /* $D01D */
+    u8  sprite_sprite_collision;     /* $D01E, cleared by read */
+    u8  sprite_background_collision; /* $D01F, cleared by read */
+    u8  sprite_mc[2];       /* shared colours $D025/$D026 */
+    u8  sprite_color[VIC_SPRITES];   /* individual colours $D027-$D02E */
+    u32 bank_addr;          /* MMU/CIA2-selected 16K VIC RAM window */
     unsigned prev_raster; /* previous raster line (for wrap detection) */
     u64  cycles;       /* raster cycle counter */
 } Vic;
@@ -39,6 +53,8 @@ void vic_init(Vic *v);
 void vic_reset(Vic *v);
 void vic_write(Vic *v, u16 addr, u8 val);
 u8   vic_read(Vic *v, u16 addr);
+/* Select one of the eight 16K VIC windows in the C128's 128K RAM. */
+void vic_set_bank(Vic *v, unsigned bank);
 /* Advance raster/IRQ state and return true if the raster IRQ line is now
  * asserted. Called once per frame. */
 bool vic_tick(Vic *v);

@@ -25,7 +25,8 @@ my first computer, at the tender age of 13: a Commodore C128.
 The emulator boots the C128 KERNAL and BASIC 7.0 to a usable `READY.` prompt.
 Current working pieces include:
 
-- VIC-IIe 40-column and VDC 80-column text displays.
+- VIC-IIe 40-column text/bitmap display with eight hardware sprites, and the
+  VDC 80-column text display.
 - Host keyboard input, paste, cursor, CIA timer and raster IRQ handling.
 - Function-key conventions: F4 screenshot, F5 reset, F6 GIF capture, F8
   monitor, F9 options overlay, F10 40/80 switch, F11 fullscreen, F12 quit.
@@ -34,8 +35,8 @@ Current working pieces include:
 - VICE's 8502/6510 core and a reused Z80 core wired to the C128 bus.
 - A fast virtual IEC drive that reads D64 images and supports `DIRECTORY`,
   `LOAD`, and BASIC 7.0 `DLOAD`, including DOS status errors.
-- Tests for the CPU, MMU, configuration, GIF encoder, D64 format, KERNAL IEC
-  trap contract, and virtual-drive channel lifecycle.
+- Tests for the CPU, MMU, VIC graphics and sprites, configuration, GIF encoder,
+  D64 format, KERNAL IEC trap contract, and virtual-drive channel lifecycle.
 
 Saving to the virtual drive, true cycle-level 1571 emulation, SID audio, CP/M
 mode, and several accuracy features remain unfinished. The virtual drive and

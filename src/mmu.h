@@ -12,7 +12,7 @@
  * Register map (as seen by the 8502):
  *   $D500   — memory configuration register (MCR)
  *   $D501   — pre-configuration register
- *   $D506   — RAM/ROM bank register (low nibble: RAM bank, high nibble: ROM bank)
+ *   $D506   — RAM configuration register (VIC bank and common-RAM layout)
  *   $D507   — mode register (bit 6: 2 MHz, bit 7: Z80 enable)
  *   $D50D   — VDC bank (bits 1..0 select 16K VDC bank)
  *   $D50E   — VDC access control (bit 6: IRQ mask, bit 7: register select)
@@ -23,8 +23,7 @@ typedef struct {
     u8  pcr2;     /* preconfiguration register $D502 */
     u8  pcr3;     /* preconfiguration register $D503 */
     u8  pcr4;     /* preconfiguration register $D504 */
-    u8  ram_bank; /* low nibble of $D506 */
-    u8  rom_bank; /* high nibble of $D506 */
+    u8  rcr;      /* $D506 RAM configuration register */
     u8  mode;     /* $D507 */
     u8  vdc_bank; /* $D50D */
     u8  vdc_ctrl; /* $D50E */
