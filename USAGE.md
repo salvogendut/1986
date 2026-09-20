@@ -26,6 +26,13 @@ Settings are read from `~/.config/1986/1986.conf` (or from `1986.conf` when
 `HOME` is unset) and written by the options overlay. See
 [`1986.conf.example`](1986.conf.example).
 
+The last display selected with F10 is stored as `display_columns = 40` or
+`display_columns = 80` when the application closes normally and restored on
+the next launch. Existing configurations without this key default to the
+80-column VDC display. With Unified Display enabled, the shared window shows
+that output. With Unified Display disabled, both output windows open and the
+last selected output receives window focus.
+
 ## ROM layout
 
 Drop the machine ROMs into a directory and pass `--rom DIR` (or set `rom_dir`

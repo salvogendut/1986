@@ -89,9 +89,10 @@ static void usage(const char *argv0) {
         "  F4     Screenshot (PPM)\n"
         "  F5     Reset\n"
         "  F6     Toggle GIF capture\n"
+        "  F7     Pause\n"
         "  F8     Monitor\n"
         "  F9     Options overlay\n"
-        "  F10    Pause\n"
+        "  F10    Switch 40/80-column display\n"
         "  F11    Toggle fullscreen\n"
         "  F12    Quit\n"
         "  Ctrl+V Paste clipboard text\n"
@@ -109,6 +110,7 @@ int main(int argc, char **argv) {
     long paste_frame = 0;
     long frames_arg = -1;
     bool no_throttle = false;
+    char cfg_path[CONFIG_PATH_MAX];
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--scale") && i + 1 < argc) cfg.scale = atoi(argv[++i]);
@@ -128,12 +130,9 @@ int main(int argc, char **argv) {
     /* Load user config (overrides defaults; command-line flags above still
      * win). If there is no config file yet, create one with the defaults so
      * it exists for later runs. */
-    {
-        char cfg_path[CONFIG_PATH_MAX];
-        config_path(cfg_path, sizeof(cfg_path));
-        if (!config_load(&cfg, cfg_path))
-            config_save(&cfg, cfg_path);
-    }
+    config_path(cfg_path, sizeof(cfg_path));
+    if (!config_load(&cfg, cfg_path))
+        config_save(&cfg, cfg_path);
     if (rom_dir) snprintf(cfg.rom_dir, sizeof(cfg.rom_dir), "%s", rom_dir);
     if (disk_path) snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s", disk_path);
     g_boot_trace = getenv("C128_BOOT_TRACE") != NULL;
@@ -199,8 +198,9 @@ int main(int argc, char **argv) {
     }
 
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */
-    c.col_mode_80 = true;   /* boot into 80-column (VDC) mode */
+    c.col_mode_80 = cfg.col_mode_80;
     c128_reset(&c);
+    display_focus_active(&c.display);
 
     /* Patch the KERNAL ROM with the IEC serial traps (like VICE) so the boot
      * does not block waiting for the serial/disk bus, and forward the IEC
@@ -347,6 +347,8 @@ int main(int argc, char **argv) {
                     c.paused = paused;
                 } else if (ev.key.scancode == SDL_SCANCODE_F10) {
                     c128_switch_4080(&c);   /* toggle 40-col VIC <-> 80-col VDC */
+                    cfg.col_mode_80 = c.col_mode_80;
+                    display_focus_active(&c.display);
                     if (cfg.display_change_reset) c128_reset(&c);
                 } else if (ev.key.scancode == SDL_SCANCODE_V &&
                            (SDL_GetModState() & SDL_KMOD_CTRL)) {
@@ -442,6 +444,8 @@ int main(int argc, char **argv) {
     }
 
     if (videocap_active()) videocap_stop();
+    if (!config_save_column_mode(cfg_path, c.col_mode_80))
+        fprintf(stderr, "1986: could not save display mode to '%s'\n", cfg_path);
     paste_free(&paste);
     monitor_destroy(monitor);
     overlay_quit(&overlay);

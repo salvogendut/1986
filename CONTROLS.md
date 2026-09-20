@@ -10,9 +10,10 @@ media, and configuration are covered in [`USAGE.md`](USAGE.md).
 | F4  | Save a PPM screenshot |
 | F5  | Reset |
 | F6  | Toggle animated GIF recording |
+| F7  | Pause or resume |
 | F8  | Monitor/disassembler |
 | F9  | Open / save-and-close the options overlay |
-| F10 | Pause or resume |
+| F10 | Switch between 40-column VIC-II and 80-column VDC |
 | F11 | Toggle fullscreen |
 | F12 | Quit |
 | Ctrl++ / Ctrl+- | Adjust window scale |
