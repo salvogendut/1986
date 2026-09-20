@@ -1,5 +1,14 @@
 # 1986 - Usage
 
+## Supported machine modes
+
+1986 runs native Commodore 128 software in the 40-column VIC-IIe and
+80-column VDC environments. The C64 compatibility personality is
+intentionally not implemented. Entering `GO64`, or requesting C64 mode during
+boot, displays a notification and safely returns to native C128 mode.
+
+CP/M is a separate C128 operating mode and remains planned.
+
 ## Command line
 
 ```
