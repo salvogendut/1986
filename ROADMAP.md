@@ -14,9 +14,10 @@ Checkboxes track progress: `[x]` = done, `[ ]` = pending.
 
 ---
 
-## Current: boot to BASIC READY  ✅ `[x]`
+## Current baseline — interactive native C128  ✅ `[x]`
 
-The C128DCR boots to the BASIC 7.0 `READY.` prompt (stable, verified):
+The C128DCR boots to the BASIC 7.0 `READY.` prompt and runs interactive BASIC
+programs in both its VIC-IIe 40-column and VDC 80-column environments:
 
 ```
 COMMODORE BASIC V7.0  122365 BYTES FREE
@@ -27,66 +28,51 @@ ALL RIGHTS RESERVED
 READY.
 ```
 
-- [x] VICE 8502/6510 CPU core, cycle-stepped and bounded per frame.
-- [x] C128 MMU config-register banking.
-- [x] IEC serial ROM traps.
-- [x] PLA colour-RAM banking (`$01` port low bits).
-- [x] CIA1 keyboard scan (matrix wired).
-- [x] 40x25 text renderer (screen RAM + colour RAM + chargen).
-- [x] CIA ICR/IMR + timer-A; VIC raster IRQ registers.
+- [x] VICE 8502/6510 CPU core, C128 MMU banking, and native-C128 memory map.
+- [x] Stable CIA timer-A/VIC raster IRQ path driving the KERNAL main loop.
+- [x] Host keyboard, cursor, clipboard/CLI paste, and BASIC command entry.
+- [x] VIC-IIe text, hires/multicolor bitmap, BASIC `CHAR`, and eight sprites.
+- [x] VDC 80x25 text with attributes/cursor and selectable display output.
+- [x] Persistent 40/80-column selection in unified and dual-window modes.
+- [x] Fast virtual IEC drive with D64 `DIRECTORY`, `LOAD`, and `DLOAD`.
+- [x] Live D64 replacement/ejection from the Media Overlay.
+- [x] Explicit rejection of the out-of-scope C64 personality (`GO64`).
 
-The single thing blocking interactive use (blinking cursor, host keyboard) is
-the **IRQ-handler stack imbalance** (see Milestone 1). Everything below is
-ordered roughly by "most visible / most foundational" first.
+The remaining milestones focus on hardware completeness and accuracy rather
+than reaching the first usable BASIC prompt.
 
 ---
 
-## Milestone 1 — Fix the 50 Hz IRQ handler (unblocks cursor + keyboard)  `[ ]`
+## Milestone 1 — Stable 50 Hz IRQ-driven BASIC  ✅ `[x]`
 
-**Goal.** The KERNAL's 50 Hz main loop runs from the VIC raster IRQ
-(`$D01A=0x01`, `$D012=0xFF`). Firing it makes the KERNAL's IRQ handler at
-`$FF17`/`$C190` overflow the stack (`SP=0x00` → `$0000`) after a few frames.
+**Goal.** Run the KERNAL's timer/raster-driven main loop without corrupting the
+8502 stack.
 
-**Why it matters.** The cursor blink and SCNKEY (keyboard scan) both run inside
-that IRQ handler. Until it runs cleanly, neither works. This is the same
-imbalance that blocked `READY.` earlier — my READY fix worked by not firing the
-IRQ.
+- [x] CIA1 timer-A latch, counter, underflow, ICR/IMR, and IRQ line.
+- [x] VIC `$D012` raster compare and `$D019`/`$D01A` status/mask behavior.
+- [x] Combined CIA/VIC IRQ delivery to the 8502.
+- [x] Stable blinking cursor, SCNKEY keyboard scanning, and interactive BASIC.
 
-**Approach.**
-- [ ] Trace the IRQ handler's dispatch: which `$DC0D` (CIA1 ICR) / `$D019`
-  (VIC status) values it reads and where a JSR/RTS pair fails to balance.
-- [ ] Make the CIA1 ICR and VIC `$D019` return the exact values VICE's
-  `read_ciaicr` / `vicii_read` produce for the current state.
-- [ ] Port the relevant parts of VICE `core/ciacore.c`/`ciatimer.c` and
-  `vicii/vicii-irq.c` (timer underflow → ICR bit → IRQ line; raster IRQ
-  status/mask/line compare).
-- [ ] Verify with `C128_BOOT_TRACE=1` that the CPU stays in the `READY.` loop
-  (`PC=$C260`) for hundreds of frames with the IRQ firing.
-
-**Done when.** The cursor blinks and a host keypress is echoed at `READY.`,
-with no stack overflow.
+**Done.** BASIC remains usable with IRQs active and host keypresses are echoed
+at `READY.` without the former stack overflow.
 
 ---
 
 ## Milestone 2 — Host keyboard input  `[ ]`
 
-**Goal.** Type at `READY.` and run BASIC commands.
+**Goal.** Complete the C128 keyboard beyond the working everyday subset.
 
-**Status.** The C64/C128 8x8 matrix map in `kbd.c` (letters, digits, symbols,
-Shift/Ctrl/RETURN/SPACE/DEL, F-keys, cursor, keypad) is in place. The CIA1 scan
-is wired (port A rows / port B columns).
-
-- [x] C64/C128 8x8 matrix map (letters, digits, symbols, Shift/Ctrl,
-  RETURN/SPACE/DEL, F-keys, cursor, keypad).
-- [ ] Verify the matrix positions against the KERNAL's SCNKEY conversion table
-  so each key yields the correct screen code (a wrong `(row,col)` produced a
-  `?SYNTAX ERROR` earlier).
+- [x] Core 8x8 matrix map (letters, digits, common symbols, Shift/Ctrl,
+  RETURN/SPACE/DEL, function keys, and cursor keys).
+- [x] Matrix positions verified sufficiently for interactive BASIC programs.
+- [x] Cursor keys and emulator function-key conventions.
+- [x] Clipboard paste and deterministic `--paste`/`--paste-at` input.
 - [ ] Add the C128-specific keys (40/80 column toggle, `HELP`, `CAPS`, `ALT`,
   `ESC`, `TAB`, `-`, `=`, `@`, `£`, etc.).
-- [ ] Paste path (Ctrl+V) reusing the existing `paste.c`.
+- [ ] Complete host-layout translation and keyboard auto-repeat behavior.
 
-**Done when.** `PRINT 1+1` then `RETURN` prints `2`; cursor keys and function
-keys behave.
+**Done when.** The full native C128 keyboard is available from common host
+layouts without relying on emulator-only shortcuts.
 
 ---
 
@@ -97,6 +83,8 @@ visibility rules without introducing a partial C64 personality.
 
 - [x] `data_read = (data & dir) | ~dir` decoded.
 - [x] Low bits select the CPU/VIC colour-RAM banks at `$D800`.
+- [x] Native MMU character-ROM visibility at `$D000-$DFFF`, allowing BASIC
+  7.0 `CHAR` to fetch real glyph data in bitmap mode.
 - [ ] Chargen select: `$01` bit 6 (`mem_update_chargen(pport.data_read & 0x40)`)
   selects the chargen address.
 - [x] Reject `$D505` C64-mode requests with a one-shot user notification and
@@ -114,10 +102,11 @@ visibility rules without introducing a partial C64 personality.
 - [x] 40x25 text renderer (screen RAM + colour RAM + chargen).
 - [x] Raster IRQ registers (`$D012`/`$D019`/`$D01A`) + raster-line crossing
   check.
-- [x] Hires and multicolor bitmap rendering.
+- [x] Hires and multicolor bitmap rendering with the correct per-cell colour
+  sources; BASIC 7.0 graphics and `CHAR` output verified visually.
 - [x] All eight standard/multicolor sprites, expansion, priority and banking.
 - [x] Sprite collision latches and IRQs (`$D019` bits 1-2).
-- [ ] Bad-lines and per-raster register effects.
+- [ ] Bad-lines, border opening, and per-raster register effects.
 
 **Done when.** Sprites and bitmap/badline demos render correctly.
 
@@ -135,20 +124,28 @@ visibility rules without introducing a partial C64 personality.
 - [x] CIA2 port A VIC-bank bits.
 - [ ] CIA2 RS-232 behavior.
 
-**Done when.** Timer-driven code (the 50 Hz jiffy clock, TOD reads) behaves.
+**Done when.** Timer B, TOD, serial/FLAG, and CIA2 I/O behave while preserving
+the already-working timer-A-driven KERNAL loop.
 
 ---
 
 ## Milestone 6 — VDC 8563 (80-column)  `[ ]`
 
-**Goal.** Render the 80-column framebuffer from the 8563 VDC.
+**Goal.** Complete the working 80-column display with high-resolution modes
+and more accurate VDC behavior.
 
-- [x] VDC register file + word-address counter (`vdc.c`).
-- [ ] 80x25 text mode (and 640x200/400 high-res), attribute RAM, internal 16K
-  video RAM.
-- [ ] Composite it as an alternative to the VIC-IIe 40-column display.
+- [x] VDC register file, update-address counter, block fill/copy, and 64K
+  internal video RAM for the C128DCR.
+- [x] 80x25 text rendering, attribute colours/reverse, and cursor blink.
+- [x] Alternative VIC/VDC output in unified and dual-window display modes.
+- [x] F10 display switching with the last active 40/80 mode persisted across
+  application restarts and focused correctly in dual-window mode.
+- [ ] Remaining attribute effects: flash, underline, and alternate charset.
+- [ ] 640x200/400 bitmap and interlace modes.
+- [ ] VDC timing, ready/busy status, and scan timing accuracy.
 
-**Done when.** `PRINT CHR$(14)` switches to an 80-column screen.
+**Done when.** Native VDC text, bitmap, and interlace software renders with
+accurate register/status timing.
 
 ---
 
@@ -156,6 +153,7 @@ visibility rules without introducing a partial C64 personality.
 
 **Goal.** Three-voice SID render → SDL3 audio stream.
 
+- [x] SID register address decoding and storage at `$D400-$D41F`.
 - [ ] 6581/8580 oscillators, ADSR, filter, volume at `$D400-$D41F`.
 - [ ] Drive the SDL3 audio callback from the 8502 frame cadence.
 
@@ -171,6 +169,8 @@ cycle-level 1571 implementation without conflating their interfaces.
 - [x] D64 directory parsing and fixed-width CBM DOS directory stream.
 - [x] Fast virtual IEC device with KERNAL traps and channel lifecycle.
 - [x] Virtual-drive `LOAD`/`DLOAD` and DOS error handling (#31).
+- [x] Live D64 eject/insert from the Media Overlay, including persisted media
+  state and immediate `DIRECTORY` visibility after a swap (#44).
 - [ ] Virtual-drive `SAVE` and write-side DOS commands.
 - [ ] D71 and D81 media formats.
 - [ ] True integrated 1571: drive CPU, 2K RAM, DOS ROM, CIA/VIA/FDC,
@@ -196,19 +196,38 @@ ROM through emulated hardware.
 
 ## Milestone 10 — Media, capture, polish  `[ ]`
 
-**Goal.** Snapshots, more of the keyboard matrix, real 2 MHz timing, accuracy
-passes.
+**Goal.** Snapshots, complete input, accurate 2 MHz timing, and desktop polish.
 
 - [x] GIF capture (F6), PPM screenshots (F4), boot trace, one-shot PPM dump.
+- [x] Persistent configuration overlay, screen/console notifications, and
+  live media selection.
+- [x] Persistent active display selection in unified and dual-window modes.
 - [ ] Snapshots (VICE `.vsf` or a simple own format) for save/load of machine
   state.
-- [ ] Full keyboard matrix + auto-repeat.
+- [ ] Full native C128 keyboard coverage, host layouts, and auto-repeat.
 - [ ] 2 MHz fast-mode timing (`$D507`/`$01`) affects the raster and CIA.
 - [ ] Cycle-exact raster/CPU interleave; run VICE's test programs.
 - [ ] WebM capture, CRT shader options, gamepad input.
 - [ ] Flatpak + packaging updates; CI.
 
 **Done when.** The emulator is a daily-driver C128DCR.
+
+---
+
+## Remaining work at a glance
+
+The main unfinished areas, grouped by likely development scale, are:
+
+1. **Core accuracy:** native PLA chargen selection, VIC-IIe bad-lines/raster
+   effects, and CIA timer-B/TOD/serial completion.
+2. **Audio:** SID voices, envelopes, filter, and SDL3 output.
+3. **Storage formats and writes:** virtual-drive `SAVE`, DOS write commands,
+   D71, and D81.
+4. **Large machine subsystems:** true cycle-level 1571 hardware and CP/M/Z80
+   bus switching.
+5. **Usability and validation:** snapshots, complete keyboard handling,
+   accurate 2 MHz operation, cycle-exact tests, capture/gamepad options,
+   packaging, and CI.
 
 ---
 
