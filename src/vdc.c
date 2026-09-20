@@ -41,7 +41,7 @@ void vdc_reset(Vdc *v) {
     v->cursor_adr = 0;
     v->screen_text_cols = 80;
     v->screen_textlines = 25;
-    v->bytes_per_char = 16;
+    v->bytes_per_char = 8;
     v->dirty = true;
 }
 
@@ -62,8 +62,8 @@ void vdc_write_data(Vdc *v, u8 val) {
             if (val <= VDC_MAX_TEXTLINES) v->screen_textlines = val;
             v->dirty = true;
             break;
-        case 9:   /* R09 rasters per char */
-            v->bytes_per_char = (val & 0x1F) < 16 ? 16 : 32;
+        case 9:   /* R09 rasters per char: chargen is one byte per raster */
+            v->bytes_per_char = 8;
             v->dirty = true;
             break;
         case 12: v->screen_adr = (u16)((v->screen_adr & 0x00FF) | (val << 8)); v->dirty = true; break;
