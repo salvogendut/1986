@@ -1,4 +1,5 @@
 #include "overlay.h"
+#include "notify.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,12 +65,58 @@ static const char *notify_mode_name(NotifyMode m) {
 static void overlay_file_callback(void *userdata, const char * const *files,
                                   int filter);
 
-/* Persist the current config and hide the overlay. */
-static void overlay_close(Overlay *ov) {
+static void save_config(const Overlay *ov) {
     char path[CONFIG_PATH_MAX];
     config_path(path, sizeof(path));
     config_save(ov->cfg, path);
+}
+
+/* Persist the current config and hide the overlay. */
+static void overlay_close(Overlay *ov) {
+    save_config(ov);
     ov->visible = false;
+}
+
+/* Replace the live disk as a physical eject followed by an insert.  The
+ * configured path always describes the media that is actually attached; a
+ * failed insert therefore leaves both the drive and the setting empty. */
+static bool replace_disk_image(Overlay *ov, const char *path) {
+    ov->cfg->disk_path[0] = '\0';
+
+    if (drive_attach_disk(&ov->c128->drive, path) != 0) {
+        fprintf(stderr, "1986: could not attach disk '%s'\n", path);
+        notify_post("COULD NOT INSERT D64 DISK IMAGE");
+        save_config(ov);
+        return false;
+    }
+
+    if (path && path[0]) {
+        snprintf(ov->cfg->disk_path, sizeof(ov->cfg->disk_path), "%s", path);
+        notify_post("D64 DISK IMAGE INSERTED");
+    } else {
+        notify_post("D64 DISK IMAGE EJECTED");
+    }
+    save_config(ov);
+    return true;
+}
+
+static void clear_media_entry(Overlay *ov) {
+    if (ov->section != OV_MEDIA) return;
+
+    if (ov->row == 1) {
+        if (ov->cfg->disk_path[0] || ov->c128->drive.disk_attached)
+            replace_disk_image(ov, NULL);
+        return;
+    }
+
+    char *path = NULL;
+    if (ov->row == 2) path = ov->cfg->tape_path;
+    else if (ov->row == 3) path = ov->cfg->cart_path;
+    if (path && path[0]) {
+        path[0] = '\0';
+        save_config(ov);
+        notify_post("MEDIA ENTRY CLEARED");
+    }
 }
 
 /* Apply the display-affecting config to the live window immediately, so
@@ -337,6 +384,9 @@ bool overlay_handle_event(Overlay *ov, SDL_Event *ev) {
         case SDL_SCANCODE_RETURN:
             overlay_activate(ov);
             break;
+        case SDL_SCANCODE_DELETE:
+            clear_media_entry(ov);
+            break;
         case SDL_SCANCODE_ESCAPE:
             overlay_close(ov);
             break;
@@ -362,16 +412,18 @@ void overlay_tick(Overlay *ov) {
     OvDialogKind kind = ov->dialog_kind;
     ov->dialog_kind = OV_DIALOG_NONE;
 
+    if (kind == OV_DIALOG_DISK) {
+        replace_disk_image(ov, ov->dialog_path);
+        return;
+    }
+
     char *dest = NULL;
-    if (kind == OV_DIALOG_DISK)      dest = ov->cfg->disk_path;
-    else if (kind == OV_DIALOG_TAPE) dest = ov->cfg->tape_path;
+    if (kind == OV_DIALOG_TAPE)      dest = ov->cfg->tape_path;
     else if (kind == OV_DIALOG_CART) dest = ov->cfg->cart_path;
     else if (kind == OV_DIALOG_ROM)  dest = ov->cfg->rom_dir;
     if (dest) {
         snprintf(dest, CONFIG_PATH_MAX, "%s", ov->dialog_path);
-        char path[CONFIG_PATH_MAX];
-        config_path(path, sizeof(path));
-        config_save(ov->cfg, path);
+        save_config(ov);
     }
 }
 
@@ -536,7 +588,9 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
 
     /* Footer. */
     SDL_SetRenderDrawColor(r, 0xAA, 0xAA, 0xAA, 255);
-    const char *footer = "Left/Right section  Up/Down select  Enter toggle/choose  F9/Esc close";
+    const char *footer = ov->section == OV_MEDIA
+        ? "Left/Right section  Up/Down select  Enter choose  Del clear  F9/Esc close"
+        : "Left/Right section  Up/Down select  Enter toggle/choose  F9/Esc close";
     SDL_RenderDebugText(r, (float)((lw - (int)strlen(footer) * 8) / 2),
                         (float)(lh - 20), footer);
 
