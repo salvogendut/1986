@@ -122,11 +122,12 @@ void vic_render(Vic *v, Mem *m, Display *d) {
             d->pixels[y * C128_SCREEN_W + x] = bg;
     }
 
-    /* Bitmap (graphics) mode: $D011 bit 5. The 8K bitmap base is selected by
-     * $D018 bits 1-3 ((ctrl2 & 0x0E) << 10, 8K-aligned); the 1K colour/screen
-     * matrix (the video RAM) is selected by $D018 bits 4-7 and holds the
-     * foreground colour per 8x8 cell. Bitmap bit 1 = foreground, bit 0 = the
-     * background colour ($D021). Multicolor ($D016 bit 4) uses 2 bits/pixel. */
+    /* Bitmap (graphics) mode: $D011 bit 5. $D018 bit 3 selects the 8K
+     * bitmap, while bits 4-7 select the 1K screen matrix. In hires mode each
+     * screen byte supplies both colours for its 8x8 cell: the high nibble for
+     * bitmap bit 1 and the low nibble for bit 0. In multicolor mode the four
+     * sources for pixel values 00..11 are $D021, screen high nibble, screen
+     * low nibble, and colour RAM respectively. */
     if (v->vmode & 0x20) {
         u16 bitmap_addr = (u16)(((v->ctrl2 & 0x0E) << 10) & 0xE000);
         u16 screen_base = (u16)((v->ctrl2 & 0xF0) << 6);
@@ -135,31 +136,35 @@ void vic_render(Vic *v, Mem *m, Display *d) {
         for (int cy = 0; cy < VIC_CHARS_Y; cy++) {
             for (int cx = 0; cx < VIC_CHARS_X; cx++) {
                 u16 cell = (u16)(cy * VIC_CHARS_X + cx);
-                u8 fg = m->ram[(u16)(screen_base + cell)] & 0x0F;
+                u8 screen = m->ram[(u16)(screen_base + cell)];
 
                 if (!multicolor) {
+                    u32 fg = VIC_COLORS[screen >> 4];
+                    u32 cell_bg = VIC_COLORS[screen & 0x0F];
                     for (int py = 0; py < 8; py++) {
                         u8 bits = m->ram[(u16)(bitmap_addr + cy * 320 + cx * 8 + py)];
                         int dy = VIC_TEXT_Y + cy * 8 + py;
                         for (int px = 0; px < 8; px++) {
                             int dx = VIC_TEXT_X + cx * 8 + px;
                             d->pixels[dy * C128_SCREEN_W + dx] =
-                                (bits & (0x80 >> px)) ? VIC_COLORS[fg] : bg;
+                                (bits & (0x80 >> px)) ? fg : cell_bg;
                         }
                     }
                 } else {
+                    unsigned cbank = (m->pla_data >> 1) & 0x01;
+                    u8 cram = m->color_ram[cbank * 0x400 + (cell & 0x3FF)] & 0x0F;
+                    u32 colors[4] = {
+                        bg,
+                        VIC_COLORS[screen >> 4],
+                        VIC_COLORS[screen & 0x0F],
+                        VIC_COLORS[cram]
+                    };
                     for (int py = 0; py < 8; py++) {
                         u8 bits = m->ram[(u16)(bitmap_addr + cy * 320 + cx * 8 + py)];
                         int dy = VIC_TEXT_Y + cy * 8 + py;
                         for (int px = 0; px < 4; px++) {
                             u8 code = (u8)((bits >> (6 - px * 2)) & 0x03);
-                            u32 col;
-                            switch (code) {
-                                case 0: col = bg; break;
-                                case 1: col = VIC_COLORS[fg]; break;
-                                case 2: col = VIC_COLORS[v->bg_color[1] & 0x0F]; break;
-                                default: col = VIC_COLORS[v->bg_color[2] & 0x0F]; break;
-                            }
+                            u32 col = colors[code];
                             int dx = VIC_TEXT_X + cx * 8 + px * 2;
                             d->pixels[dy * C128_SCREEN_W + dx] = col;
                             d->pixels[dy * C128_SCREEN_W + dx + 1] = col;
