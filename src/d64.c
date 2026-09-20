@@ -56,45 +56,48 @@ int d64_read_sector(const D64 *d, int track, int sector, u8 *buf) {
     return 0;
 }
 
-/* The directory lives at track 18 sector 1. Each entry is 32 bytes:
- *   [0] next-track, [1] next-sector, [2..3] file type + track/sector,
- *   [4..5] size (LE), [6..21] PETSCII filename, [22..27] ... , [28..31] .
- * Filenames are PETSCII; convert to ASCII and trim trailing 0xA0. */
-int d64_read_directory(const D64 *d, char *out, size_t cap) {
+/* The directory lives at track 18 sector 1. Each sector is 256 bytes: bytes
+ * 0-1 are the next-directory-sector link (track/sector; 0 = end of chain), and
+ * 8 entries of 32 bytes follow at offsets 0,32,64,...,224 (slot 0 overlaps the
+ * link bytes — a CBM DOS quirk). Each 32-byte slot is:
+ *   [2] file-type byte, [3] first-track, [4] first-sector,
+ *   [5..20] PETSCII filename (0xA0 padded), [30..31] block count (LE). */
+static int d64_decode_slot(const u8 *e, D64DirEntry *ent) {
+    if (e[2] == 0 || e[2] == 0xFF) return -1;
+    ent->blocks = (int)(e[30] | (e[31] << 8));
+    ent->type   = e[2] & 0x07;
+    ent->closed = (e[2] & 0x80) != 0;
+    ent->locked = (e[2] & 0x40) != 0;
+    int n = 0;
+    for (int j = 5; j < 21 && n < 16; j++) {
+        u8 c = e[j];
+        if (c == 0xA0) break;
+        ent->name[n++] = (c >= 0x20 && c < 0x80) ? (char)c : '?';
+    }
+    ent->name[n] = '\0';
+    return 0;
+}
+
+static int d64_scan_directory(const D64 *d, D64DirEntry *ents, int cap) {
     u8 sec[256];
     int count = 0;
     int track = 18, sector = 1;
 
-    for (int chain = 0; chain < 200 && (track || sector); chain++) {
+    for (int chain = 0; chain < 200 && track != 0; chain++) {
         if (d64_read_sector(d, track, sector, sec) != 0) break;
-        int next_t = sec[0], next_s = sec[1];
         for (int i = 0; i < 256; i += 32) {
-            u8 *e = sec + i;
-            if (e[0] == 0 && e[1] == 0xFF) { track = next_t; sector = next_s; goto next_sector; }
-            if (e[2] == 0 || e[2] == 0xFF) continue;   /* unused entry */
-            unsigned size = (unsigned)e[4] | ((unsigned)e[5] << 8);
-            /* Filename: bytes 6..21 (PETSCII). Some images store the first
-             * character in byte 5 (the size high byte), so prepend it when it
-             * is a printable ASCII letter. */
-            char name[17];
-            int n = 0;
-            if (e[5] >= 0x41 && e[5] <= 0x5A) name[n++] = (char)e[5];
-            for (int j = 6; j < 22 && n < 16; j++) {
-                u8 c = e[j];
-                if (c == 0xA0) break;
-                name[n++] = (c >= 0x20 && c < 0x80) ? (char)c : '?';
-            }
-            name[n] = '\0';
-            if (count < (int)cap) {
-                int len = snprintf(out + strlen(out), cap - strlen(out), "%u %s\n", size, name);
-                if (len < 0) break;
-            }
+            D64DirEntry e;
+            if (d64_decode_slot(sec + i, &e) != 0) continue;
+            if (count < cap) ents[count] = e;
             count++;
         }
-next_sector:
-        track = next_t; sector = next_s;
+        track = sec[0]; sector = sec[1];
     }
     return count;
+}
+
+int d64_read_directory_entries(const D64 *d, D64DirEntry *ents, int cap) {
+    return d64_scan_directory(d, ents, cap);
 }
 
 /* The disk header lives in the BAM (track 18, sector 0): disk name at

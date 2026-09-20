@@ -120,9 +120,15 @@ DWORD traps_handler(void) {
                     break;
                 case TRAP_RECEIVE: {
                     u8 b = 0;
-                    int ok = g_iec.receive ? g_iec.receive(g_iec.ctx, &b) : 0;
+                    int st = g_iec.receive ? g_iec.receive(g_iec.ctx, &b) : 0;
                     maincpu_set_a(b);
-                    maincpu_set_carry(ok ? 0 : 1);
+                    /* The KERNAL's serial-receive routine signals end-of-input
+                     * (EOI) through the status byte at $90 (bit 0x40), which
+                     * READST ($FFB7) returns. On the final byte of a stream we
+                     * set that bit, like VICE's serial_trap_receive does. */
+                    if (st == 2)
+                        cpu_mem_write(0x90, (u8)(cpu_mem_read(0x90) | 0x40));
+                    maincpu_set_carry(0);
                     maincpu_set_interrupt(0);
                     break;
                 }

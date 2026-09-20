@@ -21,6 +21,15 @@ typedef struct {
     bool has_errors;  /* a trailing D64 error-information block is present */
 } D64;
 
+/* One decoded directory entry (CBM DOS slot layout). */
+typedef struct {
+    int  blocks;      /* number of blocks (256-byte) used by the file */
+    int  type;        /* CBMDOS file type (0=DEL,1=SEQ,2=PRG,3=USR,4=REL,...) */
+    bool closed;      /* the entry was closed (no trailing '*' marker) */
+    bool locked;      /* the entry is write-protected (locked) */
+    char name[17];    /* PETSCII->ASCII filename, NUL terminated */
+} D64DirEntry;
+
 /* Number of sectors on a track (1-35 for side 0; 36-70 for side 1). */
 int  d64_track_sectors(int track);
 
@@ -36,9 +45,9 @@ void d64_close(D64 *d);
 /* Read one sector into buf[256]. Returns 0 on success, -1 if out of range. */
 int  d64_read_sector(const D64 *d, int track, int sector, u8 *buf);
 
-/* Read the directory into a caller buffer (up to cap entries) as PETSCII
- * filenames with their sizes. Returns the number of entries read. */
-int  d64_read_directory(const D64 *d, char *out, size_t cap);
+/* Read the directory into an array of decoded entries (up to cap). Returns
+ * the number of entries read. */
+int  d64_read_directory_entries(const D64 *d, D64DirEntry *ents, int cap);
 
 /* Read the disk header (BAM): the disk name, ID, DOS type and free-block
  * count. Returns 0 on success. */

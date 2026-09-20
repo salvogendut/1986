@@ -67,7 +67,9 @@ typedef struct {
     void *ctx;
     void (*attention)(void *ctx, u8 b);    /* LISTEN/TALK/secondary on the bus */
     void (*send)(void *ctx, u8 byte);      /* C128 sends a command byte */
-    int  (*receive)(void *ctx, u8 *byte);  /* drive returns a byte (1 = ok) */
+    int  (*receive)(void *ctx, u8 *byte);  /* drive returns a byte; the return
+                                            * value is 0 = no byte, 1 = a data
+                                            * byte, or 2 = the final (EOI) byte */
 } IecCallbacks;
 
 /* Patch the KERNAL's IEC routines and install the callbacks. Pass cb=NULL to

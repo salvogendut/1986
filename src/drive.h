@@ -59,8 +59,5 @@ int  drive_attach_disk(Drive *d, const char *path);
 /* Select the IEC device number. */
 void drive_set_unit(Drive *d, int unit);
 
-/* Read the directory of the attached image into out. Returns entry count. */
-int  drive_directory(const Drive *d, char *out, size_t cap);
-
 /* Install the minimal smart-drive backend (the default). */
 void drive_use_smart(Drive *d);

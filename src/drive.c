@@ -45,12 +45,6 @@ void drive_set_unit(Drive *d, int unit) {
     if (d->ops && d->ops->set_unit) d->ops->set_unit(d, unit);
 }
 
-int drive_directory(const Drive *d, char *out, size_t cap) {
-    if (!d->disk_attached) return 0;
-    out[0] = '\0';
-    return d64_read_directory(&d->d64, out, cap);
-}
-
 /* ------------------------------------------------------------------------- */
 /* Minimal "smart" drive backend.                                            */
 
@@ -60,13 +54,18 @@ typedef struct {
     int  cmd_len;
     u8   cmd[256];
     int  cmd_done;               /* a complete command (0x0D) was received */
-    u8   resp[65536];            /* the prepared response (directory PRG/file) */
+    u8   resp[65536];            /* the prepared response (directory/file) */
     int  resp_len, resp_pos;
     int  status_pos;             /* position in the 2-byte status response */
     int  opened;                 /* a data channel is open */
     char filename[64];           /* the requested filename */
     int  want_dir;               /* the "$" directory was requested */
 } SmartDrive;
+
+/* CBM DOS file-type name (indexed by the low 3 bits of the type byte). */
+static const char *const k_filetype[8] = {
+    "DEL", "SEQ", "PRG", "USR", "REL", "CBM", "DIR", "???"
+};
 
 static void smart_reset(Drive *d) {
     SmartDrive *s = d->impl;
@@ -84,100 +83,88 @@ static void smart_set_unit(Drive *d, int unit) {
     s->device = (u8)unit;
 }
 
-/* Emit a BASIC PRINT statement that prints `text`, using CHR$(34) for any
- * literal '"' (a PRINT string literal cannot contain a quote). */
-static void emit_print(u8 *resp, int *len, const char *text) {
-    resp[(*len)++] = 0x98;   /* PRINT */
-    const char *p = text;
-    int first = 1;
-    while (*p) {
-        if (*p == '"') {
-            if (!first) resp[(*len)++] = 0x3B;   /* ";" */
-            resp[(*len)++] = 0xC6; resp[(*len)++] = 0x28;   /* CHR$ ( */
-            resp[(*len)++] = 0x0B; resp[(*len)++] = 0x22;   /* number 34 */
-            resp[(*len)++] = 0x29;                          /* ) */
-            p++;
-            first = 0;
-            continue;
-        }
-        const char *q = p;
-        while (*q && *q != '"') q++;
-        if (!first) resp[(*len)++] = 0x3B;   /* ";" */
-        resp[(*len)++] = 0x22;               /* '"' */
-        while (p < q) resp[(*len)++] = (u8)*p++;
-        resp[(*len)++] = 0x22;               /* '"' */
-        first = 0;
-    }
-    resp[(*len)++] = 0x00;   /* end of line */
-}
-
-/* Build a BASIC program (directory listing) that loads at $0B00. Each line is
- * a PRINT statement, so RUN shows:
- *   0 "DISKNAME" 00 2A
- *   9 "FILE" PRG
- *   ...
- *   236 BLOCKS FREE.
- */
+/* Emit a CBM DOS directory listing as a raw tokenized BASIC program, exactly
+ * the way VICE's vdrive-dir.c does. The C128's DIRECTORY command OPENs the
+ * "$" channel and reads these bytes via CHRIN, printing each one with CHROUT
+ * (which writes to whichever screen is active, 40-col VIC or 80-col VDC). It
+ * does NOT load-and-run the program, so the lines are ordinary BASIC lines
+ * (start address, line link, line number = block count, then the text). */
 static void smart_build_directory(Drive *d) {
     SmartDrive *s = d->impl;
 
-    char diskname[17] = "1986";
-    char id[2] = { 0x00, 0x2A };
-    u8   dos_type = 0x2A;
+    /* Read the raw BAM sector (track 18, sector 0) so the header matches the
+     * disk exactly, like VICE. Layout: disk name at $90 (16 bytes, 0xA0
+     * padded), disk ID at $A2 (2 bytes), DOS version at $A5 (2 bytes, e.g.
+     * "2A"); $A4 is a 0xA0 pad that shows as a space. */
+    u8 bam[256];
+    u8   diskname[16] = { 0 };
+    char id[2] = { '0', '0' };
+    u8   dos[2] = { '2', 'A' };
     int  free_blocks = 0;
-    if (d->disk_attached)
-        d64_read_bam(&d->d64, diskname, sizeof(diskname), id, &dos_type, &free_blocks);
-
-    /* Collect the line texts (the text PRINT will emit). */
-    char lines[4096][96];
-    int  nlines = 0;
-    snprintf(lines[nlines++], sizeof(lines[0]), "0 \"%s\" %02X %02X", diskname,
-             (unsigned char)id[0], (unsigned char)id[1]);
-
-    char out[4096];
-    int  n = drive_directory(d, out, sizeof(out));
-    char *p = out;
-    while (*p && nlines < 500) {
-        int blk = atoi(p);              /* file size in bytes */
-        while (*p && *p != ' ') p++;
-        while (*p == ' ') p++;
-        char name[64]; int ni = 0;
-        while (*p && *p != '\n' && ni < 60) name[ni++] = *p++;
-        name[ni] = '\0';
-        while (*p == '\n') p++;
-        snprintf(lines[nlines++], sizeof(lines[0]), "%d \"%s\" PRG", blk / 256, name);
+    if (d->disk_attached && d64_read_sector(&d->d64, 18, 0, bam) == 0) {
+        for (int i = 0; i < 16; i++) diskname[i] = (bam[0x90 + i] == 0xA0) ? 0x20 : bam[0x90 + i];
+        id[0] = bam[0xA2]; id[1] = bam[0xA3];
+        dos[0] = bam[0xA5]; dos[1] = bam[0xA6];
+        char tmp[17];
+        d64_read_bam(&d->d64, tmp, sizeof(tmp), id, NULL, &free_blocks);
     }
-    snprintf(lines[nlines++], sizeof(lines[0]), "%d BLOCKS FREE.", free_blocks);
 
-    /* Load address $0B00. */
-    s->resp_len = 0;
-    s->resp[s->resp_len++] = 0x00;
-    s->resp[s->resp_len++] = 0x0B;
-    int base = 0x0B00;
+    /* The directory program lives at $0401 (C64/C128 BASIC start). */
+    u8 *resp = s->resp;
+    int rl = 0;
+    resp[rl++] = 0x01; resp[rl++] = 0x04;   /* load address $0401 */
 
-    int off = 2;                        /* first line begins at base+2 */
-    for (int i = 0; i < nlines; i++) {
-        const char *txt = lines[i];
-        /* Build the line into a temp buffer to learn its length. */
-        u8 line[256];
-        int ll = 0;
-        line[ll++] = 0; line[ll++] = 0;               /* link (patched) */
-        u16 lineno = (u16)(10 + i * 10);
-        line[ll++] = (u8)(lineno & 0xFF);
-        line[ll++] = (u8)(lineno >> 8);
-        emit_print(line, &ll, txt);
-        /* line length so far (link is 2 bytes at the start) */
-        int linelen = ll;
-        int next_off = off + linelen;
-        u16 link = (i + 1 < nlines) ? (u16)(base + next_off) : 0x0000;
-        line[0] = (u8)(link & 0xFF);
-        line[1] = (u8)(link >> 8);
-        for (int j = 0; j < ll; j++) s->resp[s->resp_len++] = line[j];
-        off = next_off;
+    /* Header line: link $0101, line number 0, then RVS-on + "DISKNAME" + id. */
+    resp[rl++] = 0x01; resp[rl++] = 0x01;   /* line link */
+    resp[rl++] = 0x00; resp[rl++] = 0x00;   /* line number 0 */
+    resp[rl++] = 0x12;                      /* reverse on */
+    resp[rl++] = '"';
+    for (int i = 0; i < 16; i++) resp[rl++] = diskname[i];
+    resp[rl++] = '"';
+    resp[rl++] = ' ';
+    resp[rl++] = (u8)id[0];
+    resp[rl++] = (u8)id[1];
+    resp[rl++] = ' ';                       /* the $A4 0xA0 pad */
+    resp[rl++] = (u8)dos[0];
+    resp[rl++] = (u8)dos[1];
+    resp[rl++] = 0x00;                      /* end of line */
+
+    /* One line per directory entry. */
+    D64DirEntry ents[512];
+    int n = d64_read_directory_entries(&d->d64, ents, 512);
+    for (int i = 0; i < n; i++) {
+        D64DirEntry *e = &ents[i];
+        resp[rl++] = 0x01; resp[rl++] = 0x01;        /* line link */
+        resp[rl++] = (u8)(e->blocks & 0xFF);          /* line number = blocks */
+        resp[rl++] = (u8)((e->blocks >> 8) & 0xFF);
+        resp[rl++] = ' ';                             /* 1 space before name */
+        resp[rl++] = '"';
+        int len = (int)strlen(e->name);
+        for (int j = 0; j < 16; j++) {
+            char c = (j < len) ? e->name[j] : 0x20;
+            resp[rl++] = (u8)c;
+        }
+        resp[rl++] = '"';
+        resp[rl++] = e->closed ? ' ' : '*';           /* open-file marker */
+        resp[rl++] = ' ';
+        const char *ft = k_filetype[e->type & 0x07];
+        resp[rl++] = (u8)ft[0];
+        resp[rl++] = (u8)ft[1];
+        resp[rl++] = (u8)ft[2];
+        resp[rl++] = e->locked ? '<' : ' ';           /* locked marker */
+        resp[rl++] = 0x00;                            /* end of line */
     }
-    /* End of program. */
-    s->resp[s->resp_len++] = 0x00;
-    s->resp[s->resp_len++] = 0x00;
+
+    /* Trailing "BLOCKS FREE." line. */
+    resp[rl++] = 0x01; resp[rl++] = 0x01;   /* line link */
+    resp[rl++] = (u8)(free_blocks & 0xFF);   /* line number = free blocks */
+    resp[rl++] = (u8)((free_blocks >> 8) & 0xFF);
+    resp[rl++] = ' ';
+    const char *bf = "BLOCKS FREE.";
+    while (*bf) resp[rl++] = (u8)*bf++;
+    resp[rl++] = 0x00;
+
+    s->resp_len = rl;
     s->resp_pos = 0;
     s->opened = 1;
 }
@@ -222,13 +209,19 @@ static int smart_receive(Drive *d, u8 *byte) {
     SmartDrive *s = d->impl;
     leds_ping(LED_FDC_A);   /* disk activity */
     if (s->secondary == 15) {
-        /* Command channel: the directory PRG is read here (a directory was
+        /* Command channel: the directory listing is read here (a directory was
          * built), otherwise the status (0x00 0x00) is returned. */
-        if (s->resp_pos < s->resp_len) { *byte = s->resp[s->resp_pos++]; return 1; }
+        if (s->resp_pos < s->resp_len) {
+            *byte = s->resp[s->resp_pos++];
+            return (s->resp_pos == s->resp_len) ? 2 : 1;   /* last byte = EOI */
+        }
         if (s->status_pos < 2) { *byte = 0x00; s->status_pos++; return 1; }
         return 0;
     }
-    if (s->resp_pos < s->resp_len) { *byte = s->resp[s->resp_pos++]; return 1; }
+    if (s->resp_pos < s->resp_len) {
+        *byte = s->resp[s->resp_pos++];
+        return (s->resp_pos == s->resp_len) ? 2 : 1;       /* last byte = EOI */
+    }
     return 0;
 }
 
