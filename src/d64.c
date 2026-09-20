@@ -73,9 +73,12 @@ int d64_read_directory(const D64 *d, char *out, size_t cap) {
             if (e[0] == 0 && e[1] == 0xFF) { track = next_t; sector = next_s; goto next_sector; }
             if (e[2] == 0 || e[2] == 0xFF) continue;   /* unused entry */
             unsigned size = (unsigned)e[4] | ((unsigned)e[5] << 8);
-            /* PETSCII filename bytes [6..21]. */
+            /* Filename: bytes 6..21 (PETSCII). Some images store the first
+             * character in byte 5 (the size high byte), so prepend it when it
+             * is a printable ASCII letter. */
             char name[17];
             int n = 0;
+            if (e[5] >= 0x41 && e[5] <= 0x5A) name[n++] = (char)e[5];
             for (int j = 6; j < 22 && n < 16; j++) {
                 u8 c = e[j];
                 if (c == 0xA0) break;
