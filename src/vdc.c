@@ -3,12 +3,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-/* VDC palette (RGB, CGA-style 16 colours). */
+/* VDC 8563 palette (RGB), matching VICE's vdc-colors. */
 static const u32 VDC_COLORS[16] = {
-    0x000000, 0x0000AA, 0x00AA00, 0x00AAAA,
-    0xAA0000, 0xAA00AA, 0xAA5500, 0xAAAAAA,
-    0x555555, 0x5555FF, 0x55FF55, 0x55FFFF,
-    0xFF5555, 0xFF55FF, 0xFFFF55, 0xFFFFFF
+    0x000000, 0x555555, 0x0000AA, 0x5555FF,
+    0x00AA00, 0x55FF55, 0x00AAAA, 0x55FFFF,
+    0xAA0000, 0xFF5555, 0xAA00AA, 0xFF55FF,
+    0xAA5500, 0xFFFF55, 0xAAAAAA, 0xFFFFFF
 };
 
 /* Unused-bit masks for returned register values (VICE regmask[38]). */
@@ -131,15 +131,19 @@ u8 vdc_read_status(const Vdc *v) {
 
 static void put_glyph(Vdc *v, u32 *pixels, int fbw, int fbh, int cx, int cy,
                       const u8 *glyph, u32 fg, u32 bg, int reverse,
-                      int cell_w, int cell_h) {
-    for (int py = 0; py < cell_h; py++) {
-        int gy = (int)((long)py * VDC_CHAR_HEIGHT / cell_h);
+                      float cell_w, float cell_h) {
+    int x0 = (int)(cx * cell_w);
+    int y0 = (int)(cy * cell_h);
+    int nw = (int)cell_w;
+    int nh = (int)cell_h;
+    for (int py = 0; py < nh; py++) {
+        int gy = (int)((float)py * VDC_CHAR_HEIGHT / cell_h);
         u8 bits = glyph[gy];
         if (reverse) bits = (u8)~bits;
-        for (int px = 0; px < cell_w; px++) {
-            int gx = (int)((long)px * VDC_CHAR_WIDTH / cell_w);
-            int dx = cx * cell_w + px;
-            int dy = cy * cell_h + py;
+        for (int px = 0; px < nw; px++) {
+            int gx = (int)((float)px * VDC_CHAR_WIDTH / cell_w);
+            int dx = x0 + px;
+            int dy = y0 + py;
             if (dx < fbw && dy < fbh)
                 pixels[dy * fbw + dx] = (bits & (0x80 >> gx)) ? fg : bg;
         }
@@ -156,8 +160,8 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
     if (cols < 1) cols = 1;
     if (rows < 1) rows = 1;
 
-    int cell_w = (fbw / cols < 1) ? 1 : fbw / cols;
-    int cell_h = (fbh / rows < 1) ? 1 : fbh / rows;
+    float cell_w = (float)fbw / (float)cols;
+    float cell_h = (float)fbh / (float)rows;
 
     /* Fill with the background colour (R26 low nibble). */
     u32 bg = VDC_COLORS[v->regs[26] & 0x0F];

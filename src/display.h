@@ -21,8 +21,8 @@
 #define LED_BAR_HEIGHT      22    /* drive-activity LED strip below the C128 area */
 #define WINDOW_H_TOTAL      (WINDOW_H + LED_BAR_HEIGHT)
 
-#define VDC_SCREEN_W        640   /* VDC 8563 text screen width */
-#define VDC_SCREEN_H        200   /* VDC 8563 text screen height */
+#define VDC_SCREEN_W        640   /* VDC 8563 text screen width (80 x 8 px) */
+#define VDC_SCREEN_H        480   /* 4:3 display height (25 rows scaled, ~19.2 px/row) */
 
 #define DISPLAY_CRT_SCANLINES_DEFAULT 35
 #define DISPLAY_CRT_BRIGHTNESS_DEFAULT 100
