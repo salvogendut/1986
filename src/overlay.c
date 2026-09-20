@@ -239,6 +239,8 @@ static void overlay_activate(Overlay *ov) {
                     break;
                 case ADV_ONE_DISPLAY:
                     ov->cfg->one_display = !ov->cfg->one_display;
+                    display_set_one_display(&ov->c128->display,
+                                            ov->cfg->one_display);
                     break;
                 case ADV_GIF_WIDTH:
                     ov->cfg->gif_width = cycle_gif_width(ov->cfg->gif_width);

@@ -21,6 +21,9 @@
 #define LED_BAR_HEIGHT      22    /* drive-activity LED strip below the C128 area */
 #define WINDOW_H_TOTAL      (WINDOW_H + LED_BAR_HEIGHT)
 
+#define VDC_SCREEN_W        640   /* VDC 8563 text screen width (80 x 8 px) */
+#define VDC_SCREEN_H        480   /* 4:3 display height (25 rows scaled, ~19.2 px/row) */
+
 #define DISPLAY_CRT_SCANLINES_DEFAULT 35
 #define DISPLAY_CRT_BRIGHTNESS_DEFAULT 100
 #define DISPLAY_CRT_CONTRAST_DEFAULT 100
@@ -42,6 +45,15 @@ typedef struct {
     int           crt_red;
     int           crt_green;
     int           crt_blue;
+
+    /* VDC 8563 (80-column) output. */
+    SDL_Texture  *vdc_texture;
+    u32           vdc_pixels[VDC_SCREEN_W * VDC_SCREEN_H];
+    bool          one_display;    /* true = one window, VIC/VDC share it */
+    bool          vdc_active;     /* true = show VDC (in one-window mode) */
+    SDL_Window   *vdc_window;     /* separate VDC window (two-window mode) */
+    SDL_Renderer *vdc_renderer;
+    SDL_Texture  *vdc_window_texture;
 } Display;
 
 int  display_init(Display *d, const char *title, int scale);
@@ -53,9 +65,13 @@ void display_finalize_frame(Display *d, u32 blank); /* fill pixels not scanned t
 void display_upload(Display *d);   /* update texture + blit to renderer (no flip) */
 void display_flip(Display *d);     /* SDL_RenderPresent */
 void display_save_ppm(Display *d, const char *path);
+void display_save_ppm_active(Display *d, const char *path);  /* saves the active output (VIC or VDC) */
 u32  display_hash(Display *d);
 void display_set_smoothing(Display *d, bool smooth);
 void display_set_crt(Display *d, bool enabled, int scanlines, int brightness,
                      int contrast, int red, int green, int blue);
+void display_set_one_display(Display *d, bool one);   /* create/destroy VDC window */
+void display_set_vdc_active(Display *d, bool active); /* select VIC vs VDC (one-window) */
+bool display_vdc_window_open(const Display *d);
 void display_apply_greyscale(Display *d);
 void display_draw_paused_label(Display *d);

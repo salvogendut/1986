@@ -147,6 +147,7 @@ int main(int argc, char **argv) {
     display_set_crt(&c.display, cfg.crt_enabled, cfg.crt_scanlines,
                     cfg.crt_brightness, cfg.crt_contrast,
                     cfg.crt_red, cfg.crt_green, cfg.crt_blue);
+    display_set_one_display(&c.display, cfg.one_display);
     if (cfg.fullscreen) SDL_SetWindowFullscreen(c.display.window, true);
 
     /* Load ROMs into the machine (optional at this stage). Default to the
@@ -175,6 +176,7 @@ int main(int argc, char **argv) {
     }
 
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */
+    c.col_mode_80 = true;   /* boot into 80-column (VDC) mode */
     c128_reset(&c);
 
     /* Patch the KERNAL ROM with the IEC serial traps (like VICE) so the boot
@@ -288,7 +290,7 @@ int main(int argc, char **argv) {
                     tmp[sizeof(tmp) - 1] = '\0';
                     snprintf(path, sizeof(path), "%s_%ld.ppm",
                              basename(tmp), (long)time(NULL));
-                    display_save_ppm(&c.display, path);
+                    display_save_ppm_active(&c.display, path);
                 } else if (ev.key.scancode == SDL_SCANCODE_F5) {
                     c128_reset(&c);
                 } else if (ev.key.scancode == SDL_SCANCODE_F6) {
@@ -303,9 +305,11 @@ int main(int argc, char **argv) {
                         else snprintf(path, sizeof(path), "1986-capture.gif");
                         videocap_start(path, cfg.gif_width, cfg.gif_fps);
                     }
-                } else if (ev.key.scancode == SDL_SCANCODE_F10) {
+                } else if (ev.key.scancode == SDL_SCANCODE_F7) {
                     paused = !paused;
                     c.paused = paused;
+                } else if (ev.key.scancode == SDL_SCANCODE_F10) {
+                    c128_switch_4080(&c);   /* toggle 40-col VIC <-> 80-col VDC */
                 } else if (ev.key.scancode == SDL_SCANCODE_V &&
                            (SDL_GetModState() & SDL_KMOD_CTRL)) {
                     char *text = SDL_GetClipboardText();

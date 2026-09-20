@@ -34,6 +34,8 @@ typedef struct {
     Config *cfg;
     bool    paused;
     bool    fast;        /* 8502 at 2 MHz (C128 fast mode) */
+    bool    col_mode_80; /* persistent 40/80 mode: true = 80-col (survives reset) */
+    bool    vdc_chargen_loaded; /* the 80-col VDC chargen has been loaded */
     u64     total_cycles;
 } C128;
 
@@ -42,6 +44,7 @@ void c128_reset(C128 *c);
 int  c128_frame(C128 *c);      /* run one frame; returns CPU cycles consumed */
 u64  c128_cycles_to_ns(const C128 *c, int cycles);
 void c128_key_event(C128 *c, int scancode, bool down);
+void c128_switch_4080(C128 *c);   /* toggle 40-column VIC <-> 80-column VDC */
 u8   c128_mem_read(void *ctx, u16 addr);
 void c128_mem_write(void *ctx, u16 addr, u8 val);
 

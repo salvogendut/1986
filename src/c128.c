@@ -133,11 +133,17 @@ void c128_reset(C128 *c) {
     cpu_reset(&c->cpu);
     vic_reset(&c->vic);
     vdc_reset(&c->vdc);
+    c->vdc_chargen_loaded = false;
+    /* Load the 80-column VDC character generator (second half of the 4K
+     * chargen ROM) into VDC RAM at the default chargen address. */
+    memcpy(&c->vdc.ram[0x2000], &c->mem.chargen[0x800], 0x800);
     cia_reset(&c->cia1);
     cia_reset(&c->cia2);
     sid_reset(&c->sid);
     kbd_reset(&c->kbd);
     c->paused = false;
+    /* Preserve the 40/80 column choice across resets. */
+    c->mem.mmu.col4080 = !c->col_mode_80;
 }
 
 int c128_frame(C128 *c) {
@@ -158,10 +164,21 @@ int c128_frame(C128 *c) {
     c->total_cycles += (u64)total;
     c128_frame_count++;
 
-    /* Render the VIC-IIe frame (40-column). The 8563 VDC framebuffer is
-     * rendered only when the KERNAL actively drives it (80-col mode); the
-     * C128 boots to the 40-col VIC. */
+    /* The KERNAL clears the VDC chargen (writes 0xFF) during its 80-col setup
+     * but does not copy the glyphs, so load the character generator (the same
+     * one VICE's KERNAL copies to the VDC, i.e. the chargen at offset 0)
+     * ourselves shortly after boot (and after each reset). */
+    if (!c->vdc_chargen_loaded && c128_frame_count > 8) {
+        memcpy(&c->vdc.ram[0x2000], &c->mem.chargen[0x000], 0x800);
+        c->vdc_chargen_loaded = true;
+    }
+
+    /* Render the VIC-IIe frame (40-column) and the VDC 8563 (80-column)
+     * framebuffer every frame. The active display is selected from the
+     * KERNAL's 40/80 mode flag ($00D7: 0 = 40-col, non-zero = 80-col). */
     vic_render(&c->vic, &c->mem, &c->display);
+    vdc_render(&c->vdc, c->display.vdc_pixels, VDC_SCREEN_W, VDC_SCREEN_H);
+    c->display.vdc_active = (c->mem.ram[0x00D7] != 0);
     return total;
 }
 
@@ -178,4 +195,49 @@ void c128_key_event(C128 *c, int scancode, bool down) {
      * the four PC arrow keys work independently. */
     if (shift) kbd_set(&c->kbd, KBD_SHIFT_ROW, KBD_SHIFT_COL, down);
     kbd_set(&c->kbd, row, col, down);
+}
+
+/* Copy the current text screen between the VIC-II (40x25) and the VDC (80x25)
+ * so the READY prompt "migrates" to whichever display is now selected. */
+static void migrate_vic_to_vdc(C128 *c) {
+    c->vdc.screen_text_cols = 80;
+    c->vdc.screen_textlines = 25;
+    c->vdc.bytes_per_char   = 16;
+    c->vdc.screen_adr  = 0x0000;
+    c->vdc.chargen_adr = 0x2000;
+    unsigned sa = (c->vic.screen_addr & 0x3FFF) & 0x3C00;
+    if (sa < 0x400) sa = 0x400;
+    for (int row = 0; row < 25; row++)
+        for (int col = 0; col < 80; col++) {
+            int vcol = col - 20;   /* centre the 40-col content in 80 cols */
+            u8 ch = (vcol >= 0 && vcol < 40) ? c->mem.ram[sa + row * 40 + vcol] : 0x20;
+            c->vdc.ram[(c->vdc.screen_adr + row * 80 + col) & 0xFFFF] = ch;
+        }
+    c->vdc.dirty = true;
+}
+
+static void migrate_vdc_to_vic(C128 *c) {
+    unsigned sa = (c->vic.screen_addr & 0x3FFF) & 0x3C00;
+    if (sa < 0x400) sa = 0x400;
+    int cols = c->vdc.screen_text_cols;
+    if (cols > 80) cols = 80;
+    for (int row = 0; row < 25; row++)
+        for (int col = 0; col < 40; col++) {
+            int vcol = col + 20;   /* take the centred 40 cols of the 80-col row */
+            u8 ch = (vcol >= 0 && vcol < cols)
+                  ? c->vdc.ram[(c->vdc.screen_adr + row * 80 + vcol) & 0xFFFF] : 0x20;
+            c->mem.ram[sa + row * 40 + col] = ch;
+        }
+}
+
+/* Toggle the 40/80 column mode: flip the MMU sense key, the KERNAL mode flag
+ * ($00D7) and migrate the text screen to the newly-selected display. */
+void c128_switch_4080(C128 *c) {
+    c->col_mode_80 = !c->col_mode_80;
+    c->mem.mmu.col4080 = !c->col_mode_80;
+    c->mem.ram[0xD7] = c->col_mode_80 ? 0x80 : 0x00;
+    if (c->col_mode_80)
+        migrate_vic_to_vdc(c);   /* switched to 80-col VDC */
+    else
+        migrate_vdc_to_vic(c);   /* switched to 40-col VIC */
 }
