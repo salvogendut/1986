@@ -99,6 +99,8 @@ int main(int argc, char **argv) {
     config_set_defaults(&cfg);
     const char *rom_dir = NULL;
     const char *gif_out = NULL;
+    const char *paste_arg = NULL;
+    long frames_arg = -1;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--scale") && i + 1 < argc) cfg.scale = atoi(argv[++i]);
@@ -106,6 +108,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--fast")) cfg.fast = true;
         else if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom_dir = argv[++i];
         else if (!strcmp(argv[i], "--gif-out") && i + 1 < argc) gif_out = argv[++i];
+        else if (!strcmp(argv[i], "--paste") && i + 1 < argc) paste_arg = argv[++i];
+        else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames_arg = atol(argv[++i]);
         else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
         else if (argv[i][0] == '-') { usage(argv[0]); return 1; }
     }
@@ -206,6 +210,7 @@ int main(int argc, char **argv) {
     Monitor *monitor = monitor_create(&c);
     Paste paste;
     paste_init(&paste);
+    if (paste_arg) paste_text(&paste, paste_arg);
 
     if (gif_out) videocap_start(gif_out, cfg.gif_width, cfg.gif_fps);
 
@@ -394,6 +399,10 @@ int main(int argc, char **argv) {
                 display_save_ppm(&c.display, g_save_ppm);
                 g_save_ppm = NULL;
             }
+
+            /* Debug: stop after a fixed number of frames. */
+            if (frames_arg > 0 && c128_frame_count >= frames_arg)
+                running = false;
         } else {
             display_apply_greyscale(&c.display);
         }

@@ -171,6 +171,7 @@ static void smart_build_directory(Drive *d) {
 
 static void smart_attention(Drive *d, u8 b) {
     SmartDrive *s = d->impl;
+    fprintf(stderr, "[A] %02X\n", b);
     if ((b & 0xF0) == 0x20) {          /* LISTEN */
         s->device = b & 0x0F;
         s->listening = 1; s->talking = 0; s->cmd_len = 0; s->cmd_done = 0;
@@ -194,6 +195,7 @@ static void smart_attention(Drive *d, u8 b) {
 
 static void smart_send(Drive *d, u8 byte) {
     SmartDrive *s = d->impl;
+    fprintf(stderr, "[S] %02X '%c'\n", byte, (byte>=0x20&&byte<0x7f)?byte:' ');
     if (s->cmd_len < (int)sizeof(s->cmd)) {
         s->cmd[s->cmd_len++] = byte;
         if (byte == 0x0D) s->cmd_done = 1;
