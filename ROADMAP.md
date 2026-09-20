@@ -159,15 +159,21 @@ tracks the KERNAL's `$01` writes.
 
 ---
 
-## Milestone 8 — 1571 drives + disk images  `[ ]`
+## Milestone 8 — Virtual drive and true 1571  `[ ]`
 
-**Goal.** Load and save D64/D81 images, the C128's fast serial.
+**Goal.** Provide a convenient fast virtual drive and an independent,
+cycle-level 1571 implementation without conflating their interfaces.
 
-- [ ] The integrated 1571: 1541-compatible + 1571 2K RAM, the fast-serial
-  (burst) protocol, and the IEC bus (which the KERNAL's disk routines use — this
-  also removes the need for the serial ROM traps added as a boot workaround).
+- [x] D64 directory parsing and fixed-width CBM DOS directory stream.
+- [x] Fast virtual IEC device with KERNAL traps and channel lifecycle.
+- [x] Virtual-drive `LOAD`/`DLOAD` and DOS error handling (#31).
+- [ ] Virtual-drive `SAVE` and write-side DOS commands.
+- [ ] D71 and D81 media formats.
+- [ ] True integrated 1571: drive CPU, 2K RAM, DOS ROM, CIA/VIA/FDC,
+  mechanism timing, line-level IEC, and fast serial (#30).
 
-**Done when.** `LOAD"*",8,1` from a D64/D81 works.
+**Done when.** Virtual mode is broadly useful and true-drive mode runs the DOS
+ROM through emulated hardware.
 
 ---
 

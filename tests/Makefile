@@ -27,9 +27,9 @@ test-gifcap: test_gifcap.c ../src/gifcap.c ../src/gifcap.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_gifcap.c ../src/gifcap.c -o $@
 
-test-d64: test_d64.c ../src/d64.c ../src/d64.h
+test-d64: test_d64.c ../src/d64.c ../src/d64.h ../src/virtual_drive.c ../src/virtual_drive.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
-		test_d64.c ../src/d64.c -o $@
+		test_d64.c ../src/d64.c ../src/virtual_drive.c -o $@
 
 check: $(TESTS)
 	./test-cpu

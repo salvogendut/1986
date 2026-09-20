@@ -53,6 +53,7 @@ void c128_switch_4080(C128 *c);   /* toggle 40-column VIC <-> 80-column VDC */
 void c128_iec_attention(void *ctx, u8 b);
 void c128_iec_send(void *ctx, u8 byte);
 int  c128_iec_receive(void *ctx, u8 *byte);
+u8   c128_iec_take_status(void *ctx);
 u8   c128_mem_read(void *ctx, u16 addr);
 void c128_mem_write(void *ctx, u16 addr, u8 val);
 

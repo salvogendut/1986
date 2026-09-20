@@ -23,6 +23,9 @@ src/
   vdc.*       - MOS 8563 VDC (80-column) register file
   cia.*       - MOS 6526 CIA1/CIA2 register file
   sid.*       - MOS 6581/8580 SID register file
+  d64.*       - single-sided D64 image and directory decoding
+  virtual_drive.* - fast logical IEC device used by KERNAL ROM traps
+  drive.*     - machine-facing media/virtual-drive holder
   z80.*       - cycle-stepped Z80 (reused from 1983/1984/1985) for CP/M
   z80dis.*    - Z80 disassembler (reused)
   paste.*     - clipboard text -> keyboard injection
@@ -35,6 +38,7 @@ tests/
   test_mmu.c  - MMU register behaviour
   test_config.c - config roundtrip
   test_gifcap.c - GIF encoder output
+  test_d64.c  - D64 directory bytes + virtual IEC channel lifecycle
 ```
 
 ## Reuse from siblings
@@ -95,15 +99,24 @@ text renderer draws screen RAM, colour RAM and chargen. The 8502's `$00/$01`
 port (the PLA) is decoded: `data_read = (data & dir) | ~dir`, and its low bits
 select the CPU/VIC colour-RAM banks (`$D800`).
 
-**Cursor blink / keyboard scan (blocked).** The KERNAL drives its 50 Hz main
-loop from the VIC raster IRQ (`$D01A=0x01`, `$D012=0xFF`). The raster IRQ
-machinery (`vic_tick`, `cpu_step_budget`) is in place, but firing it makes the
-KERNAL's IRQ handler overflow the stack (`SP=0x00` -> `$0000`) after a few
-frames — the same IRQ-handler imbalance that blocked `READY.` earlier. Because
-SCNKEY (keyboard scan) and the cursor update run in that IRQ handler, input and
-the blinking cursor are blocked until the handler runs without corrupting the
-stack. This needs the IRQ handler to dispatch correctly against the CIA/VIC
-status registers (roadmap item 1).
+## Disk-drive architecture
+
+`virtual_drive.c` is a fast logical IEC device used by the patched KERNAL
+routines. It implements device addressing, OPEN/CLOSE, LISTEN/TALK,
+UNLISTEN/UNTALK, secondary channels, status responses, and D64 directory
+streams without running a drive CPU. It follows D64 file-sector chains and
+serves raw PRG streams (including their load address) for `LOAD` and `DLOAD`.
+Missing files report DOS error 62 both on the IEC status byte and command
+channel. It does not require a 1571 DOS ROM.
+
+The C128 KERNAL's burst-mode flag is cleared while this command-level backend
+is active, keeping transfers on the trapped byte routines. A true 1571 will
+instead provide the CIA shift-register endpoint needed by fast serial.
+
+A future true `Drive1571` is a separate machine: it will run its own 6502 and
+DOS ROM and connect through line-level IEC signals. It must not be placed
+behind the command-level `VirtualDrive` interface. The two modes share only
+neutral disk-image/media code.
 
 Visual check (saves a PPM at frame 60):
 ```bash
@@ -112,11 +125,10 @@ SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
 
 ## Roadmap
 
-1. **Fix the IRQ handler stack imbalance** so the 50 Hz VIC raster IRQ can run
-   the KERNAL's cursor update and SCNKEY without overflowing the stack — this
-   unblocks the blinking cursor and host keyboard input at `READY.`.
-2. **Keyboard input** — wire host keys into the C128 keyboard matrix so
-   commands can be typed at the `READY.` prompt.
+1. **Virtual drive writes and formats** — add `SAVE`, D71, and D81 support to
+   the tested logical IEC/media layer.
+2. **True 1571** — implement the independent drive CPU, chips, mechanism and
+   line-level IEC connection.
 3. **PLA / GO 64** — chargen select (bit 6 of `$01`) and the full C64-mode
    memory model for GO 64 (`$01` -> `mmu_set_config64` in VICE).
 4. **VIC-IIe raster** — per-line raster/IRQ timing and sprite/bitmap modes.

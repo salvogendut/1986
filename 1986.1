@@ -24,8 +24,23 @@ Run the 8502 at 2 MHz (C128 fast mode).
 \fB\-\-rom\fR DIR
 Directory holding the machine ROM images (kernal.rom, basic.rom, chargen.rom).
 .TP
+\fB\-\-disk\fR PATH
+Attach a D64 disk image at launch.
+.TP
 \fB\-\-gif\-out\fR PATH
 Start recording an animated GIF at launch.
+.TP
+\fB\-\-paste\fR TEXT
+Inject text through the emulated keyboard.
+.TP
+\fB\-\-paste\-at\fR N
+Delay injected text until emulated frame N.
+.TP
+\fB\-\-frames\fR N
+Exit after N emulated frames.
+.TP
+\fB\-\-no\-throttle\fR
+Run without real-time frame pacing.
 .TP
 \fB\-\-help\fR
 Show this help and exit.

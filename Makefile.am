@@ -25,7 +25,10 @@ dist_man1_MANS = 1986.1
 	src/monitor.c \
 	src/gifcap.c \
 	src/leds.c \
-	src/notify.c
+	src/notify.c \
+	src/d64.c \
+	src/drive.c \
+	src/virtual_drive.c
 
 noinst_HEADERS = \
 	src/types.h \
@@ -50,6 +53,9 @@ noinst_HEADERS = \
 	src/gifcap.h \
 	src/leds.h \
 	src/notify.h \
+	src/d64.h \
+	src/drive.h \
+	src/virtual_drive.h \
 	src/vice/vice.h \
 	src/vice/types.h \
 	src/vice/log.h \
@@ -90,4 +96,4 @@ dist_metainfo_DATA = io.github.salvogendut.Emulator1986.metainfo.xml
 EXTRA_DIST = Makefile LICENSE Development.md USAGE.md CONTROLS.md INSTALL.md \
 	ROADMAP.md 1986.conf.example packaging/io.github.salvogendut.Emulator1986.yml \
 	roms/README tests/Makefile tests/test_cpu.c tests/test_mmu.c \
-	tests/test_config.c tests/test_gifcap.c
+	tests/test_config.c tests/test_gifcap.c tests/test_d64.c

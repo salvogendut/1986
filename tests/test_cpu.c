@@ -1,4 +1,6 @@
 #include "cpu.h"
+#include "vice/maincpu.h"
+#include "vice/types.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -14,6 +16,25 @@ static void bus_write(void *ctx, u16 addr, u8 val) { (void)ctx; ram[addr] = val;
 
 static void load(u16 addr, const u8 *bytes, int n) {
     memcpy(&ram[addr], bytes, n);
+}
+
+extern DWORD traps_handler(void);
+
+static u8 attention_byte, send_byte;
+static int receive_result = 2;
+static u8 pending_status;
+static void test_attention(void *ctx, u8 byte) { (void)ctx; attention_byte = byte; }
+static void test_send(void *ctx, u8 byte) { (void)ctx; send_byte = byte; }
+static int test_receive(void *ctx, u8 *byte) {
+    (void)ctx;
+    *byte = 0x80;
+    return receive_result;
+}
+static u8 test_take_status(void *ctx) {
+    (void)ctx;
+    u8 status = pending_status;
+    pending_status = 0;
+    return status;
 }
 
 /* cpu_step() runs a whole frame (CPU_PAL_FRAME_CYCLES) of the VICE 6502 core.
@@ -39,6 +60,65 @@ int main(void) {
      * runs every iteration. A may be either 5 or 8 depending on where the
      * frame boundary lands, so assert the stable memory result. */
     CHECK(ram[0x0200] == 0x08, "STA stored result");
+
+    /* C128 KERNAL IEC traps exchange bytes through BSOUR ($95) and the serial
+     * input temporary ($A4), rather than assuming the accumulator is the
+     * transport. */
+    IecCallbacks iec = {
+        .ctx = NULL,
+        .force_slow_serial = true,
+        .attention = test_attention,
+        .send = test_send,
+        .receive = test_receive,
+        .take_status = test_take_status,
+    };
+    cpu_install_iec_traps(&ram[0xE000], &iec);
+
+    ram[0x0A1C] = 0x40;
+    ram[0x95] = 0x29;
+    maincpu_regs.a = 0xEE;
+    reg_pc = 0xE355;
+    CHECK(traps_handler() == 0, "attention trap handled");
+    CHECK(attention_byte == 0x29, "attention reads BSOUR");
+    CHECK((ram[0x0A1C] & 0x40) == 0,
+          "command-level IEC disables unsupported C128 burst mode");
+
+    pending_status = 0x02;
+    ram[0x90] = 0;
+    ram[0x95] = 0x3F;
+    reg_pc = 0xE355;
+    CHECK(traps_handler() == 0, "status-producing attention trap handled");
+    CHECK((ram[0x90] & 0x02) != 0, "attention propagates IEC error status");
+
+    ram[0x95] = 0x42;
+    maincpu_regs.a = 0xEE;
+    reg_pc = 0xE38C;
+    CHECK(traps_handler() == 0, "send trap handled");
+    CHECK(send_byte == 0x42, "send reads BSOUR");
+
+    ram[0x90] = 0;
+    ram[0xA4] = 0;
+    reg_pc = 0xE43E;
+    CHECK(traps_handler() == 0, "receive trap handled");
+    CHECK(maincpu_regs.a == 0x80, "receive sets A");
+    CHECK(ram[0xA4] == 0x80, "receive stores C128 serial input temp");
+    CHECK((ram[0x90] & 0x40) != 0, "receive sets EOI status");
+    CHECK(MOS6510_REGS_GET_SIGN(&maincpu_regs) != 0,
+          "receive updates negative flag");
+    CHECK(!MOS6510_REGS_GET_ZERO(&maincpu_regs),
+          "receive updates zero flag");
+
+    receive_result = 0;
+    ram[0x90] = 0;
+    reg_pc = 0xE43E;
+    CHECK(traps_handler() == 0, "empty receive trap handled");
+    CHECK((ram[0x90] & 0x80) != 0, "empty receive reports device error");
+
+    receive_result = -1;
+    ram[0x90] = 0;
+    reg_pc = 0xE43E;
+    CHECK(traps_handler() == 0, "failed receive trap handled");
+    CHECK((ram[0x90] & 0x02) != 0, "failed receive reports serial error");
 
     if (failures == 0) { printf("test-cpu: OK\n"); return 0; }
     printf("test-cpu: %d failure(s)\n", failures);
