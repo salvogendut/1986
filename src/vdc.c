@@ -136,10 +136,16 @@ static void put_glyph(Vdc *v, u32 *pixels, int fbw, int fbh, int cx, int cy,
     int y0 = (int)(cy * cell_h);
     int nw = (int)cell_w;
     int nh = (int)cell_h;
+    int cur_top = v->regs[10] & 0x1F;
+    int cur_bot = v->regs[11] & 0x1F;
     for (int py = 0; py < nh; py++) {
         int gy = (int)((float)py * VDC_CHAR_HEIGHT / cell_h);
         u8 bits = glyph[gy];
         if (reverse) bits = (u8)~bits;
+        /* The VDC cursor inverts the character cell's glyph on the raster
+         * lines between R10 (start) and R11 (end) while it is visible. */
+        if (v->cursor_on && gy >= cur_top && gy < cur_bot)
+            bits = (u8)~bits;
         for (int px = 0; px < nw; px++) {
             int gx = (int)((float)px * VDC_CHAR_WIDTH / cell_w);
             int dx = x0 + px;
@@ -152,6 +158,8 @@ static void put_glyph(Vdc *v, u32 *pixels, int fbw, int fbh, int cx, int cy,
 
 void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
     if (!pixels || !v->fb) return;
+
+    v->frame_counter++;
 
     int cols = (int)v->screen_text_cols;
     int rows = (int)v->screen_textlines;
@@ -173,6 +181,12 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
     bool attr_mode = (v->regs[25] & 0x40) != 0;
     bool reverse_screen = (v->regs[24] & 0x40) != 0;
 
+    /* Cursor: R14/R15 is the cursor position; R10 bits 5-7 select the blink
+     * rate. It is visible while the blink phase matches (VICE crsrblink). */
+    static const int crsrblink[4] = { 0x01, 0x00, 0x08, 0x10 };
+    int blink = ((v->frame_counter | 1) & crsrblink[(v->regs[10] >> 5) & 3]) != 0;
+    u16 cursor_idx = (u16)((v->cursor_adr - v->screen_adr) & 0xFFFF);
+
     for (int row = 0; row < rows; row++) {
         for (int col = 0; col < cols; col++) {
             u16 idx = (u16)(row * cols + col);
@@ -181,6 +195,7 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
             u32 c_fg = attr_mode ? VDC_COLORS[attr & 0x0F] : fg;
             u32 c_bg = bg;
             bool rev = reverse_screen || (attr_mode && (attr & VDC_ATTR_REVERSE));
+            v->cursor_on = blink && (idx == cursor_idx);
             u16 co = (u16)((v->chargen_adr + (u16)(c * v->bytes_per_char)) & 0xFFFF);
             u8 glyph[VDC_CHAR_HEIGHT];
             for (int l = 0; l < VDC_CHAR_HEIGHT; l++)
@@ -189,5 +204,6 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
                       cell_w, cell_h);
         }
     }
+    v->cursor_on = false;
     v->dirty = false;
 }
