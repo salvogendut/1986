@@ -42,7 +42,7 @@ in `1986.conf`; the default is the install-time `pkgdatadir/roms`):
 |---------------|----------|-------------------------------|
 | `kernal.rom`  | 0x4000   | C128 KERNAL ($C000-$FFFF)     |
 | `basic.rom`   | 0x8000   | BASIC 7.0 (low + high)        |
-| `chargen.rom` | 0x1000   | Character generator           |
+| `chargen.rom` | 0x2000   | C64 + native-C128 character banks |
 
 These ROMs are copyrighted Commodore and are not bundled. The emulator still
 renders its test pattern without them.

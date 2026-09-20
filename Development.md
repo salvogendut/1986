@@ -98,7 +98,9 @@ This is driven by:
 The CIA1 keyboard scan is wired (port A rows / port B columns). The 40x25
 text renderer draws screen RAM, colour RAM and chargen. The 8502's `$00/$01`
 port (the PLA) is decoded: `data_read = (data & dir) | ~dir`, and its low bits
-select the CPU/VIC colour-RAM banks (`$D800`).
+select the CPU/VIC colour-RAM banks (`$D800`). Native C128 MMU CR bit 0 also
+switches `$D000-$DFFF` between I/O and the C128 character-ROM bank, which is
+required by BASIC 7's bitmap `CHAR` routine.
 
 ## Disk-drive architecture
 

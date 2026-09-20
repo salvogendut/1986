@@ -53,6 +53,10 @@ static bool cfg_e000_is_rom(unsigned cfg) {
     return (cfg & 0x18) == 0x00;
 }
 
+bool mem_io_visible(const Mem *m) {
+    return (m->mmu.mcr & 0x01) == 0;
+}
+
 u8 mem_read(Mem *m, u16 addr) {
     unsigned cfg = c128_config(m);
 
@@ -70,8 +74,13 @@ u8 mem_read(Mem *m, u16 addr) {
     if (addr < 0xD000) {                     /* $C000-$CFFF EDITOR (always ROM in C128 mode) */
         return m->editor[addr - 0xC000];
     }
-    if (addr < 0xE000) {                     /* $D000-$DFFF I/O */
-        return m->ram[bank_off(m, addr)];    /* I/O is decoded above this layer */
+    if (addr < 0xE000) {                     /* $D000-$DFFF */
+        /* With I/O banked out and the KERNAL selected for the upper ROM
+         * region, the C128 exposes its native 4K character set here. The
+         * CPU bus handles visible I/O before reaching this layer. */
+        if (cfg < 8)
+            return m->chargen[0x1000 + (addr & 0x0FFF)];
+        return m->ram[bank_off(m, addr)];
     }
     /* $E000-$FFFF */
     if (cfg_e000_is_rom(cfg)) return m->kernal[addr - 0xE000];
@@ -144,11 +153,20 @@ int mem_load_c128_roms(Mem *m, const char *dir) {
         }
     }
 
-    /* CHARGEN dump: 4K. */
+    /* CHARGEN dump: 8K (C64 and native-C128 4K banks). Retain support for
+     * older 4K dumps by mirroring their only bank. */
     for (int i = 0; chargen_names[i]; i++) {
         snprintf(path, sizeof(path), "%s/%s", dir, chargen_names[i]);
         size_t n = read_file(path, m->chargen, sizeof(m->chargen));
-        if (n >= 0x1000) { loaded++; break; }
+        if (n >= 0x2000) {
+            loaded++;
+            break;
+        }
+        if (n >= 0x1000) {
+            memcpy(&m->chargen[0x1000], m->chargen, 0x1000);
+            loaded++;
+            break;
+        }
     }
 
     return loaded;
