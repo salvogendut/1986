@@ -65,11 +65,12 @@ void cpu_install_serial_traps(u8 *kernal); /* patch the KERNAL ROM with IEC trap
  * The C128 core installs a handler that forwards to the pluggable drive. */
 typedef struct {
     void *ctx;
+    bool force_slow_serial;                 /* command-level device has no CIA SDR */
     void (*attention)(void *ctx, u8 b);    /* LISTEN/TALK/secondary on the bus */
     void (*send)(void *ctx, u8 byte);      /* C128 sends a command byte */
-    int  (*receive)(void *ctx, u8 *byte);  /* drive returns a byte; the return
-                                            * value is 0 = no byte, 1 = a data
-                                            * byte, or 2 = the final (EOI) byte */
+    int  (*receive)(void *ctx, u8 *byte);  /* -1 = serial error, 0 = no device,
+                                            * 1 = data, 2 = final (EOI) byte */
+    u8   (*take_status)(void *ctx);        /* consume pending IEC status bits */
 } IecCallbacks;
 
 /* Patch the KERNAL's IEC routines and install the callbacks. Pass cb=NULL to

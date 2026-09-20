@@ -101,6 +101,21 @@ static const C128Trap g_serial_traps[] = {
 
 static IecCallbacks g_iec;
 
+static void apply_iec_status(void) {
+    if (!g_iec.take_status) return;
+    u8 status = g_iec.take_status(g_iec.ctx);
+    if (status) cpu_mem_write(0x90, (u8)(cpu_mem_read(0x90) | status));
+}
+
+/* The command-level device has no CIA shift-register endpoint.  Keep the
+ * C128 KERNAL on its normal serial routines (which are trapped below) rather
+ * than letting BASIC 7 select the 1571 burst path.  Bit 6 of $0A1C is the
+ * KERNAL's "fast serial available" flag, tested by DLOAD at $F3E0. */
+static void select_trapped_serial(void) {
+    if (g_iec.force_slow_serial)
+        cpu_mem_write(0x0A1C, (u8)(cpu_mem_read(0x0A1C) & ~0x40));
+}
+
 DWORD traps_handler(void) {
     unsigned pc = reg_pc;
     for (size_t i = 0; i < N_SERIAL_TRAPS; i++) {
@@ -112,12 +127,16 @@ DWORD traps_handler(void) {
                     /* The KERNAL passes serial-bus bytes through BSOUR ($95),
                      * not in A.  Match VICE's serial_trap_attention(). */
                     if (g_iec.attention) g_iec.attention(g_iec.ctx, cpu_mem_read(0x95));
+                    apply_iec_status();
+                    select_trapped_serial();
                     maincpu_set_carry(0);
                     maincpu_set_interrupt(0);
                     break;
                 case TRAP_SEND:
                     /* SerialSendByte uses the same KERNAL bus buffer. */
                     if (g_iec.send) g_iec.send(g_iec.ctx, cpu_mem_read(0x95));
+                    apply_iec_status();
+                    select_trapped_serial();
                     maincpu_set_carry(0);
                     maincpu_set_interrupt(0);
                     break;
@@ -133,7 +152,9 @@ DWORD traps_handler(void) {
                      * (EOI) through the status byte at $90 (bit 0x40), which
                      * READST ($FFB7) returns. On the final byte of a stream we
                      * set that bit, like VICE's serial_trap_receive does. */
-                    if (st == 2)
+                    if (st < 0)
+                        cpu_mem_write(0x90, (u8)(cpu_mem_read(0x90) | 0x02));
+                    else if (st == 2)
                         cpu_mem_write(0x90, (u8)(cpu_mem_read(0x90) | 0x40));
                     else if (st == 0)
                         cpu_mem_write(0x90, (u8)(cpu_mem_read(0x90) | 0x80));

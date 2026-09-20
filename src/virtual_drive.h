@@ -38,6 +38,9 @@ typedef struct {
     u8 response[VDRIVE_RESPONSE_MAX];
     size_t response_len;
     size_t response_pos;
+    int response_channel;
+    bool response_error;
+    u8 bus_status;
     char status[64];
 } VirtualDrive;
 
@@ -49,3 +52,4 @@ void virtual_drive_attach(VirtualDrive *v, const D64 *disk);
 void virtual_drive_attention(VirtualDrive *v, u8 byte);
 void virtual_drive_send(VirtualDrive *v, u8 byte);
 int  virtual_drive_receive(VirtualDrive *v, u8 *byte);
+u8   virtual_drive_take_bus_status(VirtualDrive *v);

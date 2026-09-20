@@ -25,6 +25,8 @@ typedef struct {
 typedef struct {
     int  blocks;      /* number of blocks (256-byte) used by the file */
     int  type;        /* CBMDOS file type (0=DEL,1=SEQ,2=PRG,3=USR,4=REL,...) */
+    int  start_track; /* first sector in the file chain */
+    int  start_sector;
     bool closed;      /* the entry was closed (no trailing '*' marker) */
     bool locked;      /* the entry is write-protected (locked) */
     char name[17];    /* PETSCII->ASCII filename, NUL terminated */
@@ -58,3 +60,13 @@ int  d64_read_bam(const D64 *d, char *name, size_t name_cap,
  * VICE/CBM-DOS compatible: a 32-byte header, fixed 32-byte file records, and
  * a 31-byte BLOCKS FREE record. Returns its length, or 0 on failure. */
 size_t d64_build_directory_program(const D64 *d, u8 *out, size_t cap);
+
+/* Find a directory entry by CBM DOS name. Matching is ASCII-case-insensitive
+ * for host convenience and supports '*' and '?' wildcards. An optional drive
+ * prefix such as "0:" and comma-separated file options are ignored. */
+int d64_find_file(const D64 *d, const char *name, D64DirEntry *entry);
+
+/* Follow an entry's track/sector chain and copy its raw contents, including
+ * the two-byte PRG load address. Returns the byte count, or -1 for a malformed
+ * chain or insufficient output space. */
+int d64_read_file(const D64 *d, const D64DirEntry *entry, u8 *out, size_t cap);

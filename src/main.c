@@ -83,6 +83,7 @@ static void usage(const char *argv0) {
         "  --paste TEXT     inject text through the keyboard matrix\n"
         "  --paste-at N     delay --paste until emulated frame N\n"
         "  --frames N       exit after N emulated frames\n"
+        "  --no-throttle    run without real-time frame pacing\n"
         "  --help           this message\n"
         "\n"
         "  F4     Screenshot (PPM)\n"
@@ -107,6 +108,7 @@ int main(int argc, char **argv) {
     const char *paste_arg = NULL;
     long paste_frame = 0;
     long frames_arg = -1;
+    bool no_throttle = false;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--scale") && i + 1 < argc) cfg.scale = atoi(argv[++i]);
@@ -118,6 +120,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--paste") && i + 1 < argc) paste_arg = argv[++i];
         else if (!strcmp(argv[i], "--paste-at") && i + 1 < argc) paste_frame = atol(argv[++i]);
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames_arg = atol(argv[++i]);
+        else if (!strcmp(argv[i], "--no-throttle")) no_throttle = true;
         else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(argv[0]); return 0; }
         else if (argv[i][0] == '-') { usage(argv[0]); return 1; }
     }
@@ -204,9 +207,11 @@ int main(int argc, char **argv) {
      * (LISTEN/TALK/send/receive) calls to the pluggable disk drive. */
     IecCallbacks iec = {
         .ctx = &c,
+        .force_slow_serial = true,
         .attention = c128_iec_attention,
         .send = c128_iec_send,
         .receive = c128_iec_receive,
+        .take_status = c128_iec_take_status,
     };
     cpu_install_iec_traps(c.mem.kernal, &iec);
 
@@ -402,8 +407,11 @@ int main(int argc, char **argv) {
             /* Pace to the emulated frame time. */
             uint64_t now = SDL_GetTicksNS();
             if (next_frame == 0) next_frame = now;
-            if (now < next_frame) SDL_Delay((Uint32)((next_frame - now) / 1000000ULL));
-            next_frame += emulated_frame_ns;
+            if (!no_throttle) {
+                if (now < next_frame)
+                    SDL_Delay((Uint32)((next_frame - now) / 1000000ULL));
+                next_frame += emulated_frame_ns;
+            }
 
             if (g_videocap_gif && videocap_gif_due(emulated_frame_ns))
                 gifcap_frame(g_videocap_gif, c.display.pixels);

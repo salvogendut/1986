@@ -264,3 +264,8 @@ int c128_iec_receive(void *ctx, u8 *byte) {
     C128 *c = ctx;
     return drive_receive(&c->drive, byte);
 }
+
+u8 c128_iec_take_status(void *ctx) {
+    C128 *c = ctx;
+    return drive_take_bus_status(&c->drive);
+}

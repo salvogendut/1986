@@ -46,3 +46,7 @@ int drive_receive(Drive *d, u8 *byte) {
     if (status) leds_ping(LED_FDC_A);
     return status;
 }
+
+u8 drive_take_bus_status(Drive *d) {
+    return virtual_drive_take_bus_status(&d->virtual_drive);
+}

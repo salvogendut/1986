@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 int d64_track_sectors(int track) {
     if (track < 1 || track > D64_MAX_TRACKS) return 0;
@@ -75,6 +76,8 @@ static int d64_decode_slot(const u8 *e, D64DirEntry *ent) {
     if (e[2] == 0 || e[2] == 0xFF) return -1;
     ent->blocks = (int)(e[30] | (e[31] << 8));
     ent->type   = e[2] & 0x07;
+    ent->start_track = e[3];
+    ent->start_sector = e[4];
     ent->closed = (e[2] & 0x80) != 0;
     ent->locked = (e[2] & 0x40) != 0;
     int n = 0;
@@ -211,4 +214,75 @@ size_t d64_build_directory_program(const D64 *d, u8 *out, size_t cap) {
     record[29] = 0;
     record[30] = 0;
     return need;
+}
+
+static bool filename_matches(const char *pattern, const char *name) {
+    while (*pattern) {
+        if (*pattern == '*') return true;
+        if (!*name) return false;
+        if (*pattern != '?' &&
+            toupper((unsigned char)*pattern) != toupper((unsigned char)*name))
+            return false;
+        pattern++;
+        name++;
+    }
+    return *name == '\0';
+}
+
+int d64_find_file(const D64 *d, const char *name, D64DirEntry *entry) {
+    if (!d || !name || !entry) return -1;
+
+    while (*name == ' ' || *name == '@') name++;
+    if (name[0] >= '0' && name[0] <= '9' && name[1] == ':') name += 2;
+
+    char pattern[17];
+    size_t n = 0;
+    while (*name && *name != ',' && n < sizeof(pattern) - 1)
+        pattern[n++] = *name++;
+    while (n > 0 && pattern[n - 1] == ' ') n--;
+    pattern[n] = '\0';
+    if (n == 0) return -1;
+
+    D64DirEntry entries[512];
+    int count = d64_read_directory_entries(d, entries, 512);
+    for (int i = 0; i < count; i++) {
+        if (entries[i].type != 0 && filename_matches(pattern, entries[i].name)) {
+            *entry = entries[i];
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int d64_read_file(const D64 *d, const D64DirEntry *entry, u8 *out, size_t cap) {
+    if (!d || !entry || !out) return -1;
+    int track = entry->start_track;
+    int sector = entry->start_sector;
+    bool visited[D64_MAX_TRACKS + 1][21];
+    memset(visited, 0, sizeof(visited));
+    size_t length = 0;
+
+    while (track != 0) {
+        int sectors = d64_track_sectors(track);
+        if (sectors == 0 || sector < 0 || sector >= sectors ||
+            visited[track][sector])
+            return -1;
+        visited[track][sector] = true;
+
+        u8 block[D64_SECTOR_BYTES];
+        if (d64_read_sector(d, track, sector, block) != 0) return -1;
+
+        int next_track = block[0];
+        int next_sector = block[1];
+        size_t bytes = next_track == 0
+            ? (next_sector > 0 ? (size_t)next_sector - 1u : 0u)
+            : 254u;
+        if (bytes > 254 || length + bytes > cap) return -1;
+        memcpy(out + length, block + 2, bytes);
+        length += bytes;
+
+        track = next_track;
+        sector = next_sector;
+    }
+    return (int)length;
 }

@@ -104,7 +104,14 @@ select the CPU/VIC colour-RAM banks (`$D800`).
 `virtual_drive.c` is a fast logical IEC device used by the patched KERNAL
 routines. It implements device addressing, OPEN/CLOSE, LISTEN/TALK,
 UNLISTEN/UNTALK, secondary channels, status responses, and D64 directory
-streams without running a drive CPU. It does not require a 1571 DOS ROM.
+streams without running a drive CPU. It follows D64 file-sector chains and
+serves raw PRG streams (including their load address) for `LOAD` and `DLOAD`.
+Missing files report DOS error 62 both on the IEC status byte and command
+channel. It does not require a 1571 DOS ROM.
+
+The C128 KERNAL's burst-mode flag is cleared while this command-level backend
+is active, keeping transfers on the trapped byte routines. A true 1571 will
+instead provide the CIA shift-register endpoint needed by fast serial.
 
 A future true `Drive1571` is a separate machine: it will run its own 6502 and
 DOS ROM and connect through line-level IEC signals. It must not be placed
@@ -118,8 +125,8 @@ SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
 
 ## Roadmap
 
-1. **Virtual drive loading** — follow D64 file chains and support `LOAD` and
-   `DLOAD` while retaining the tested virtual IEC channel layer.
+1. **Virtual drive writes and formats** — add `SAVE`, D71, and D81 support to
+   the tested logical IEC/media layer.
 2. **True 1571** — implement the independent drive CPU, chips, mechanism and
    line-level IEC connection.
 3. **PLA / GO 64** — chargen select (bit 6 of `$01`) and the full C64-mode

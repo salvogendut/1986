@@ -17,6 +17,7 @@
 | `--paste TEXT` | Inject text through the emulated keyboard. |
 | `--paste-at N` | Delay `--paste` until emulated frame N. |
 | `--frames N` | Exit after N emulated frames. |
+| `--no-throttle` | Run without real-time frame pacing. |
 | `--help` | Show help. |
 
 ## Configuration

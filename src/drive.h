@@ -35,3 +35,4 @@ void drive_set_unit(Drive *d, int unit);
 void drive_attention(Drive *d, u8 byte);
 void drive_send(Drive *d, u8 byte);
 int  drive_receive(Drive *d, u8 *byte);
+u8   drive_take_bus_status(Drive *d);

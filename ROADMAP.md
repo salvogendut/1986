@@ -166,7 +166,8 @@ cycle-level 1571 implementation without conflating their interfaces.
 
 - [x] D64 directory parsing and fixed-width CBM DOS directory stream.
 - [x] Fast virtual IEC device with KERNAL traps and channel lifecycle.
-- [ ] Virtual-drive `LOAD`/`DLOAD`, save, and DOS error handling (#31).
+- [x] Virtual-drive `LOAD`/`DLOAD` and DOS error handling (#31).
+- [ ] Virtual-drive `SAVE` and write-side DOS commands.
 - [ ] D71 and D81 media formats.
 - [ ] True integrated 1571: drive CPU, 2K RAM, DOS ROM, CIA/VIA/FDC,
   mechanism timing, line-level IEC, and fast serial (#30).
