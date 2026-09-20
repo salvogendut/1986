@@ -35,6 +35,9 @@ typedef struct {
     u16 chargen_adr;   /* R28 character-generator address */
     u16 cursor_adr;    /* R14/15 cursor location */
 
+    int  frame_counter;  /* incremented each frame (cursor/attribute blink) */
+    bool cursor_on;      /* the cursor is visible on this frame */
+
     unsigned screen_text_cols;  /* characters per line (R1) */
     unsigned screen_textlines;  /* visible rows (R6) */
     unsigned bytes_per_char;    /* chargen bytes per character (R9) */
