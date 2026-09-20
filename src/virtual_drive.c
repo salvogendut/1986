@@ -40,9 +40,9 @@ void virtual_drive_set_unit(VirtualDrive *v, int unit) {
 }
 
 void virtual_drive_attach(VirtualDrive *v, const D64 *disk) {
+    int unit = v->unit;
+    virtual_drive_init(v, unit);
     v->disk = disk;
-    v->response_len = v->response_pos = 0;
-    v->response_channel = -1;
     if (disk) set_status(v, "00, OK,00,00\r");
     else set_status(v, "74,DRIVE NOT READY,00,00\r");
 }

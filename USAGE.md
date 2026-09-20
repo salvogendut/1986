@@ -42,6 +42,14 @@ the next launch. Existing configurations without this key default to the
 that output. With Unified Display disabled, both output windows open and the
 last selected output receives window focus.
 
+## Media overlay
+
+Open the options overlay with F9 and select **Media > Disk image** to insert a
+D64 image. Choosing another image immediately ejects the current disk and
+inserts the new one, so the next `DIRECTORY` reads the new disk without an
+application restart. With an image selected, press Esc on the Disk image row
+to eject it and clear the saved entry; press F9 to close the overlay.
+
 ## ROM layout
 
 Drop the machine ROMs into a directory and pass `--rom DIR` (or set `rom_dir`
