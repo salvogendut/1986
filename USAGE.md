@@ -81,6 +81,9 @@ be 8, 16, or 32 KiB; smaller images repeat through the 32 KiB address space.
 U36 is independent of the external cartridge slot. Selecting a new image or
 pressing Del to eject it resets the machine. The `u36` config setting restores
 the selection at launch; an invalid replacement leaves the socket empty.
+For BASIC 8, use the 80-column VDC display and hold CTRL through the C128
+startup to activate the ROM. Standard 640x200 bitmap output is supported;
+400-line interlace and some advanced VDC effects are still unfinished.
 
 The 785260 diagnostic cartridge expects Commodore's external test harness.
 1986 does not silently connect its user-port, serial, joystick, or cassette

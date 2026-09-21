@@ -8,9 +8,9 @@
  *
  * The VDC drives the 640x200 (text) / 640x400 (high-res) display and has its
  * own character set and video RAM. This is a frame-based emulation: the
- * register interface ($D600 index / $D601 data) and the 16K/64K video RAM are
- * modelled, and the active text screen is rendered into a framebuffer once per
- * frame. Bitmap and interlace modes are not yet implemented.
+ * register interface ($D600 index / $D601 data) and the 64K video RAM are
+ * modelled, and text and standard bitmap modes are rendered once per frame.
+ * Interlace and cycle-accurate timing are not yet implemented.
  */
 
 #define VDC_RAM_SIZE     0x10000   /* 64K of VDC video RAM (C128DCR) */

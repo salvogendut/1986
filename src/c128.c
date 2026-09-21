@@ -138,17 +138,20 @@ void c128_init(C128 *c, Config *cfg) {
      * the reset vector must be read from the loaded KERNAL ROM. */
 }
 
+/* Expand the two packed 8-byte character sets into the VDC's 16-byte slots. */
+static void load_vdc_chargen(C128 *c) {
+    for (unsigned ch = 0; ch < 512; ch++)
+        memcpy(&c->vdc.ram[0x2000 + ch * 16],
+               &c->mem.chargen[ch * 8], 8);
+}
+
 void c128_reset(C128 *c) {
     mem_reset(&c->mem);
     cpu_reset(&c->cpu);
     vic_reset(&c->vic);
     vdc_reset(&c->vdc);
     c->vdc_chargen_loaded = false;
-    /* Load the 80-column VDC character generator (block 0x000 of the 4K
-     * chargen ROM, read 8 bytes per char) into VDC RAM at the chargen
-     * address, so the KERNAL's later boot clears it to 0xFF and the reload
-     * in c128_frame() restores the glyphs. */
-    memcpy(&c->vdc.ram[0x2000], &c->mem.chargen[0x000], 0x800);
+    load_vdc_chargen(c);
     cia_reset(&c->cia1);
     cia_reset(&c->cia2);
     sid_reset(&c->sid);
@@ -201,12 +204,10 @@ int c128_frame(C128 *c) {
     c128_frame_count++;
     c->frames_since_reset++;
 
-    /* The KERNAL clears the VDC chargen (writes 0xFF) during its 80-col setup
-     * but does not copy the glyphs, so load the character generator (the same
-     * one VICE's KERNAL copies to the VDC, i.e. the chargen at offset 0)
-     * ourselves shortly after boot (and after each reset). */
+    /* The KERNAL clears the VDC chargen during its 80-col setup, so reload
+     * the packed ROM glyphs into the VDC's 16-byte slots shortly after boot. */
     if (!c->vdc_chargen_loaded && c->frames_since_reset > 8) {
-        memcpy(&c->vdc.ram[0x2000], &c->mem.chargen[0x000], 0x800);
+        load_vdc_chargen(c);
         c->vdc_chargen_loaded = true;
     }
 

@@ -49,7 +49,8 @@ The emulator boots the C128 KERNAL and BASIC 7.0 to a usable `READY.` prompt.
 Current working pieces include:
 
 - VIC-IIe 40-column text/bitmap display with eight hardware sprites, and the
-  VDC 80-column text display.
+  VDC 80-column text and standard 640x200 bitmap display. VDC interlace modes
+  remain unfinished.
 - Host keyboard input, paste, cursor, CIA timers/TOD/serial/FLAG interrupts,
   and VIC raster IRQ handling.
 - Audible three-voice 8580 SID synthesis through SDL3, including the standard
