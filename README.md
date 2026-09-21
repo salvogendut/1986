@@ -89,6 +89,9 @@ Current working pieces include:
 - An in-window function-key reminder in both display windows and an About
   dialog in General showing the emulator version and build commit. General
   also has a persistent 40/80 key setting for the default VIC/VDC output.
+  With separate windows, F10 brings the selected display forward where the
+  window manager permits; focusing either window selects and remembers it
+  for the next launch.
 - Compact options overlay that reads and writes `1986.conf`, with an optional
   second virtual IEC drive, separately selected disk image/unit, and
   per-entry remembered file-picker directories.

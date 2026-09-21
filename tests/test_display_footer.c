@@ -31,8 +31,14 @@ int main(void) {
     int active_ok = display_active_renderer(d) == d->renderer;
     display_set_vdc_active(d, true);
     active_ok = active_ok && display_active_renderer(d) == d->vdc_renderer;
+    SDL_HideWindow(d->vdc_window);
+    display_focus_active(d);
+    active_ok = active_ok && !(SDL_GetWindowFlags(d->vdc_window) & SDL_WINDOW_HIDDEN);
     display_set_vdc_active(d, false);
     active_ok = active_ok && display_active_renderer(d) == d->renderer;
+    SDL_HideWindow(d->window);
+    display_focus_active(d);
+    active_ok = active_ok && !(SDL_GetWindowFlags(d->window) & SDL_WINDOW_HIDDEN);
 
     int mw, mh, vw, vh;
     SDL_GetWindowSize(d->window, &mw, &mh);

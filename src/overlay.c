@@ -552,6 +552,7 @@ static void overlay_activate(Overlay *ov) {
                     ov->cfg->one_display = !ov->cfg->one_display;
                     display_set_one_display(&ov->c128->display,
                                             ov->cfg->one_display);
+                    display_focus_active(&ov->c128->display);
                     break;
                 case ADV_DISPLAY_CHANGE_RESET:
                     ov->cfg->display_change_reset = !ov->cfg->display_change_reset;

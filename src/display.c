@@ -163,7 +163,11 @@ void display_focus_active(Display *d) {
     SDL_Window *target = d->window;
     if (!d->one_display && d->vdc_active && d->vdc_window)
         target = d->vdc_window;
-    if (target) SDL_RaiseWindow(target);
+    if (!target) return;
+    SDL_WindowFlags flags = SDL_GetWindowFlags(target);
+    if (flags & SDL_WINDOW_MINIMIZED) SDL_RestoreWindow(target);
+    if (flags & SDL_WINDOW_HIDDEN) SDL_ShowWindow(target);
+    SDL_RaiseWindow(target);
 }
 
 SDL_Renderer *display_active_renderer(const Display *d) {

@@ -148,7 +148,14 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RIGHT);
     CHECK(ov.visible && ov.section == OV_ADVANCED,
           "Tinker exposes the Advanced section");
-    for (int i = 0; i < 6; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 3; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.one_display && display_focuses == 3,
+          "enabling Unified Display focuses the selected output");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(!cfg.one_display && display_focuses == 4,
+          "restoring separate windows focuses the selected output");
+    for (int i = 0; i < 3; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.second_drive, "Second Drive toggle enables the extra device");
 
