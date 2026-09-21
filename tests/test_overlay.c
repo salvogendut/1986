@@ -100,7 +100,7 @@ int main(void) {
           cfg.drive_unit != cfg.drive2_unit,
           "Drive 2 cycles to an unused unit and updates live routing");
     for (int i = 0; i < 8; ++i) key(&ov, SDL_SCANCODE_DOWN);
-    CHECK(ov.row == 5, "enabled Media section includes Drive 2 image row");
+    CHECK(ov.row == 6, "Tinker Media includes U36 with Drive 2 enabled");
 
     key(&ov, SDL_SCANCODE_RIGHT);
     for (int i = 0; i < 6; ++i) key(&ov, SDL_SCANCODE_DOWN);
@@ -108,7 +108,7 @@ int main(void) {
     CHECK(!cfg.second_drive, "Second Drive toggle disables the extra device");
     key(&ov, SDL_SCANCODE_LEFT);
     for (int i = 0; i < 8; ++i) key(&ov, SDL_SCANCODE_DOWN);
-    CHECK(ov.row == 3, "disabled Media section hides both Drive 2 rows");
+    CHECK(ov.row == 4, "disabled Media section hides Drive 2 but retains U36");
 
     key(&ov, SDL_SCANCODE_LEFT);
     CHECK(ov.section == OV_GENERAL && ov.row == 0,
@@ -166,6 +166,43 @@ int main(void) {
     CHECK(config_load(&saved, config_file) && saved.cart_path[0] == '\0',
           "ejection is persisted");
 
+    char u36_file[CONFIG_PATH_MAX];
+    snprintf(u36_file, sizeof(u36_file), "%s/test-u36.rom", temp_home);
+    FILE *u36_output = fopen(u36_file, "wb");
+    CHECK(u36_output != NULL, "create U36 fixture");
+    if (u36_output) {
+        unsigned char block[0x2000];
+        memset(block, 0x36, sizeof(block));
+        CHECK(fwrite(block, 1, sizeof(block), u36_output) == sizeof(block),
+              "write 8 KiB U36 fixture");
+        fclose(u36_output);
+    }
+    CHECK(overlay_set_u36(&ov, u36_file), "insert U36 ROM from Media");
+    CHECK(c->mem.u36_attached && c->mem.u36_rom[0x6000] == 0x36 &&
+          strcmp(cfg.u36_path, u36_file) == 0 && machine_resets == 5,
+          "U36 image mirrors, persists, and resets on insert");
+    config_set_defaults(&saved);
+    CHECK(config_load(&saved, config_file) &&
+          strcmp(saved.u36_path, u36_file) == 0,
+          "U36 path survives config reload");
+    ov.section = OV_MEDIA;
+    ov.row = 4; /* U36 when second drive is disabled and Tinker is on */
+    key(&ov, SDL_SCANCODE_DELETE);
+    CHECK(!c->mem.u36_attached && cfg.u36_path[0] == '\0' &&
+          machine_resets == 6, "Del ejects U36 and resets the machine");
+    CHECK(overlay_set_u36(&ov, u36_file), "reattach U36 image");
+    CHECK(!overlay_set_u36(&ov, "/tmp/1986-missing-u36.rom"),
+          "invalid U36 replacement reports failure");
+    CHECK(!c->mem.u36_attached && cfg.u36_path[0] == '\0' &&
+          machine_resets == 8,
+          "failed U36 replacement ejects old image and clears path");
+    cfg.tinker = false;
+    ov.section = OV_MEDIA;
+    ov.row = 0;
+    for (int i = 0; i < 8; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    CHECK(ov.row == 3, "U36 Media row is hidden without Tinker");
+    cfg.tinker = true;
+
     const char *preview = getenv("C128_OVERLAY_PREVIEW");
     if (preview) {
         SDL_Window *window = NULL;
@@ -198,6 +235,7 @@ int main(void) {
     }
 
     unlink(cart_file);
+    unlink(u36_file);
     unlink(config_file);
     rmdir(temp_home);
 

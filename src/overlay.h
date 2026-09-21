@@ -18,6 +18,7 @@ typedef enum {
     OV_DIALOG_DISK2,  /* second IEC drive image */
     OV_DIALOG_TAPE,   /* .tap */
     OV_DIALOG_CART,   /* .crt, .bin, or .rom */
+    OV_DIALOG_U36,    /* internal function ROM .bin or .rom */
     OV_DIALOG_ROM,    /* ROM directory (folder picker) */
 } OvDialogKind;
 
@@ -54,3 +55,4 @@ bool overlay_is_visible(const Overlay *ov);
 /* Physically replace/eject the native-C128 cartridge and persist the live
  * state. On a failed replacement the old cartridge remains ejected. */
 bool overlay_set_cartridge(Overlay *ov, const char *path);
+bool overlay_set_u36(Overlay *ov, const char *path);

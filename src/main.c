@@ -231,6 +231,13 @@ int main(int argc, char **argv) {
                 notify_post("CARTRIDGE LOADED - F10 SWITCHES DISPLAY");
             }
         }
+        if (cfg.u36_path[0] && !mem_attach_u36(&c.mem, cfg.u36_path)) {
+            fprintf(stderr, "1986: invalid U36 ROM '%s' (expected raw 8/16/32 KiB)\n",
+                    cfg.u36_path);
+            notify_post("INVALID U36 ROM IMAGE");
+            cfg.u36_path[0] = '\0';
+            config_save(&cfg, cfg_path);
+        }
     }
 
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */

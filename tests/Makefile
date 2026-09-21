@@ -59,9 +59,9 @@ test-drive: test_drive.c ../src/drive.c ../src/drive.h ../src/disk_image.c ../sr
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_drive.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c -o $@
 
-test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/cartridge.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c
+test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
-		test_overlay.c ../src/overlay.c ../src/config.c ../src/cartridge.c ../src/drive.c \
+		test_overlay.c ../src/overlay.c ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c \
 		../src/disk_image.c ../src/virtual_drive.c $(SDL3_LIBS) -o $@
 
 test-display-footer: test_display_footer.c ../src/display.c ../src/display.h

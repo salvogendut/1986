@@ -31,6 +31,8 @@ disk2 =
 
 # Native C128 generic .crt or raw external function ROM (.bin/.rom)
 cart =
+# Optional U36 internal function ROM (.bin/.rom, raw 8/16/32 KiB)
+u36 =
 
 # F6 GIF capture
 gif_width = 320
