@@ -7,6 +7,9 @@ typedef enum { IMM, ZP, ZPX, ZPY, ABS, ABSX, ABSY, INDX, INDY } AddrMode;
 
 void drive1571cr_init(Drive1571Cr *d) {
     memset(d, 0, sizeof(*d));
+    via6522_init(&d->via1);
+    via6522_init(&d->via2);
+    cia_init(&d->mos5710);
 }
 
 bool drive1571cr_load_rom(Drive1571Cr *d, const char *path) {
@@ -42,12 +45,51 @@ static bool decode_io(u16 addr, Drive1571CrIo *chip) {
     return true;
 }
 
+static void update_irq(Drive1571Cr *d) {
+    d->cpu.irq = d->external_irq || via6522_irq(&d->via1) ||
+                 via6522_irq(&d->via2) || cia_irq_line(&d->mos5710);
+}
+
+static u8 mos5710_read(Drive1571Cr *d, u16 addr) {
+    u8 reg = addr & 0x1f;
+    if (reg >= 0x10)
+        return d->io_read ? d->io_read(d->io_ctx, DRIVE1571CR_MOS5710, addr) : 0;
+    if (reg == 0x0c || reg == 0x0d || reg == 0x0e) {
+        u8 value = cia_read(&d->mos5710, reg);
+        update_irq(d);
+        return value;
+    }
+    return 0xff;
+}
+
+static void mos5710_write(Drive1571Cr *d, u16 addr, u8 value) {
+    u8 reg = addr & 0x1f;
+    if (reg >= 0x10) {
+        if (d->io_write) d->io_write(d->io_ctx, DRIVE1571CR_MOS5710, addr, value);
+        return;
+    }
+    if (reg == 0x0d && (value & 0x80)) value &= 0x88; /* SDR IRQ only */
+    if (reg == 0x0e) value = (value & 0x40) | 0x01;
+    if (reg == 0x0c || reg == 0x0d || reg == 0x0e) {
+        cia_write(&d->mos5710, reg, value);
+        update_irq(d);
+    }
+}
+
 u8 drive1571cr_read(Drive1571Cr *d, u16 addr) {
     if (addr < 0x1000) return d->ram[addr & 0x07ff];
     if (addr >= 0x8000) return d->rom_loaded ? d->rom[addr - 0x8000] : 0xff;
     Drive1571CrIo chip;
-    if (decode_io(addr, &chip) && d->io_read)
-        return d->io_read(d->io_ctx, chip, addr);
+    if (decode_io(addr, &chip)) {
+        if (chip == DRIVE1571CR_VIA1 || chip == DRIVE1571CR_VIA2) {
+            u8 value = via6522_read(chip == DRIVE1571CR_VIA1 ? &d->via1 :
+                                    &d->via2, addr);
+            update_irq(d);
+            return value;
+        }
+        if (chip == DRIVE1571CR_MOS5710) return mos5710_read(d, addr);
+        if (d->io_read) return d->io_read(d->io_ctx, chip, addr);
+    }
     return 0xff;
 }
 
@@ -58,8 +100,14 @@ void drive1571cr_write(Drive1571Cr *d, u16 addr, u8 value) {
     }
     if (addr >= 0x8000) return;
     Drive1571CrIo chip;
-    if (decode_io(addr, &chip) && d->io_write)
-        d->io_write(d->io_ctx, chip, addr, value);
+    if (decode_io(addr, &chip)) {
+        if (chip == DRIVE1571CR_VIA1 || chip == DRIVE1571CR_VIA2) {
+            via6522_write(chip == DRIVE1571CR_VIA1 ? &d->via1 : &d->via2,
+                          addr, value);
+            update_irq(d);
+        } else if (chip == DRIVE1571CR_MOS5710) mos5710_write(d, addr, value);
+        else if (d->io_write) d->io_write(d->io_ctx, chip, addr, value);
+    }
 }
 
 static u16 read16(Drive1571Cr *d, u16 addr) {
@@ -69,6 +117,10 @@ static u16 read16(Drive1571Cr *d, u16 addr) {
 
 void drive1571cr_reset(Drive1571Cr *d) {
     Drive1571CrCpu *cpu = &d->cpu;
+    via6522_reset(&d->via1);
+    via6522_reset(&d->via2);
+    cia_reset(&d->mos5710);
+    d->external_irq = false;
     cpu->a = cpu->x = cpu->y = 0;
     cpu->sp = 0xfd;
     cpu->p = I | U;
@@ -77,7 +129,10 @@ void drive1571cr_reset(Drive1571Cr *d) {
     cpu->irq = cpu->nmi_pending = cpu->jammed = false;
 }
 
-void drive1571cr_irq(Drive1571Cr *d, bool level) { d->cpu.irq = level; }
+void drive1571cr_irq(Drive1571Cr *d, bool level) {
+    d->external_irq = level;
+    update_irq(d);
+}
 void drive1571cr_nmi(Drive1571Cr *d) { d->cpu.nmi_pending = true; }
 
 static void flag(Drive1571CrCpu *c, u8 mask, bool set) {
@@ -247,6 +302,10 @@ int drive1571cr_step(Drive1571Cr *d) {
         bool nmi = c->nmi_pending;
         c->nmi_pending = false;
         interrupt(d, nmi ? 0xfffa : 0xfffe, false);
+        via6522_tick(&d->via1, 7);
+        via6522_tick(&d->via2, 7);
+        cia_tick(&d->mos5710, 7);
+        update_irq(d);
         c->cycles += 7;
         return 7;
     }
@@ -370,6 +429,10 @@ int drive1571cr_step(Drive1571Cr *d) {
             return 0;
     }
     if (!cycles) { c->jammed = true; return 0; }
+    via6522_tick(&d->via1, (unsigned)cycles);
+    via6522_tick(&d->via2, (unsigned)cycles);
+    cia_tick(&d->mos5710, cycles);
+    update_irq(d);
     c->cycles += (u64)cycles;
     return cycles;
 }

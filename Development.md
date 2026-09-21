@@ -163,9 +163,13 @@ is active, keeping transfers on the trapped byte routines. A true 1571 will
 instead provide the CIA shift-register endpoint needed by fast serial.
 
 The independent `Drive1571Cr` core now owns a 2K mirrored RAM, 32K DOS ROM,
-reset/interrupt vectors, and an NMOS 6502 instruction executor. Its 1571CR
-address decoder exposes VIA1, VIA2, WD1770, and MOS5710 register hooks, but
-those peripherals and the physical IEC bus are not yet implemented or clocked.
+reset/interrupt vectors, an NMOS 6502 instruction executor, and two 6522 VIAs.
+The VIAs have port direction/readback, T1/T2 counters, control-line edges, and
+IRQ propagation to the drive CPU. Their timing is at instruction boundaries;
+shift-register and sub-instruction bus timing are still absent. The MOS5710's
+limited CIA-like SDR/ICR/CRA registers use the existing CIA model, following
+VICE's partial 1571CR handling. Its extra FDC2 registers and the WD1770 have
+decoded hooks only; the mechanism and physical IEC bus are not yet connected.
 The core is a sibling of the command-level `VirtualDrive`, never behind its
 interface; the modes will share only neutral disk-image/media code. The
 Advanced real-drive gate remains pending until a real IEC backend can replace

@@ -59,18 +59,28 @@ int main(void) {
     IoProbe probe = {0};
     drive1571cr_set_io(&drive, io_read, io_write, &probe);
     drive1571cr_write(&drive, 0x180f, 0x12);
-    CHECK(probe.chip == DRIVE1571CR_VIA1 && probe.reg == 0x180f && probe.value == 0x12,
-          "VIA1 decoded at $1800 mirror");
+    CHECK(drive.via1.ora == 0x12 && probe.writes == 0,
+          "VIA1 register bank decoded at $1800 mirror");
     drive1571cr_write(&drive, 0x1c02, 0x34);
-    CHECK(probe.chip == DRIVE1571CR_VIA2 && probe.reg == 0x1c02 && probe.value == 0x34,
-          "VIA2 decoded at $1c00 mirror");
+    CHECK(drive.via2.ddrb == 0x34 && probe.writes == 0,
+          "VIA2 register bank decoded at $1c00 mirror");
     drive1571cr_write(&drive, 0x2f07, 0x56);
     CHECK(probe.chip == DRIVE1571CR_FDC && probe.reg == 0x2f07 && probe.value == 0x56,
           "WD1770 region decoded at $2000-$2fff");
     drive1571cr_write(&drive, 0x4010, 0x78);
     CHECK(probe.chip == DRIVE1571CR_MOS5710 && probe.reg == 0x4010 &&
           drive1571cr_read(&drive, 0x4010) == 0x78,
-          "MOS5710/FDC2 register window decoded");
+          "MOS5710/FDC2 extension window remains separately decoded");
+    drive1571cr_write(&drive, 0x400d, 0x9f);
+    CHECK(drive.mos5710.imr == 0x08,
+          "MOS5710 masks unsupported CIA interrupt sources");
+    drive1571cr_write(&drive, 0x400e, 0x00);
+    CHECK(drive1571cr_read(&drive, 0x400e) == 0x01,
+          "MOS5710 keeps its serial timer running");
+    drive1571cr_write(&drive, 0x400c, 0xa5);
+    CHECK(drive1571cr_read(&drive, 0x400c) == 0xa5 &&
+          drive1571cr_read(&drive, 0x4000) == 0xff,
+          "MOS5710 exposes SDR but not the absent parallel CIA ports");
     drive1571cr_write(&drive, 0x8000, 0x99);
     CHECK(drive1571cr_read(&drive, 0x3000) == 0xff,
           "unmapped address remains open bus");
@@ -112,6 +122,40 @@ int main(void) {
                                        "arithmetic instruction is legal");
     CHECK(drive.ram[0x20] == 0x00 && drive.ram[0x21] == 0xff,
           "decimal ADC and binary SBC execute independently of host CPU");
+
+    static const u8 irq_program[] = { 0x58, 0xea, 0xea }; /* CLI, NOP, NOP */
+    install_program(&drive, irq_program, sizeof(irq_program));
+    drive1571cr_write(&drive, 0x100e, 0xc0); /* VIA1 T1 interrupt enable */
+    drive1571cr_write(&drive, 0x1004, 2);
+    drive1571cr_write(&drive, 0x1005, 0);
+    CHECK(drive1571cr_step(&drive) == 2 && drive.cpu.pc == 0x8001,
+          "drive CPU executes CLI while VIA1 timer advances");
+    CHECK(drive1571cr_step(&drive) == 2 && drive.cpu.irq,
+          "VIA1 timer underflow reaches the drive CPU IRQ line");
+    CHECK(drive1571cr_step(&drive) == 7 && drive.cpu.pc == 0x9000,
+          "drive CPU vectors through ROM IRQ handler on VIA interrupt");
+    drive1571cr_write(&drive, 0x100d, 0x40);
+    CHECK(!drive.cpu.irq, "acknowledging VIA1 timer deasserts drive CPU IRQ");
+
+    install_program(&drive, irq_program, sizeof(irq_program));
+    drive1571cr_write(&drive, 0x140e, 0xc0); /* VIA2 T1 interrupt enable */
+    drive1571cr_write(&drive, 0x1404, 0);
+    drive1571cr_write(&drive, 0x1405, 0);
+    CHECK(drive1571cr_step(&drive) == 2 && drive.cpu.irq,
+          "VIA2 timer is also clocked and wired to the drive IRQ line");
+
+    install_program(&drive, irq_program, sizeof(irq_program));
+    drive1571cr_write(&drive, 0x400d, 0x88); /* MOS5710 SDR IRQ mask */
+    drive1571cr_write(&drive, 0x400e, 0x40); /* serial output */
+    drive.mos5710.ta_latch = 1; /* internal timer fixture, not an exposed port */
+    drive.mos5710.ta_counter = 1;
+    drive1571cr_write(&drive, 0x400c, 0x5a);
+    drive1571cr_run(&drive, 50);
+    CHECK(drive.cpu.irq && (drive.mos5710.icr & 0x08),
+          "MOS5710 serial completion clocks through to drive CPU IRQ");
+    CHECK(drive1571cr_read(&drive, 0x400d) & 0x08,
+          "MOS5710 ICR read reports and acknowledges serial IRQ");
+    CHECK(!drive.cpu.irq, "MOS5710 IRQ deasserts after ICR read");
 
     /* Every documented NMOS 6502 opcode must be accepted by the drive core.
      * The actual DOS ROM is user-supplied, so CI cannot depend on it. */

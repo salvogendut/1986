@@ -211,7 +211,11 @@ cycle-level 1571 implementation without conflating their interfaces.
   mechanism timing, line-level IEC, and fast serial (#30).
 - [x] First 1571CR slice: independent ROM-backed 6502 core, mirrored 2K RAM,
   hardware address decoder, reset/interrupt vectors, and CPU/bus tests (#92).
-- [ ] Emulate 1571CR VIAs, MOS5710, WD1770, mechanism and physical IEC;
+- [x] Two 6522 VIAs with port direction, timers, control-line IRQs and drive-CPU
+  IRQ propagation; shift-register and cycle-exact timing remain open (#92).
+- [x] Partial MOS5710 CIA serial/interrupt registers and shared drive IRQ line
+  (following VICE's limited 1571CR handling; extra FDC2 registers remain open).
+- [ ] Emulate WD1770/FDC2, mechanism and physical IEC;
   clock the core with the machine and switch Advanced > Real Disk Drive to it.
 - [x] Media persists a per-drive hardware type when real-drive mode is selected;
   1581 is shown as future hardware rather than confused with D81 image support.
