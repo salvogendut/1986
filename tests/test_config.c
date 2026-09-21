@@ -63,6 +63,12 @@ int main(void) {
           "second-drive toggle, unit, and image roundtrip");
     CHECK(back.main_input_port == 1 && back.joy_port_mode[0] == JOYPORT_MOUSE,
           "input port and 1351 mode roundtrip");
+
+    CHECK(config_save_input_port(path, 2), "F1 host-port setting saved");
+    CHECK(config_load(&back, path) && back.main_input_port == 2 &&
+          back.joy_port_mode[0] == JOYPORT_MOUSE && back.second_drive,
+          "F1 host-port save preserves modes and other settings");
+    CHECK(!config_save_input_port(path, 3), "invalid host port is rejected");
     CHECK(strcmp(back.u36_path, "utility.rom") == 0,
           "U36 ROM path roundtrip");
 
@@ -76,6 +82,8 @@ int main(void) {
           "mode-only save preserves U36 setting");
     CHECK(back.real_disk_drive,
           "mode-only save preserves real-drive preference");
+    CHECK(back.main_input_port == 2 && back.joy_port_mode[0] == JOYPORT_MOUSE,
+          "mode-only save preserves F1 input port and mouse mode");
     CHECK(back.second_drive && back.drive2_unit == 10 &&
           strcmp(back.disk2_path, "second.d81") == 0,
           "mode-only save preserves second-drive media settings");

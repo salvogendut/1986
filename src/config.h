@@ -68,6 +68,8 @@ bool config_load(Config *cfg, const char *path);   /* returns false if missing *
 bool config_save(const Config *cfg, const char *path);
 /* Reload the on-disk config and update only the persistent display mode. */
 bool config_save_column_mode(const char *path, bool col_mode_80);
+/* Save the F1 host-port shortcut without overwriting other settings. */
+bool config_save_input_port(const char *path, int port);
 
 /* Resolve the config file location: $HOME/.config/1986/1986.conf (or a
  * relative "1986.conf" if HOME is unset). C128_CONFIG_PATH overrides this

@@ -217,3 +217,11 @@ bool config_save_column_mode(const char *path, bool col_mode_80) {
     stored.col_mode_80 = col_mode_80;
     return config_save(&stored, path);
 }
+
+bool config_save_input_port(const char *path, int port) {
+    if (port != 1 && port != 2) return false;
+    Config stored;
+    config_load(&stored, path);
+    stored.main_input_port = port;
+    return config_save(&stored, path);
+}

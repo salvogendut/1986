@@ -62,6 +62,12 @@ static void release_mouse(SDL_Window **captured, JoyPorts *ports) {
     }
 }
 
+static SDL_Window *active_input_window(const Display *display) {
+    if (!display->one_display && display->vdc_active && display->vdc_window)
+        return display->vdc_window;
+    return display->window;
+}
+
 /* --- Video capture state (F6). --- */
 static GifCap  *g_videocap_gif = NULL;
 static uint64_t g_videocap_gif_interval_ns = 0;
@@ -121,6 +127,7 @@ static void usage(const char *argv0) {
         "  --no-throttle    run without real-time frame pacing\n"
         "  --help           this message\n"
         "\n"
+        "  F1     Swap host joystick port (1/2)\n"
         "  F4     Screenshot (PPM)\n"
         "  F5     Reset\n"
         "  F6     Toggle GIF capture\n"
@@ -349,8 +356,7 @@ int main(int argc, char **argv) {
             } else if (ev.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
                 leds_set_mouse_position(0, 0, false);
             } else if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-                SDL_Window *target = ev.button.windowID == SDL_GetWindowID(c.display.window)
-                    ? c.display.window : c.display.vdc_window;
+                SDL_Window *target = active_input_window(&c.display);
                 if (!paused && !overlay_is_visible(&overlay) && mouse_mode && target &&
                     ev.button.windowID == SDL_GetWindowID(target)) {
                     if (!mouse_captured && SDL_SetWindowRelativeMouseMode(target, true))
@@ -432,6 +438,14 @@ int main(int argc, char **argv) {
                 }
                 if (ev.key.scancode == SDL_SCANCODE_F12) {
                     running = false;
+                } else if (ev.key.scancode == SDL_SCANCODE_F1) {
+                    if (mouse_captured) release_mouse(&mouse_captured, &c.joyports);
+                    cfg.main_input_port = cfg.main_input_port == 1 ? 2 : 1;
+                    joyports_set_joystick(&c.joyports, 0, 0);
+                    joyports_set_joystick(&c.joyports, 1, 0);
+                    if (!config_save_input_port(cfg_path, cfg.main_input_port))
+                        fprintf(stderr, "1986: could not save host input port to '%s'\n", cfg_path);
+                    notify_post("HOST INPUT: JOY PORT %d", cfg.main_input_port);
                 } else if (ev.key.scancode == SDL_SCANCODE_F8) {
                     if (monitor_is_open(monitor))
                         monitor_handle_event(monitor,
@@ -468,8 +482,11 @@ int main(int argc, char **argv) {
                 } else if (ev.key.scancode == SDL_SCANCODE_F7) {
                     paused = !paused;
                     c.paused = paused;
+                    if (paused && mouse_captured)
+                        release_mouse(&mouse_captured, &c.joyports);
                     if (paused && audio_stream) SDL_ClearAudioStream(audio_stream);
                 } else if (ev.key.scancode == SDL_SCANCODE_F10) {
+                    if (mouse_captured) release_mouse(&mouse_captured, &c.joyports);
                     c128_switch_4080(&c);   /* toggle 40-col VIC <-> 80-col VDC */
                     cfg.col_mode_80 = c.col_mode_80;
                     display_focus_active(&c.display);
