@@ -22,6 +22,12 @@ display_columns = 80
 
 # Advanced: future hardware drive backend (currently pending; virtual remains active)
 real_disk_drive = 0
+# Optional second fast virtual drive (IEC units must differ)
+second_drive = 0
+drive_unit = 8
+drive2_unit = 9
+disk =
+disk2 =
 
 # F6 GIF capture
 gif_width = 320

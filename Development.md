@@ -147,6 +147,12 @@ BAM and reports the removed-file count; both commands use the same atomic
 write-back and external-change guard as SAVE. The Advanced overlay's Real Disk
 Drive switch is a persisted future-backend preference, currently shown as
 pending while the fast virtual drive remains active.
+An optional second fast virtual drive owns a separate image and unit. The
+logical IEC callbacks fan out attention/data to both devices, and only the
+addressed unit answers. The Advanced > Second Drive switch disconnects it
+without forgetting its image or unit; configuration loading and Media unit
+cycling prevent #8-#11 address collisions. The F9 overlay is a compact top
+panel, following the sibling emulators' layout.
 
 The C128 KERNAL's burst-mode flag is cleared while this command-level backend
 is active, keeping transfers on the trapped byte routines. A true 1571 will

@@ -21,7 +21,7 @@ CP/M is a separate C128 operating mode and remains planned.
 | `--fullscreen` | Start fullscreen. |
 | `--fast` | Run the 8502 at 2 MHz (C128 fast mode). |
 | `--rom DIR` | Directory holding the machine ROM images. |
-| `--disk PATH` | Attach a D64, D71, or D81 image at launch. |
+| `--disk PATH` | Attach a D64, D71, or D81 image to Drive 1 at launch. |
 | `--gif-out PATH` | Start recording a GIF at launch. |
 | `--paste TEXT` | Inject text through the emulated keyboard. |
 | `--paste-at N` | Delay `--paste` until emulated frame N. |
@@ -44,12 +44,18 @@ last selected output receives window focus.
 
 ## Media overlay
 
-Open the options overlay with F9 and select **Media > Disk image** to insert a
-D64, D71, or D81 image. Choosing another image immediately ejects the current
+Open the options overlay with F9 and select **Media > Drive 1 image** to insert
+a D64, D71, or D81 image. Choosing another image immediately ejects the current
 disk and inserts the new one, so the next `DIRECTORY` reads the new disk
-without an application restart. Press Del on a populated Media entry to clear it; for a
-Disk image this also ejects the live disk. Press F9 or Esc to close the
-overlay.
+without an application restart. Press Del on a populated image row to eject
+that drive's disk. Press F9 or Esc to close the overlay.
+
+Enable **Advanced > Second Drive** to show **Drive 2** and **Drive 2 image** in
+Media. The two drives have independent images and IEC device numbers #8-#11;
+Enter on a Drive row cycles its number while skipping the other drive's number.
+Drive 1 defaults to #8, Drive 2 to #9. Turning Second Drive off disconnects
+Drive 2 from IEC but remembers its image and unit for the next time it is on.
+The toggle defaults to Off and requires Tinker to expose Advanced.
 
 `SAVE "NAME",8` and BASIC 7.0 `DSAVE "NAME"` write PRG files to the attached
 D64, D71, or D81 image; `DIRECTORY` and `LOAD` see them immediately, and they
@@ -72,6 +78,9 @@ backend preference. It defaults to Off. On currently displays `On (pending)`:
 the hardware drive emulator is not yet implemented, so the fast virtual drive
 remains active. It does not emulate 1571/1581 hardware or D81 partition and
 REL-file operations.
+
+The F9 overlay uses a compact top panel with smaller text; the running screen
+remains visible below it.
 
 ## Sound
 

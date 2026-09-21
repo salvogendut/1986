@@ -129,7 +129,10 @@ void c128_init(C128 *c, Config *cfg) {
     cia_init(&c->cia2);
     sid_init(&c->sid);
     kbd_init(&c->kbd);
+    config_normalize_drive_units(cfg);
     drive_init(&c->drive, cfg);
+    drive_init(&c->drive2, cfg);
+    drive_set_unit(&c->drive2, cfg->drive2_unit);
 
     /* Reset is deferred: the host loads machine ROMs after c128_init(), and
      * the reset vector must be read from the loaded KERNAL ROM. */
@@ -153,6 +156,8 @@ void c128_reset(C128 *c) {
     c->sid_fast_remainder = 0;
     kbd_reset(&c->kbd);
     drive_reset(&c->drive);
+    drive_reset(&c->drive2);
+    drive_set_unit(&c->drive2, c->cfg->drive2_unit);
     c->paused = false;
     c->frames_since_reset = 0;
     /* Preserve the 40/80 column choice across resets. */
@@ -283,20 +288,22 @@ void c128_switch_4080(C128 *c) {
 
 void c128_iec_attention(void *ctx, u8 b) {
     C128 *c = ctx;
-    drive_attention(&c->drive, b);
+    drive_pair_attention(&c->drive, &c->drive2, c->cfg->second_drive, b);
 }
 
 void c128_iec_send(void *ctx, u8 byte) {
     C128 *c = ctx;
-    drive_send(&c->drive, byte);
+    drive_pair_send(&c->drive, &c->drive2, c->cfg->second_drive, byte);
 }
 
 int c128_iec_receive(void *ctx, u8 *byte) {
     C128 *c = ctx;
-    return drive_receive(&c->drive, byte);
+    return drive_pair_receive(&c->drive, &c->drive2,
+                              c->cfg->second_drive, byte);
 }
 
 u8 c128_iec_take_status(void *ctx) {
     C128 *c = ctx;
-    return drive_take_bus_status(&c->drive);
+    return drive_pair_take_bus_status(&c->drive, &c->drive2,
+                                      c->cfg->second_drive);
 }

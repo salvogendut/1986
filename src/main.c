@@ -212,6 +212,9 @@ int main(int argc, char **argv) {
          * not load a 1571 ROM. A future true-drive module will own that ROM. */
         if (cfg.disk_path[0] && drive_attach_disk(&c.drive, cfg.disk_path) != 0)
             fprintf(stderr, "1986: could not attach disk '%s'\n", cfg.disk_path);
+        if (cfg.disk2_path[0] && drive_attach_disk(&c.drive2, cfg.disk2_path) != 0)
+            fprintf(stderr, "1986: could not attach second disk '%s'\n",
+                    cfg.disk2_path);
     }
 
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */
@@ -490,6 +493,8 @@ int main(int argc, char **argv) {
     paste_free(&paste);
     monitor_destroy(monitor);
     overlay_quit(&overlay);
+    drive_attach_disk(&c.drive, NULL);
+    drive_attach_disk(&c.drive2, NULL);
     display_destroy(&c.display);
     return 0;
 }
