@@ -506,7 +506,7 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, lw, y, "Memory", "128 KB", false); y += OV_LINE_H;
         draw_row(r, lw, y, "Video", "VIC-IIe (40-col) + 8563 VDC (80-col)", false);
         y += OV_LINE_H;
-        draw_row(r, lw, y, "Sound", "SID 6581", false); y += OV_LINE_H;
+        draw_row(r, lw, y, "Sound", "SID 8580", false); y += OV_LINE_H;
 #ifdef PACKAGE_VERSION
         draw_row(r, lw, y, "Emulator", PACKAGE_VERSION, false); y += OV_LINE_H;
 #endif
