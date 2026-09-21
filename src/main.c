@@ -343,11 +343,25 @@ int main(int argc, char **argv) {
     SDL_Gamepad *gamepad = open_first_gamepad();
     bool pc_shift_held = false;
     uint64_t next_frame = 0;
+    const bool f9_trace = getenv("C128_F9_TRACE") != NULL;
+    bool last_presented_overlay = false;
 
     while (running) {
         /* --- Event processing --- */
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
+            if (f9_trace &&
+                (ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED ||
+                 ev.type == SDL_EVENT_WINDOW_FOCUS_LOST))
+                fprintf(stderr, "[f9] focus %s window=%u\n",
+                        ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED ? "gained" : "lost",
+                        ev.window.windowID);
+            if (f9_trace &&
+                (ev.type == SDL_EVENT_KEY_DOWN || ev.type == SDL_EVENT_KEY_UP) &&
+                ev.key.scancode == SDL_SCANCODE_F9)
+                fprintf(stderr, "[f9] %s window=%u repeat=%d visible-before=%d\n",
+                        ev.type == SDL_EVENT_KEY_DOWN ? "down" : "up",
+                        ev.key.windowID, ev.key.repeat, overlay_is_visible(&overlay));
             if (ev.type == SDL_EVENT_GAMEPAD_ADDED && !gamepad) {
                 gamepad = SDL_OpenGamepad(ev.gdevice.which);
                 continue;
@@ -410,7 +424,12 @@ int main(int argc, char **argv) {
                 if (ev.key.scancode == SDL_SCANCODE_RETURN) continue;
             }
 
-            if (overlay_handle_event(&overlay, &ev)) {
+            bool overlay_handled = overlay_handle_event(&overlay, &ev);
+            if (f9_trace && ev.type == SDL_EVENT_KEY_DOWN &&
+                ev.key.scancode == SDL_SCANCODE_F9)
+                fprintf(stderr, "[f9] handled=%d visible-after=%d\n",
+                        overlay_handled, overlay_is_visible(&overlay));
+            if (overlay_handled) {
                 if (mouse_captured && (overlay_is_visible(&overlay) ||
                     cfg.joy_port_mode[cfg.main_input_port - 1] != JOYPORT_MOUSE))
                     release_mouse(&mouse_captured, &c.joyports);
@@ -637,6 +656,11 @@ int main(int argc, char **argv) {
         if (!c.display.one_display && c.display.vdc_renderer)
             notify_render(c.display.vdc_renderer);
         display_flip(&c.display);
+        if (f9_trace && last_presented_overlay != overlay_is_visible(&overlay)) {
+            last_presented_overlay = overlay_is_visible(&overlay);
+            fprintf(stderr, "[f9] presented visible=%d frame=%d\n",
+                    last_presented_overlay, c128_frame_count);
+        }
         if (monitor_is_open(monitor)) monitor_render(monitor);
     }
 
