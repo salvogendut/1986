@@ -62,8 +62,10 @@ static u8 io_read(C128 *c, u16 addr) {
         }
     }
     else if (addr >= 0xDD00 && addr < 0xDE00) v = cia_read(&c->cia2, addr);
-    else if (addr >= 0xD600 && addr < 0xD700)
+    else if (addr >= 0xD600 && addr < 0xD700) {
+        vdc_set_bus_clock(&c->vdc, cpu_cycles(), c->fast);
         v = ((addr & 1) == 0) ? vdc_read_status(&c->vdc) : vdc_read_data(&c->vdc);
+    }
     else v = 0xFF;
 
     return v;
@@ -88,6 +90,7 @@ static void io_write(C128 *c, u16 addr, u8 val) {
     if (addr >= 0xDC00 && addr < 0xDD00) { cia_write(&c->cia1, addr, val); return; }
     if (addr >= 0xDD00 && addr < 0xDE00) { cia_write(&c->cia2, addr, val); return; }
     if (addr >= 0xD600 && addr < 0xD700) {
+        vdc_set_bus_clock(&c->vdc, cpu_cycles(), c->fast);
         if ((addr & 1) == 0) vdc_write_index(&c->vdc, val);   /* $D600 */
         else                 vdc_write_data(&c->vdc, val);    /* $D601 */
         return;
@@ -168,20 +171,11 @@ void c128_init(C128 *c, Config *cfg) {
      * the reset vector must be read from the loaded KERNAL ROM. */
 }
 
-/* Expand the two packed 8-byte character sets into the VDC's 16-byte slots. */
-static void load_vdc_chargen(C128 *c) {
-    for (unsigned ch = 0; ch < 512; ch++)
-        memcpy(&c->vdc.ram[0x2000 + ch * 16],
-               &c->mem.chargen[ch * 8], 8);
-}
-
 void c128_reset(C128 *c) {
     mem_reset(&c->mem);
     cpu_reset(&c->cpu);
     vic_reset(&c->vic);
     vdc_reset(&c->vdc);
-    c->vdc_chargen_loaded = false;
-    load_vdc_chargen(c);
     cia_reset(&c->cia1);
     cia_reset(&c->cia2);
     sid_reset(&c->sid);
@@ -210,6 +204,8 @@ int c128_frame(C128 *c) {
     c->audio_count = 0;
     while (remaining > 0) {
         int chunk = (remaining > 63) ? 63 : remaining;
+        vdc_set_raster_line(&c->vdc,
+            (unsigned)((frame_cycles - remaining) * 312 / frame_cycles));
         total += cpu_step_budget(&c->cpu, chunk);
         remaining -= chunk;
         cia_tick(&c->cia1, chunk);
@@ -235,13 +231,6 @@ int c128_frame(C128 *c) {
     c->total_cycles += (u64)total;
     c128_frame_count++;
     c->frames_since_reset++;
-
-    /* The KERNAL clears the VDC chargen during its 80-col setup, so reload
-     * the packed ROM glyphs into the VDC's 16-byte slots shortly after boot. */
-    if (!c->vdc_chargen_loaded && c->frames_since_reset > 8) {
-        load_vdc_chargen(c);
-        c->vdc_chargen_loaded = true;
-    }
 
     /* $D506 bit 6 selects the VIC's 64K RAM bank on a 128K machine; CIA2
      * port A bits 0-1 select the inverted 16K window inside it. Input pins

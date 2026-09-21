@@ -16,15 +16,41 @@ static const u8 regmask[38] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x00, 0x00,
     0xFC, 0xE0, 0x80, 0xE0, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x0F, 0xE0, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0xF0, 0x3F
 };
+
+/* R28 bit 4 chooses the VDC's addressing convention, independently of how
+ * much video RAM is fitted. The DRAM address-line wiring rearranges addresses
+ * when the two do not match (VICE 3.10 vdc_16k_to_64k_map / vice versa). */
+static u16 vdc_ram_address(const Vdc *v, u16 addr) {
+    bool mode64 = (v->regs[28] & 0x10) != 0;
+    bool fitted64 = v->address_mask == 0xFFFF;
+    if (mode64 && fitted64) return addr;
+    if (!mode64 && !fitted64) return addr & 0x3FFF;
+    if (!mode64)
+        return (u16)((addr & 0x80FF) |
+                     ((addr & 0x3F00) << 1) | (addr & 0x0100));
+    return (u16)((addr & 0x00FF) | ((addr & 0x7E00) >> 1));
+}
+
+static u8 vdc_ram_read(const Vdc *v, u16 addr) {
+    return v->ram[vdc_ram_address(v, addr)];
+}
+
+static void vdc_ram_write(Vdc *v, u16 addr, u8 value) {
+    v->ram[vdc_ram_address(v, addr)] = value;
+    v->dirty = true;
+}
 
 void vdc_init(Vdc *v) {
     memset(v, 0, sizeof(*v));
     v->address_mask = 0xFFFF; /* C128DCR default: 64 KiB */
-    v->fb_w = VDC_MAX_COLS * VDC_CHAR_WIDTH;   /* 640 */
-    v->fb_h = VDC_MAX_LINES * VDC_CHAR_HEIGHT; /* 200 */
+    /* Power-up RAM pattern is separate from resetting the VDC registers. */
+    for (int i = 0; i < VDC_RAM_SIZE; i++)
+        v->ram[i] = (i & 1) ? 0x00 : 0xFF;
+    v->fb_w = VDC_MAX_COLS * VDC_CHAR_WIDTH;
+    v->fb_h = VDC_MAX_LINES * VDC_CHAR_HEIGHT;
     v->fb = (u32 *)malloc((size_t)v->fb_w * v->fb_h * sizeof(u32));
     vdc_reset(v);
 }
@@ -34,11 +60,39 @@ void vdc_set_ram_size_kb(Vdc *v, int kb) {
     v->dirty = true;
 }
 
+void vdc_set_bus_clock(Vdc *v, u64 clock, bool fast_cpu) {
+    if (clock < v->bus_clock) v->ready_clock = 0;
+    v->bus_clock = clock;
+    v->clock_scale = fast_cpu ? 2u : 1u;
+}
+
+static void vdc_busy(Vdc *v, unsigned nominal_cycles) {
+    v->ready_clock = v->bus_clock + (u64)nominal_cycles * v->clock_scale;
+}
+
+static bool vdc_display_active(const Vdc *v) {
+    int rasters_per_row = (v->regs[9] & 0x1F) + 1;
+    int border = ((int)v->regs[4] + 1 - (int)v->regs[7]) * rasters_per_row
+               - (v->regs[3] >> 4);
+    if (border < 0) border = 0;
+    border += v->regs[9] & 0x1F;
+    int display_end = border + (int)v->regs[6] * rasters_per_row;
+    return v->raster_line > (unsigned)border &&
+           v->raster_line <= (unsigned)display_end;
+}
+
+static void vdc_busy_data(Vdc *v) {
+    vdc_busy(v, vdc_display_active(v) ? 43u : 4u);
+}
+
 void vdc_reset(Vdc *v) {
-    /* VICE powerup fills the RAM with a 0xff00ff00.. pattern. */
-    for (int i = 0; i < VDC_RAM_SIZE; i++)
-        v->ram[i] = (i & 1) ? 0x00 : 0xFF;
     memset(v->regs, 0, sizeof(v->regs));
+    v->regs[0] = 126;
+    v->regs[1] = 102;
+    v->regs[4] = 39;
+    v->regs[6] = 25;
+    v->regs[9] = 7;
+    v->regs[22] = 0x78;
     v->reg = 0;
     v->update_adr = 0;
     v->screen_adr = 0;
@@ -48,6 +102,11 @@ void vdc_reset(Vdc *v) {
     v->screen_text_cols = 80;
     v->screen_textlines = 25;
     v->bytes_per_char = 16;
+    v->frame_counter = 0;
+    v->raster_line = 0;
+    v->bus_clock = 1;
+    v->ready_clock = 0;
+    v->clock_scale = 1;
     v->dirty = true;
 }
 
@@ -57,11 +116,13 @@ void vdc_write_index(Vdc *v, u8 val) {
 
 void vdc_write_data(Vdc *v, u8 val) {
     int reg = v->reg;
+    /* The light-pen position registers are read-only. */
+    if (reg == 16 || reg == 17) return;
     v->regs[reg] = val;
 
     switch (reg) {
         case 1:   /* R01 horizontal chars displayed */
-            if (val >= 8 && val <= VDC_MAX_TEXTCOLS) v->screen_text_cols = val;
+            if (val >= 6 && val <= VDC_MAX_TEXTCOLS) v->screen_text_cols = val;
             v->dirty = true;
             break;
         case 6:   /* R06 vertical displayed */
@@ -76,40 +137,45 @@ void vdc_write_data(Vdc *v, u8 val) {
         case 13: v->screen_adr = (u16)((v->screen_adr & 0xFF00) | val);       v->dirty = true; break;
         case 14: v->cursor_adr = (u16)((v->cursor_adr & 0x00FF) | (val << 8)); break;
         case 15: v->cursor_adr = (u16)((v->cursor_adr & 0xFF00) | val);        break;
-        case 18: v->update_adr = (u16)(((v->regs[18] << 8) | v->regs[19]) & v->address_mask); break;
-        case 19: v->update_adr = (u16)(((v->regs[18] << 8) | v->regs[19]) & v->address_mask); break;
+        case 18:
+        case 19:
+            v->update_adr = (u16)((v->regs[18] << 8) | v->regs[19]);
+            vdc_busy_data(v);
+            break;
         case 20: v->attribute_adr = (u16)((v->attribute_adr & 0x00FF) | (val << 8)); v->dirty = true; break;
         case 21: v->attribute_adr = (u16)((v->attribute_adr & 0xFF00) | val);        v->dirty = true; break;
-        case 28: v->chargen_adr = (u16)((val << 8) & 0xE000 & v->address_mask); v->dirty = true; break;
+        case 28: v->chargen_adr = (u16)((val << 8) & 0xE000); v->dirty = true; break;
         case 30: { /* R30 word count -> fill or copy block */
             u16 ptr = (u16)((v->regs[18] << 8) | v->regs[19]);
             int blklen = val ? val : 256;
             if (v->regs[24] & 0x80) { /* copy */
                 u16 src = (u16)((v->regs[32] << 8) | v->regs[33]);
                 for (int i = 0; i < blklen; i++)
-                    v->ram[(ptr + i) & v->address_mask] = v->ram[(src + i) & v->address_mask];
+                    vdc_ram_write(v, (u16)(ptr + i), vdc_ram_read(v, (u16)(src + i)));
                 src = (u16)(src + blklen);
-                v->regs[31] = v->ram[(src - 1) & v->address_mask];
+                v->regs[31] = vdc_ram_read(v, (u16)(src - 1));
                 v->regs[32] = (u8)(src >> 8);
                 v->regs[33] = (u8)src;
             } else { /* fill */
                 for (int i = 0; i < blklen; i++)
-                    v->ram[(ptr + i) & v->address_mask] = v->regs[31];
+                    vdc_ram_write(v, (u16)(ptr + i), v->regs[31]);
             }
             ptr += blklen;
             v->regs[18] = (u8)(ptr >> 8);
             v->regs[19] = (u8)(ptr & 0xFF);
             v->update_adr = ptr;
+            vdc_busy(v, (unsigned)(blklen * ((v->regs[24] & 0x80) ? 120 : 66) / 100));
             v->dirty = true;
             break;
         }
         case 31: { /* R31 data -> write to update address, auto-increment */
             u16 ptr = (u16)((v->regs[18] << 8) | v->regs[19]);
-            v->ram[ptr & v->address_mask] = val;
+            vdc_ram_write(v, ptr, val);
             ptr++;
             v->regs[18] = (u8)(ptr >> 8);
             v->regs[19] = (u8)(ptr & 0xFF);
             v->update_adr = ptr;
+            vdc_busy_data(v);
             v->dirty = true;
             break;
         }
@@ -121,51 +187,91 @@ void vdc_write_data(Vdc *v, u8 val) {
 u8 vdc_read_data(Vdc *v) {
     if (v->reg == 31) {
         u16 ptr = (u16)((v->regs[18] << 8) | v->regs[19]);
-        u8 val = v->ram[ptr & v->address_mask];
-        ptr = (u16)((ptr + 1) & v->address_mask);
+        u8 val = vdc_ram_read(v, ptr);
+        ptr = (u16)(ptr + 1);
         v->regs[18] = (u8)(ptr >> 8);
         v->regs[19] = (u8)(ptr & 0xFF);
         v->update_adr = ptr;
+        vdc_busy_data(v);
         return val;
     }
-    /* R28 readback follows VICE: 64 KiB forces bit 4 high, while 16 KiB
-     * leaves the written bit 4 intact. The low nibble reads high in both. */
-    if (v->reg == 28)
-        return v->regs[28] | (v->address_mask == 0xFFFF ? 0x1F : 0x0F);
     if (v->reg < 38) return v->regs[v->reg] | regmask[v->reg];
     return 0xFF;
 }
 
 u8 vdc_read_status(const Vdc *v) {
-    /* Status: bit 7 = ready (always set), bit 0-1 = revision. */
-    return 0x80 | (v->regs[8] & 0x03);
+    /* 8568 revision 2 is independent of R8's interlace setting. */
+    u8 status = 2;
+    if (v->bus_clock > v->ready_clock) status |= 0x80;
+    if (!vdc_display_active(v)) status |= 0x20;
+    return status;
+}
+
+void vdc_set_raster_line(Vdc *v, unsigned line) {
+    v->raster_line = line;
 }
 
 /* --- Text-mode rendering ------------------------------------------------ */
 
-static void put_glyph(Vdc *v, u32 *pixels, int fbw, int fbh, int cx, int cy,
-                      const u8 *glyph, u32 fg, u32 bg, int reverse,
-                      float cell_w, float cell_h) {
-    int x0 = (int)(cx * cell_w);
-    int y0 = (int)(cy * cell_h);
-    int nw = (int)cell_w;
-    int nh = (int)cell_h;
+static void render_text(Vdc *v, u32 *pixels, int fbw, int fbh,
+                        int cols, int rows, bool attr_mode,
+                        bool reverse_screen, u32 fg, u32 bg) {
+    /* VICE's R22 mask has a special value at 7: no foreground pixels. */
+    static const u8 pixel_mask[16] = {
+        0x80, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC, 0xFE, 0x00,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+    };
+    static const int crsrblink[4] = { 0x01, 0x00, 0x08, 0x10 };
+    int rasters_per_row = (v->regs[9] & 0x1F) + 1;
+    int total_rasters = rows * rasters_per_row;
+    int stride = cols + v->regs[27];
+    int blink = ((v->frame_counter | 1) &
+                 crsrblink[(v->regs[10] >> 5) & 3]) != 0;
+    bool attribute_blink = (v->frame_counter &
+        ((v->regs[24] & 0x20) ? 16 : 8)) != 0;
     int cur_top = v->regs[10] & 0x1F;
     int cur_bot = v->regs[11] & 0x1F;
-    for (int py = 0; py < nh; py++) {
-        int gy = (int)((float)py * VDC_CHAR_HEIGHT / cell_h);
-        u8 bits = glyph[gy];
-        if (reverse) bits = (u8)~bits;
-        /* The VDC cursor inverts the character cell's glyph on the raster
-         * lines between R10 (start) and R11 (end) while it is visible. */
-        if (v->cursor_on && gy >= cur_top && gy < cur_bot)
-            bits = (u8)~bits;
-        for (int px = 0; px < nw; px++) {
-            int gx = (int)((float)px * VDC_CHAR_WIDTH / cell_w);
-            int dx = x0 + px;
-            int dy = y0 + py;
-            if (dx < fbw && dy < fbh)
-                pixels[dy * fbw + dx] = (bits & (0x80 >> gx)) ? fg : bg;
+    int visible_pixels = v->regs[22] & 0x0F;
+
+    for (int y = 0; y < fbh; y++) {
+        int raster = y * total_rasters / fbh;
+        int row = raster / rasters_per_row;
+        int glyph_line = raster % rasters_per_row;
+        for (int col = 0; col < cols; col++) {
+            u16 idx = (u16)(row * stride + col);
+            u16 address = (u16)(v->screen_adr + idx);
+            u8 c = vdc_ram_read(v, address);
+            u8 attr = attr_mode ?
+                vdc_ram_read(v, (u16)(v->attribute_adr + idx)) : 0;
+            u32 c_fg = attr_mode ? VDC_COLORS[attr & 0x0F] : fg;
+            u16 co = (u16)(v->chargen_adr +
+                (attr_mode && (attr & VDC_ATTR_ALTCHARSET) ? 0x1000u : 0u) +
+                (u16)(c * v->bytes_per_char));
+            u8 bits = 0;
+            if (glyph_line <= (v->regs[23] & 0x1F) &&
+                glyph_line < (int)v->bytes_per_char)
+                bits = vdc_ram_read(v, (u16)(co + glyph_line)) &
+                       pixel_mask[visible_pixels];
+            if (attr_mode && (attr & VDC_ATTR_UNDERLINE) &&
+                glyph_line == v->regs[29])
+                bits = 0xFF;
+            if (attr_mode && (attr & VDC_ATTR_FLASH) && attribute_blink)
+                bits = 0;
+            if ((v->regs[25] & 0x20) && visible_pixels < 8 &&
+                (bits & (0x80 >> visible_pixels)))
+                bits |= (u8)(0xFF >> (visible_pixels + 1));
+            if (attr_mode && (attr & VDC_ATTR_REVERSE)) bits ^= 0xFF;
+            if (reverse_screen) bits ^= 0xFF;
+            if (blink && address == v->cursor_adr &&
+                glyph_line >= cur_top && glyph_line < cur_bot)
+                bits ^= 0xFF;
+
+            int x0 = col * fbw / cols;
+            int x1 = (col + 1) * fbw / cols;
+            for (int x = x0; x < x1; x++) {
+                int bit = (x - x0) * 8 / (x1 - x0);
+                pixels[y * fbw + x] = (bits & (0x80 >> bit)) ? c_fg : bg;
+            }
         }
     }
 }
@@ -191,12 +297,12 @@ static void render_bitmap(const Vdc *v, u32 *pixels, int fbw, int fbh,
             int source_x = x * logical_width / fbw / pixel_width;
             int byte_col = source_x >> 3;
             int bit = 7 - (source_x & 7);
-            u8 bits = v->ram[(v->screen_adr + bitmap_row + byte_col) & v->address_mask];
+            u8 bits = vdc_ram_read(v, (u16)(v->screen_adr + bitmap_row + byte_col));
             if (reverse_screen) bits = (u8)~bits;
             u32 dot_fg = fg;
             u32 dot_bg = bg;
             if (attr_mode) {
-                u8 attr = v->ram[(v->attribute_adr + attr_row + byte_col) & v->address_mask];
+                u8 attr = vdc_ram_read(v, (u16)(v->attribute_adr + attr_row + byte_col));
                 dot_fg = VDC_COLORS[attr >> 4];
                 dot_bg = VDC_COLORS[attr & 0x0F];
             }
@@ -217,9 +323,6 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
     if (cols < 1) cols = 1;
     if (rows < 1) rows = 1;
 
-    float cell_w = (float)fbw / (float)cols;
-    float cell_h = (float)fbh / (float)rows;
-
     /* Fill with the background colour (R26 low nibble). */
     u32 bg = VDC_COLORS[v->regs[26] & 0x0F];
     for (int i = 0; i < fbw * fbh; i++) pixels[i] = bg;
@@ -233,39 +336,11 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
     if (v->regs[25] & 0x80) {
         render_bitmap(v, pixels, fbw, fbh, cols, rows, attr_mode,
                       reverse_screen, fg, bg);
-        v->cursor_on = false;
         v->dirty = false;
         return;
     }
 
-    /* Cursor: R14/R15 is the cursor position; R10 bits 5-7 select the blink
-     * rate. It is visible while the blink phase matches (VICE crsrblink). */
-    static const int crsrblink[4] = { 0x01, 0x00, 0x08, 0x10 };
-    int blink = ((v->frame_counter | 1) & crsrblink[(v->regs[10] >> 5) & 3]) != 0;
-    u16 cursor_idx = (u16)((v->cursor_adr - v->screen_adr) & 0xFFFF);
-
-    for (int row = 0; row < rows; row++) {
-        for (int col = 0; col < cols; col++) {
-            u16 idx = (u16)(row * cols + col);
-            u8 c = v->ram[(v->screen_adr + idx) & v->address_mask];
-            u8 attr = attr_mode ? v->ram[(v->attribute_adr + idx) & v->address_mask] : 0;
-            u32 c_fg = attr_mode ? VDC_COLORS[attr & 0x0F] : fg;
-            u32 c_bg = bg;
-            bool rev = reverse_screen || (attr_mode && (attr & VDC_ATTR_REVERSE));
-            v->cursor_on = blink && (idx == cursor_idx);
-            /* In attribute mode bit 7 selects the second 4 KiB character
-             * set within the VDC's 8 KiB chargen block. The C128 editor
-             * uses this for the upper/lowercase Shift+C= selection. */
-            u16 co = (u16)(v->chargen_adr +
-                (attr_mode && (attr & VDC_ATTR_ALTCHARSET) ? 0x1000u : 0u) +
-                (u16)(c * v->bytes_per_char));
-            u8 glyph[VDC_CHAR_HEIGHT];
-            for (int l = 0; l < VDC_CHAR_HEIGHT; l++)
-                glyph[l] = v->ram[(co + l) & v->address_mask];
-            put_glyph(v, pixels, fbw, fbh, col, row, glyph, c_fg, c_bg, rev,
-                      cell_w, cell_h);
-        }
-    }
-    v->cursor_on = false;
+    render_text(v, pixels, fbw, fbh, cols, rows, attr_mode,
+                reverse_screen, fg, bg);
     v->dirty = false;
 }
