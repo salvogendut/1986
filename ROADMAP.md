@@ -209,6 +209,18 @@ cycle-level 1571 implementation without conflating their interfaces.
 - [ ] D81 partition navigation and REL-file operations.
 - [ ] True integrated 1571: drive CPU, 2K RAM, DOS ROM, CIA/VIA/FDC,
   mechanism timing, line-level IEC, and fast serial (#30).
+- [x] First 1571CR slice: independent ROM-backed 6502 core, mirrored 2K RAM,
+  hardware address decoder, reset/interrupt vectors, and CPU/bus tests (#92).
+- [x] Two 6522 VIAs with port direction, timers, control-line IRQs and drive-CPU
+  IRQ propagation; shift-register and cycle-exact timing remain open (#92).
+- [x] Partial MOS5710 CIA serial/interrupt registers and shared drive IRQ line
+  (following VICE's limited 1571CR handling; extra FDC2 registers remain open).
+- [ ] Emulate WD1770/FDC2, mechanism and physical IEC;
+  clock the core with the machine and switch Advanced > Real Disk Drive to it.
+- [x] Media persists a per-drive hardware type when real-drive mode is selected;
+  1581 is shown as future hardware rather than confused with D81 image support.
+- [x] Separate, live Drive 1/Drive 2 activity LEDs in both display windows;
+  connect the physical drive's LED latch when its backend takes over (#92).
 - [x] Persisted Advanced > Real Disk Drive preference, default Off; On is
   marked pending and retains the virtual backend until true-drive support (#57).
 - [x] Optional second fast virtual drive with independent image and a distinct

@@ -118,8 +118,19 @@ Tape playback, further write-side DOS commands, true cycle-level 1571 emulation,
 high-fidelity SID filter/combined-waveform emulation, CP/M mode, and several
 accuracy features remain unfinished. The virtual drive does not emulate 1571
 or 1581 hardware; it and the future true 1571 will share only the media/image
-layer. Advanced > Real Disk Drive is a saved preference for that future
-backend; while it is pending, the fast virtual drive stays active.
+layer. The first independent 1571CR slice now has a 2K RAM/32K ROM bus map,
+reset/interrupt vectors, a standalone NMOS 6502 instruction core, and two
+6522 VIAs with port, timer, and IRQ handling, plus the MOS5710's limited CIA
+serial/interrupt registers. It does not yet have FDC/FDC2, mechanism timing,
+or physical IEC, so it cannot service disks.
+Advanced > Real Disk Drive is still a saved preference: while the
+hardware backend is pending, the fast virtual drive stays active. With that
+preference On, Media exposes a hardware type per drive (1571CR or future 1581);
+selecting 1581 does not imply that its hardware is emulated.
+The bottom bar shows a separately labeled activity LED for each enabled drive,
+in both the 40-column and 80-column windows. For now these follow the active
+virtual drive's disk and IEC transfers; true-drive hardware LED state will be
+connected when the physical backend becomes operational.
 
 See [DEVELOPMENT.md](Development.md) for technical notes and
 [ROADMAP.md](ROADMAP.md) for the forward plan.

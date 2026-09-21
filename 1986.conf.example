@@ -32,6 +32,10 @@ real_disk_drive = 0
 second_drive = 0
 drive_unit = 8
 drive2_unit = 9
+# Hardware models selected in Media when Real Disk Drive is On.
+# The 1571CR core is under development; 1581 hardware is not yet implemented.
+drive_type = 1571
+drive2_type = 1571
 disk =
 disk2 =
 

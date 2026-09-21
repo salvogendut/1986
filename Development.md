@@ -162,10 +162,19 @@ The C128 KERNAL's burst-mode flag is cleared while this command-level backend
 is active, keeping transfers on the trapped byte routines. A true 1571 will
 instead provide the CIA shift-register endpoint needed by fast serial.
 
-A future true `Drive1571` is a separate machine: it will run its own 6502 and
-DOS ROM and connect through line-level IEC signals. It must not be placed
-behind the command-level `VirtualDrive` interface. The two modes share only
-neutral disk-image/media code.
+The independent `Drive1571Cr` core now owns a 2K mirrored RAM, 32K DOS ROM,
+reset/interrupt vectors, an NMOS 6502 instruction executor, and two 6522 VIAs.
+The VIAs have port direction/readback, T1/T2 counters, control-line edges, and
+IRQ propagation to the drive CPU. Their timing is at instruction boundaries;
+shift-register and sub-instruction bus timing are still absent. The MOS5710's
+limited CIA-like SDR/ICR/CRA registers use the existing CIA model, following
+VICE's partial 1571CR handling. Its extra FDC2 registers and the WD1770 have
+decoded hooks only; the mechanism and physical IEC bus are not yet connected.
+The core is a sibling of the command-level `VirtualDrive`, never behind its
+interface; the modes will share only neutral disk-image/media code. The
+Advanced real-drive gate remains pending until a real IEC backend can replace
+the KERNAL traps without breaking disk access. Media now stores 1571/1581
+hardware type independently for each drive; 1581 is only a future selection.
 
 Visual check (saves a PPM at frame 60):
 ```bash

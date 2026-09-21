@@ -3,19 +3,33 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* This test only needs the reserved strip, not the activity LEDs. */
+/* Give the activity strip a distinct colour so both windows can be checked. */
+static int led_bar_renders;
 void leds_render(SDL_Renderer *r, int x, int y, int w, int h) {
-    (void)r; (void)x; (void)y; (void)w; (void)h;
+    led_bar_renders++;
+    SDL_SetRenderDrawColor(r, 0x22, 0x33, 0x44, 255);
+    SDL_FRect bar = { (float)x, (float)y, (float)w, (float)h };
+    SDL_RenderFillRect(r, &bar);
 }
 
-static int band_pixel(SDL_Renderer *r, int x, int y) {
+static int colour_pixel(SDL_Renderer *r, int x, int y, Uint8 wanted_red,
+                        Uint8 wanted_green, Uint8 wanted_blue) {
     SDL_Surface *surface = SDL_RenderReadPixels(r, NULL);
     if (!surface) return 0;
     Uint8 red, green, blue, alpha;
     bool ok = SDL_ReadSurfacePixel(surface, x, y,
                                    &red, &green, &blue, &alpha);
     SDL_DestroySurface(surface);
-    return ok && red == 0x10 && green == 0x10 && blue == 0x14;
+    return ok && red == wanted_red && green == wanted_green &&
+           blue == wanted_blue;
+}
+
+static int band_pixel(SDL_Renderer *r, int x, int y) {
+    return colour_pixel(r, x, y, 0x10, 0x10, 0x14);
+}
+
+static int led_pixel(SDL_Renderer *r, int x, int y) {
+    return colour_pixel(r, x, y, 0x22, 0x33, 0x44);
 }
 
 int main(void) {
@@ -46,9 +60,12 @@ int main(void) {
     display_upload(d);
     display_render_function_keys(d);
     int ok = active_ok && mw == WINDOW_W && mh == WINDOW_H_TOTAL &&
-             vw == VDC_SCREEN_W && vh == VDC_SCREEN_H + FUNCTION_KEY_BAR_HEIGHT &&
+             vw == VDC_SCREEN_W && vh == VDC_SCREEN_H + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT &&
              band_pixel(d->renderer, 2, mh - LED_BAR_HEIGHT - 2) &&
-             band_pixel(d->vdc_renderer, 2, vh - 2);
+             band_pixel(d->vdc_renderer, 2, vh - LED_BAR_HEIGHT - 2) &&
+             led_pixel(d->renderer, 2, mh - 2) &&
+             led_pixel(d->vdc_renderer, 2, vh - 2) &&
+             led_bar_renders == 2;
 
     display_set_scale(d, 2);
     SDL_GetWindowSize(d->window, &mw, &mh);
@@ -57,11 +74,14 @@ int main(void) {
          mw == WINDOW_W * 2 &&
          mh == WINDOW_H * 2 + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT &&
          vw == VDC_SCREEN_W * 2 &&
-         vh == VDC_SCREEN_H * 2 + FUNCTION_KEY_BAR_HEIGHT;
+         vh == VDC_SCREEN_H * 2 + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT;
     display_upload(d);
     display_render_function_keys(d);
     ok = ok && band_pixel(d->renderer, 2, mh - LED_BAR_HEIGHT - 2) &&
-         band_pixel(d->vdc_renderer, 2, vh - 2);
+         band_pixel(d->vdc_renderer, 2, vh - LED_BAR_HEIGHT - 2) &&
+         led_pixel(d->renderer, 2, mh - 2) &&
+         led_pixel(d->vdc_renderer, 2, vh - 2) &&
+         led_bar_renders == 4;
 
     display_set_one_display(d, true);
     display_set_vdc_active(d, true);
@@ -70,7 +90,7 @@ int main(void) {
     SDL_GetWindowSize(d->vdc_window, &vw, &vh);
     ok = ok && display_active_renderer(d) == d->vdc_renderer &&
          vw == VDC_SCREEN_W * 2 &&
-         vh == VDC_SCREEN_H * 2 + FUNCTION_KEY_BAR_HEIGHT;
+         vh == VDC_SCREEN_H * 2 + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT;
     display_set_one_display(d, true);
     display_upload(d);
     display_render_function_keys(d);

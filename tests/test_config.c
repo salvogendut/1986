@@ -15,6 +15,8 @@ int main(void) {
     CHECK(cfg.col_mode_80, "default display is 80 columns");
     CHECK(cfg.vdc_ram_kb == 64, "C128DCR defaults to 64K VDC RAM");
     CHECK(!cfg.real_disk_drive, "real drive defaults off");
+    CHECK(cfg.drive_type == 1571 && cfg.drive2_type == 1571,
+          "both hardware drive types default to 1571");
     CHECK(!cfg.second_drive && cfg.drive_unit == 8 && cfg.drive2_unit == 9,
           "second drive defaults off with a distinct unit");
     CHECK(cfg.main_input_port == 2 && cfg.joy_port_mode[0] == JOYPORT_JOYSTICK &&
@@ -46,6 +48,8 @@ int main(void) {
     cfg.second_drive = true;
     cfg.drive_unit = 9;
     cfg.drive2_unit = 10;
+    cfg.drive_type = 1581;
+    cfg.drive2_type = 1571;
     cfg.main_input_port = 1;
     cfg.joy_port_mode[0] = JOYPORT_MOUSE;
     snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s", "keep-me.d64");
@@ -66,6 +70,8 @@ int main(void) {
     CHECK(!back.col_mode_80, "40-column mode roundtrip");
     CHECK(back.vdc_ram_kb == 16, "16K VDC RAM setting roundtrip");
     CHECK(back.real_disk_drive, "real-drive preference roundtrip");
+    CHECK(back.drive_type == 1581 && back.drive2_type == 1571,
+          "hardware type selection roundtrip");
     CHECK(back.second_drive && back.drive_unit == 9 && back.drive2_unit == 10 &&
           strcmp(back.disk2_path, "second.d81") == 0,
           "second-drive toggle, unit, and image roundtrip");
@@ -111,13 +117,15 @@ int main(void) {
     CHECK(collision != NULL, "create unit-collision config");
     if (collision) {
         fputs("drive_unit = 10\ndrive2_unit = 10\nsecond_drive = 1\n"
-              "vdc_ram_kb = 32\n", collision);
+              "vdc_ram_kb = 32\ndrive_type = 999\ndrive2_type = 0\n", collision);
         fclose(collision);
     }
     CHECK(config_load(&back, path) && back.drive_unit == 10 &&
           back.drive2_unit == 8,
           "loading a colliding unit assignment chooses a distinct unit");
     CHECK(back.vdc_ram_kb == 64, "invalid VDC RAM size falls back to DCR default");
+    CHECK(back.drive_type == 1571 && back.drive2_type == 1571,
+          "invalid hardware drive types fall back to 1571");
 
     remove(path);
 

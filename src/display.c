@@ -111,7 +111,7 @@ void display_set_scale(Display *d, int scale) {
                           WINDOW_H * d->scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT);
     if (d->vdc_window)
         SDL_SetWindowSize(d->vdc_window, VDC_SCREEN_W * d->scale,
-                          VDC_SCREEN_H * d->scale + FUNCTION_KEY_BAR_HEIGHT);
+                          VDC_SCREEN_H * d->scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT);
 }
 
 /* Create or destroy the separate VDC (80-column) window used in two-window
@@ -130,7 +130,7 @@ void display_set_one_display(Display *d, bool one) {
     if (d->vdc_window) return;   /* already open */
     d->vdc_window = SDL_CreateWindow("1986 — VDC 8563 (80-column)",
                                      VDC_SCREEN_W * d->scale,
-                                     VDC_SCREEN_H * d->scale + FUNCTION_KEY_BAR_HEIGHT,
+                                     VDC_SCREEN_H * d->scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT,
                                      SDL_WINDOW_RESIZABLE);
     if (!d->vdc_window) {
         fprintf(stderr, "SDL_CreateWindow (VDC): %s\n", SDL_GetError());
@@ -297,7 +297,9 @@ void display_upload(Display *d) {
         SDL_SetTextureColorMod(d->vdc_window_texture, vmod2, vmod2, vmod2);
         blit_fit(d->vdc_renderer, d->vdc_window_texture,
                  VDC_SCREEN_W, VDC_SCREEN_H, vw,
-                 vh > FUNCTION_KEY_BAR_HEIGHT ? vh - FUNCTION_KEY_BAR_HEIGHT : 1);
+                 vh > FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT
+                     ? vh - FUNCTION_KEY_BAR_HEIGHT - LED_BAR_HEIGHT : 1);
+        leds_render(d->vdc_renderer, 0, vh - LED_BAR_HEIGHT, vw, LED_BAR_HEIGHT);
     }
 }
 
@@ -335,7 +337,7 @@ static void render_function_keys(SDL_Renderer *r, int bottom_reserved) {
 
 void display_render_function_keys(Display *d) {
     render_function_keys(d->renderer, LED_BAR_HEIGHT);
-    if (d->vdc_renderer) render_function_keys(d->vdc_renderer, 0);
+    if (d->vdc_renderer) render_function_keys(d->vdc_renderer, LED_BAR_HEIGHT);
 }
 
 void display_flip(Display *d) {

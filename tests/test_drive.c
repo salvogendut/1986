@@ -11,8 +11,13 @@ static int failures = 0;
     if (!(cond)) { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, msg); failures++; } \
 } while (0)
 
-/* drive.c only uses the UI LED when bytes are received. */
-void leds_ping(LedId id) { (void)id; }
+static unsigned led_pings[LED_COUNT];
+static int led_unit[2];
+void leds_ping(LedId id) { led_pings[id]++; }
+void leds_set_drive_unit(LedId id, int unit) {
+    if (id == LED_FDC_A || id == LED_FDC_B)
+        led_unit[id == LED_FDC_B] = unit;
+}
 
 static int make_image(char *path, DiskFormat format, u8 marker,
                       const char *disk_name, const char *file_name) {
@@ -181,10 +186,21 @@ int main(void) {
     Drive pair_first, pair_second;
     drive_init(&pair_first, &cfg);
     drive_init(&pair_second, &cfg);
+    drive_set_slot(&pair_second, 1);
     drive_set_unit(&pair_second, 9);
+    CHECK(led_unit[0] == 8 && led_unit[1] == 9,
+          "each LED shows its drive's IEC unit");
     CHECK(drive_attach_disk(&pair_first, first) == 0 &&
           drive_attach_disk(&pair_second, second) == 0,
           "attach independent images to both drives");
+    memset(led_pings, 0, sizeof(led_pings));
+    CHECK(pair_directory_contains(&pair_first, &pair_second, true, 8, "FIRSTFILE") &&
+          led_pings[LED_FDC_A] > 0 && led_pings[LED_FDC_B] == 0,
+          "Drive 1 traffic lights only Drive 1 LED");
+    memset(led_pings, 0, sizeof(led_pings));
+    CHECK(pair_directory_contains(&pair_first, &pair_second, true, 9, "SECONDFILE") &&
+          led_pings[LED_FDC_B] > 0 && led_pings[LED_FDC_A] == 0,
+          "Drive 2 traffic lights only Drive 2 LED");
     CHECK(pair_directory_contains(&pair_first, &pair_second, true, 8, "FIRSTFILE") &&
           !pair_directory_contains(&pair_first, &pair_second, true, 8, "SECONDFILE") &&
           pair_directory_contains(&pair_first, &pair_second, true, 9, "SECONDFILE"),
@@ -193,6 +209,7 @@ int main(void) {
           pair_directory_contains(&pair_first, &pair_second, false, 8, "FIRSTFILE"),
           "disabling the second drive removes only its IEC response");
     drive_set_unit(&pair_second, 10);
+    CHECK(led_unit[1] == 10, "Drive 2 LED tracks Media device number");
     CHECK(!pair_directory_contains(&pair_first, &pair_second, true, 9, "SECONDFILE") &&
           pair_directory_contains(&pair_first, &pair_second, true, 10, "SECONDFILE"),
           "changing Drive 2 unit takes effect immediately");

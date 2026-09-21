@@ -30,6 +30,8 @@ dist_man1_MANS = 1986.1
 	src/notify.c \
 	src/disk_image.c \
 	src/drive.c \
+	src/drive1571cr.c \
+	src/via6522.c \
 	src/virtual_drive.c
 
 noinst_HEADERS = \
@@ -59,6 +61,8 @@ noinst_HEADERS = \
 	src/notify.h \
 	src/disk_image.h \
 	src/drive.h \
+	src/drive1571cr.h \
+	src/via6522.h \
 	src/virtual_drive.h \
 	src/shutter_wav.h \
 	src/vice/vice.h \
@@ -129,5 +133,5 @@ EXTRA_DIST = LICENSE README.md Development.md USAGE.md CONTROLS.md INSTALL.md \
 	tests/test_cartridge.c tests/test_cia.c tests/test_sid.c tests/test_config.c \
 	tests/test_joyport.c tests/test_c128_keyboard.c tests/test_gifcap.c \
 	tests/test_d64.c tests/test_d64_save.c tests/test_disk_formats.c \
-	tests/test_drive.c tests/test_prg_drive.c tests/test_overlay.c \
+	tests/test_drive.c tests/test_drive1571cr.c tests/test_via6522.c tests/test_prg_drive.c tests/test_overlay.c \
 	tests/test_display_footer.c tests/test_vic.c tests/test_vdc.c

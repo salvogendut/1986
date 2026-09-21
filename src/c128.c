@@ -165,7 +165,9 @@ void c128_init(C128 *c, Config *cfg) {
     config_normalize_drive_units(cfg);
     drive_init(&c->drive, cfg);
     drive_init(&c->drive2, cfg);
+    drive_set_slot(&c->drive2, 1);
     drive_set_unit(&c->drive2, cfg->drive2_unit);
+    drive1571cr_init(&c->integrated_drive);
 
     /* Reset is deferred: the host loads machine ROMs after c128_init(), and
      * the reset vector must be read from the loaded KERNAL ROM. */
@@ -186,6 +188,7 @@ void c128_reset(C128 *c) {
     joyports_reset(&c->joyports);
     drive_reset(&c->drive);
     drive_reset(&c->drive2);
+    drive1571cr_reset(&c->integrated_drive);
     drive_set_unit(&c->drive2, c->cfg->drive2_unit);
     c->paused = false;
     c->frames_since_reset = 0;
