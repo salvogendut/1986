@@ -107,6 +107,10 @@ This is driven by:
 - Correct MOS 6526 CIA semantics: `$DC0D` reads the interrupt flags and writes
   the mask, `$DC0E` is timer-A control; timer-A underflow sets ICR bit 0 and
   asserts the IRQ line when masked.
+- CIA TOD clocks receive one 50 Hz mains pulse per PAL frame, independently of
+  8502 fast mode. TOD alarms, serial shift completion, CNT pin edges, and FLAG
+  falling edges feed the same interrupt mask/status path. External diagnostic
+  harness loopbacks are not wired by default.
 - The VIC-IIe raster IRQ: `$D012` compare, `$D019` status, `$D01A` mask.
 - Both IRQ sources wired to the CPU, driving the KERNAL's 50 Hz main loop.
 

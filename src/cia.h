@@ -7,9 +7,10 @@
  *
  * Two CIAs live in the C128 at $DC00 (CIA1: keyboard, joystick, timer A/B,
  * serial) and $DD00 (CIA2: VIC bank, RS-232, timer A/B). This models the
- * interrupt control register (ICR) / interrupt mask register (IMR), timer A
- * used by the KERNAL main loop, and timer B's Phi2/cascade modes. CNT-driven
- * timer modes require an external input and remain inactive for now.
+ * interrupt control register (ICR) / interrupt mask register (IMR), both
+ * timers, the mains-driven time-of-day clock and alarm, and the serial and
+ * FLAG pins. External pin inputs are supplied by the machine when connected;
+ * the diagnostic harness is not connected by default.
  *
  * Interrupt flags (ICR bits): 0 = timer A, 1 = timer B, 2 = TOD alarm,
  * 3 = serial (SDR), 4 = FLAG, 7 = IRQ line.
@@ -21,7 +22,22 @@ typedef struct {
     u8  imr;         /* interrupt mask register (set/cleared via $DC0D write) */
     u8  ta_lo, ta_hi;
     u8  tb_lo, tb_hi;
-    u8  tod;         /* time-of-day */
+    u8  tod[4];      /* BCD tenths, seconds, minutes, hours + AM/PM */
+    u8  tod_alarm[4];
+    u8  tod_latch[4];
+    u8  tod_pulses;  /* 50/60 Hz pulses since the last tenth */
+    bool tod_stopped;
+    bool tod_latched;
+    u8  sdr;         /* serial data register */
+    u8  serial_shift;
+    u8  serial_bits;
+    bool serial_pending;
+    bool serial_active;
+    bool sp_input_high;
+    bool cnt_input_high;
+    bool flag_input_high;
+    bool sp_output_high;
+    bool cnt_output_high;
     u8  cra;         /* timer A control register */
     u8  crb;         /* timer B control register */
     u16 ta_latch;    /* timer A reload value */
@@ -43,3 +59,11 @@ u8   cia_read(Cia *c, u16 addr);
 bool cia_tick(Cia *c, int cycles);
 /* True while the CIA IRQ line is asserted (a masked flag is pending). */
 bool cia_irq_line(const Cia *c);
+/* One 50 Hz mains pulse (PAL frame) drives the TOD clock independently of
+ * the CPU speed; CRA bit 7 selects five or six pulses per tenth. */
+void cia_tod_tick(Cia *c);
+/* External user-port inputs. CNT rising edges clock serial input and the
+ * CNT-driven timer modes; FLAG interrupts on the falling edge. */
+void cia_set_cnt(Cia *c, bool high);
+void cia_set_sp(Cia *c, bool high);
+void cia_set_flag(Cia *c, bool high);

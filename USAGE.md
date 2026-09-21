@@ -75,6 +75,12 @@ the VIC output the persistent default, or press F10 to switch while running.
 Selection is restored at launch from `cart` in the config; `--cart PATH`
 overrides it for that run. Tape selection remains a placeholder for now.
 
+The 785260 diagnostic cartridge expects Commodore's external test harness.
+1986 does not silently connect its user-port, serial, joystick, or cassette
+loopback wiring. Those tests, including the CIA-to-CIA data-line part of
+`INTERRUPT`, can report `BAD` without a harness. The two CIA chips do emulate
+TOD alarms, serial shift-register interrupts, and FLAG edges internally.
+
 `SAVE "NAME",8` and BASIC 7.0 `DSAVE "NAME"` write PRG files to the attached
 D64, D71, or D81 image; `DIRECTORY` and `LOAD` see them immediately, and they
 persist after the application closes. Saving an existing name leaves it
