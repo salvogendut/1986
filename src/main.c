@@ -433,9 +433,7 @@ int main(int argc, char **argv) {
                     cfg.scale += key_plus ? 1 : -1;
                     if (cfg.scale < 1) cfg.scale = 1;
                     if (cfg.scale > 4) cfg.scale = 4;
-                    SDL_SetWindowSize(c.display.window,
-                                      WINDOW_W * cfg.scale,
-                                      WINDOW_H * cfg.scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT);
+                    display_set_scale(&c.display, cfg.scale);
                     continue;
                 }
                 /* Shift+PrintScreen toggles the 40/80 column key. */
