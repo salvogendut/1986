@@ -345,6 +345,8 @@ int main(int argc, char **argv) {
     uint64_t next_frame = 0;
     const bool f9_trace = getenv("C128_F9_TRACE") != NULL;
     bool last_presented_overlay = false;
+    if (f9_trace)
+        fprintf(stderr, "[f9] SDL video driver=%s\n", SDL_GetCurrentVideoDriver());
 
     while (running) {
         /* --- Event processing --- */
@@ -357,11 +359,11 @@ int main(int argc, char **argv) {
                         ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED ? "gained" : "lost",
                         ev.window.windowID);
             if (f9_trace &&
-                (ev.type == SDL_EVENT_KEY_DOWN || ev.type == SDL_EVENT_KEY_UP) &&
-                ev.key.scancode == SDL_SCANCODE_F9)
-                fprintf(stderr, "[f9] %s window=%u repeat=%d visible-before=%d\n",
+                (ev.type == SDL_EVENT_KEY_DOWN || ev.type == SDL_EVENT_KEY_UP))
+                fprintf(stderr, "[f9] %s window=%u scancode=%d key=%d repeat=%d visible-before=%d\n",
                         ev.type == SDL_EVENT_KEY_DOWN ? "down" : "up",
-                        ev.key.windowID, ev.key.repeat, overlay_is_visible(&overlay));
+                        ev.key.windowID, ev.key.scancode, ev.key.key,
+                        ev.key.repeat, overlay_is_visible(&overlay));
             if (ev.type == SDL_EVENT_GAMEPAD_ADDED && !gamepad) {
                 gamepad = SDL_OpenGamepad(ev.gdevice.which);
                 continue;
@@ -658,7 +660,7 @@ int main(int argc, char **argv) {
         display_flip(&c.display);
         if (f9_trace && last_presented_overlay != overlay_is_visible(&overlay)) {
             last_presented_overlay = overlay_is_visible(&overlay);
-            fprintf(stderr, "[f9] presented visible=%d frame=%d\n",
+            fprintf(stderr, "[f9] submitted visible=%d frame=%d\n",
                     last_presented_overlay, c128_frame_count);
         }
         if (monitor_is_open(monitor)) monitor_render(monitor);
