@@ -90,6 +90,19 @@ int main(void) {
     CHECK(pixels[0] == 0xFFFFFF && pixels[1] == 0x000000,
           "text rendering still uses glyph RAM after leaving bitmap mode");
 
+    reg_write(v, 20, 0x10); /* attribute table at $1000 */
+    reg_write(v, 21, 0x00);
+    reg_write(v, 25, 0x40); /* attribute mode */
+    v->ram[0x1000] = 0x0f;
+    v->ram[0x3010] = 0x40; /* distinct glyph in alternate charset */
+    vdc_render(v, pixels, 640, 200);
+    CHECK(pixels[0] == 0xFFFFFF && pixels[1] == 0x000000,
+          "normal VDC attribute keeps the upper/graphics glyph");
+    v->ram[0x1000] = VDC_ATTR_ALTCHARSET | 0x0f;
+    vdc_render(v, pixels, 640, 200);
+    CHECK(pixels[0] == 0x000000 && pixels[1] == 0xFFFFFF,
+          "alternate VDC attribute selects the upper/lowercase glyph");
+
     /* Block-copy source pointer and data latch advance along with target. */
     reg_write(v, 24, 0x80);
     reg_write(v, 18, 0x30);

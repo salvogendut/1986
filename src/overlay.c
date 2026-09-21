@@ -24,6 +24,27 @@ static const char *const about_lines[] = {
 };
 #define ABOUT_LINE_COUNT ((int)(sizeof(about_lines) / sizeof(about_lines[0])))
 
+static const char *const keyboard_map_lines[] = {
+    "HOST KEY                         C128 KEY / ACTION",
+    "Left/Right Shift                SHIFT",
+    "Left/Right Alt                  C= (Commodore)",
+    "Shift + Alt                     switch character sets",
+    "Caps Lock                       Shift+C= shortcut",
+    "Escape                          RUN/STOP",
+    "Page Up                         RESTORE (NMI)",
+    "Escape + Page Up                RUN/STOP + RESTORE",
+    "Left/Right Ctrl                 CONTROL",
+    "Backspace                       DEL",
+    "Home                            CLR/HOME",
+    "Arrow keys                      C128 cursor keys",
+    "F10                             toggle 40/80 display",
+    "Shift + Print Screen            hold 40/80 key",
+    "Shift + F1..F8                  C128 function keys",
+    "F1, F4..F12                    emulator shortcuts",
+    "Enter or Escape                 close this map"
+};
+#define KEYBOARD_MAP_LINE_COUNT ((int)(sizeof(keyboard_map_lines) / sizeof(keyboard_map_lines[0])))
+
 /* Logical Media rows; Drive 2 rows collapse away when disabled. */
 #define MEDIA_DRIVE1   0
 #define MEDIA_DISK1    1
@@ -50,9 +71,10 @@ static const char *const about_lines[] = {
 #define ADV_NOTIFICATIONS       12
 #define ADV_DEBUG               13
 #define ADV_JOY_HIDAPI          14
-#define ADV_RESET               15
-#define ADV_VERSION             16
-#define ADV_ROWS                17
+#define ADV_KEYBOARD_MAP        15
+#define ADV_RESET               16
+#define ADV_VERSION             17
+#define ADV_ROWS                18
 
 static int cycle_gif_width(int width) {
     switch (width) {
@@ -100,6 +122,7 @@ static void save_config(const Overlay *ov) {
 static void overlay_close(Overlay *ov) {
     save_config(ov);
     ov->about_visible = false;
+    ov->keyboard_map_visible = false;
     ov->visible = false;
 }
 
@@ -500,6 +523,9 @@ static void overlay_activate(Overlay *ov) {
                     ov->cfg->joystick_hidapi = !ov->cfg->joystick_hidapi;
                     notify_post("JOYSTICK HIDAPI CHANGE APPLIES AFTER RESTART");
                     break;
+                case ADV_KEYBOARD_MAP:
+                    ov->keyboard_map_visible = true;
+                    break;
                 case ADV_RESET:
                     config_set_defaults(ov->cfg);
                     drive_attach_disk(&ov->c128->drive, NULL);
@@ -555,6 +581,11 @@ bool overlay_handle_event(Overlay *ov, SDL_Event *ev) {
     if (ov->about_visible) {
         if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_ESCAPE)
             ov->about_visible = false;
+        return true;
+    }
+    if (ov->keyboard_map_visible) {
+        if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_ESCAPE)
+            ov->keyboard_map_visible = false;
         return true;
     }
 
@@ -676,7 +707,7 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         SDL_GetWindowSize(ov->c128->display.window, &rw, &rh);
     float scale = OV_SCALE;
     if ((float)rw / scale < 840.0f) scale = (float)rw / 840.0f;
-    if ((float)rh / scale < 450.0f) scale = (float)rh / 450.0f;
+    if ((float)rh / scale < 470.0f) scale = (float)rh / 470.0f;
     if (scale <= 0.0f) return;
     SDL_SetRenderScale(r, scale, scale);
     int lw = (int)(rw / scale);
@@ -822,6 +853,8 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, panel_w, y, "Joystick HIDAPI",
                  ov->cfg->joystick_hidapi ? "On" : "Off",
                  ov->row == ADV_JOY_HIDAPI); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Keyboard map", "[Enter]",
+                 ov->row == ADV_KEYBOARD_MAP); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Reset defaults", NULL,
                  ov->row == ADV_RESET); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Version", version, ov->row == ADV_VERSION);
@@ -862,6 +895,28 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         SDL_SetRenderDrawColor(r, 0xFF, 0xDA, 0x79, 255);
         SDL_RenderDebugText(r, bx + (box_w - 16) * 0.5f,
                             by + box_h - 20, "OK");
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    }
+
+    if (ov->keyboard_map_visible) {
+        int lh = (int)(rh / scale);
+        int box_w = 640;
+        int box_h = 24 + KEYBOARD_MAP_LINE_COUNT * 16 + 20;
+        float bx = (float)(lw - box_w) * 0.5f;
+        float by = (float)(lh - box_h) * 0.5f;
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(r, 0, 0, 0, 180);
+        SDL_FRect dim = { 0, 0, (float)lw, (float)lh };
+        SDL_RenderFillRect(r, &dim);
+        SDL_SetRenderDrawColor(r, 0x19, 0x20, 0x34, 255);
+        SDL_FRect box = { bx, by, (float)box_w, (float)box_h };
+        SDL_RenderFillRect(r, &box);
+        SDL_SetRenderDrawColor(r, 0x89, 0xA3, 0xCB, 255);
+        SDL_RenderRect(r, &box);
+        SDL_SetRenderDrawColor(r, 0xF0, 0xF0, 0xF0, 255);
+        for (int i = 0; i < KEYBOARD_MAP_LINE_COUNT; ++i)
+            SDL_RenderDebugText(r, bx + 16, by + 16 + i * 16,
+                                keyboard_map_lines[i]);
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
     }
 

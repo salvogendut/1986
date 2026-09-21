@@ -5,7 +5,7 @@ CPPFLAGS ?=
 SDL3_CFLAGS ?= $(shell pkg-config --cflags sdl3)
 SDL3_LIBS ?= $(shell pkg-config --libs sdl3)
 
-TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-overlay test-display-footer test-vic test-vdc
+TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-overlay test-display-footer test-vic test-vdc
 
 .PHONY: all check clean
 
@@ -42,6 +42,11 @@ test-config: test_config.c ../src/config.c ../src/config.h
 test-joyport: test_joyport.c ../src/joyport.c ../src/joyport.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_joyport.c ../src/joyport.c -o $@
+
+test-c128-keyboard: test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/c128.h ../src/kbd.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra \
+		-ffunction-sections -fdata-sections -Wl,--gc-sections -I../src \
+		test_c128_keyboard.c ../src/c128.c ../src/kbd.c $(SDL3_LIBS) -o $@
 
 test-gifcap: test_gifcap.c ../src/gifcap.c ../src/gifcap.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
@@ -89,6 +94,7 @@ check: $(TESTS)
 	./test-sid
 	./test-config
 	./test-joyport
+	./test-c128-keyboard
 	./test-gifcap
 	./test-d64
 	./test-d64-save

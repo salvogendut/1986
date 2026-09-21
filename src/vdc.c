@@ -246,7 +246,12 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
             u32 c_bg = bg;
             bool rev = reverse_screen || (attr_mode && (attr & VDC_ATTR_REVERSE));
             v->cursor_on = blink && (idx == cursor_idx);
-            u16 co = (u16)((v->chargen_adr + (u16)(c * v->bytes_per_char)) & 0xFFFF);
+            /* In attribute mode bit 7 selects the second 4 KiB character
+             * set within the VDC's 8 KiB chargen block. The C128 editor
+             * uses this for the upper/lowercase Shift+C= selection. */
+            u16 co = (u16)(v->chargen_adr +
+                (attr_mode && (attr & VDC_ATTR_ALTCHARSET) ? 0x1000u : 0u) +
+                (u16)(c * v->bytes_per_char));
             u8 glyph[VDC_CHAR_HEIGHT];
             for (int l = 0; l < VDC_CHAR_HEIGHT; l++)
                 glyph[l] = v->ram[(co + l) & 0xFFFF];
