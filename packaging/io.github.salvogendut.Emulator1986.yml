@@ -1,7 +1,7 @@
 app-id: io.github.salvogendut.Emulator1986
 runtime: org.freedesktop.Platform
-runtime-version: '24.08'
-sdk: org.freedesktop.Sdk//24.08
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk//25.08
 command: '1986'
 
 finish-args:
@@ -44,6 +44,5 @@ modules:
       - make -j$(nproc)
       - make install
     sources:
-      - type: git
-        url: https://github.com/salvogendut/1986.git
-        branch: main
+      - type: dir
+        path: ..

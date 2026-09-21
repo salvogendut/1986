@@ -1,3 +1,4 @@
+#include "compat_win.h"
 #include "config.h"
 #include <stdio.h>
 #include <stdlib.h>

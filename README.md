@@ -1,5 +1,7 @@
 # 1986 - Commodore C128DCR emulator
 
+![1986 logo beside the Commodore 128 BASIC screen](1986.png)
+
 1986 is a work-in-progress emulator of the Commodore C128DCR. The emulation
 core is written in C and the desktop application uses SDL3.
 
@@ -19,6 +21,28 @@ the options overlay, and the cycle-stepped Z80 core (for CP/M mode). The
 The name "1986" was chosen not only because of the sibling projects and the
 year of the C128DCR's introduction, but also because it was the year I got
 my first computer, at the tender age of 13: a Commodore C128.
+
+## Screenshots
+
+VIC-IIe 40-column BASIC desktop:
+
+![VIC-IIe 40-column BASIC desktop](screenshots/vicii-basic.png)
+
+VDC 80-column BASIC desktop:
+
+![VDC 80-column BASIC desktop](screenshots/vdc-basic.png)
+
+The Rocky Horror Show, staircase scene:
+
+![The Rocky Horror Show staircase scene](screenshots/rocky-horror-staircase.png)
+
+The Rocky Horror Show, room scene:
+
+![The Rocky Horror Show room scene](screenshots/rocky-horror-room.png)
+
+LUDO:
+
+![LUDO game board on the VDC display](screenshots/ludo.png)
 
 ## Acknowledgments
 
@@ -105,6 +129,10 @@ make -j"$(nproc)"
 ```
 
 See [INSTALL.md](INSTALL.md) for other platforms.
+
+Tagged releases provide Fedora RPM, Debian DEB, Windows portable ZIP,
+macOS app bundles for Apple Silicon and Intel, and a Linux Flatpak bundle.
+They use the icon derived from `1986_logo.png`; machine ROMs are not bundled.
 
 ## Run the tests
 

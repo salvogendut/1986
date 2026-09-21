@@ -147,7 +147,7 @@ static bool replace_disk_image(Overlay *ov, int which, const char *path) {
         char message[64];
         snprintf(message, sizeof(message), "DRIVE %d: %s MEDIA INSERTED",
                  which, disk_image_format_name(&drive->image));
-        notify_post(message);
+        notify_post("%s", message);
     } else {
         notify_post(which == 2 ? "DRIVE 2 MEDIA EJECTED" :
                                  "DRIVE 1 MEDIA EJECTED");
