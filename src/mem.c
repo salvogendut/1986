@@ -45,16 +45,13 @@ static unsigned c128_config(const Mem *m) {
 static bool cfg_4000_is_rom(unsigned cfg) {
     return (cfg & 1) != 0;
 }
-/* $8000-$BFFF: k = cfg&7 -> 0,1 BASIC-hi; 2,3 internal function ROM; 4,5
- * external function ROM; 6,7 RAM. We map 0,1 to BASIC-hi and the rest to RAM
- * until the function ROMs are implemented. */
-static bool cfg_8000_is_rom(unsigned cfg) {
-    return (cfg & 7) == 0 || (cfg & 7) == 1;
+/* C128 MMU selectors: 00=BASIC/KERNAL, 01=internal function ROM,
+ * 10=external function ROM, 11=RAM. Internal ROM remains unimplemented. */
+static unsigned lower_rom_select(const Mem *m) {
+    return (m->mmu.mcr >> 2) & 3;
 }
-/* $E000-$FFFF: KERNAL ROM when the $C000-$FFFF selector (config bits 3-4)
- * is 0. The RAM-bank bit (config bit 5) does not affect ROM selection. */
-static bool cfg_e000_is_rom(unsigned cfg) {
-    return (cfg & 0x18) == 0x00;
+static unsigned upper_rom_select(const Mem *m) {
+    return (m->mmu.mcr >> 4) & 3;
 }
 
 bool mem_io_visible(const Mem *m) {
@@ -71,23 +68,30 @@ u8 mem_read(Mem *m, u16 addr) {
                                     : m->ram[bank_off(m, addr)];
     }
     if (addr < 0xC000) {                     /* $8000-$BFFF */
-        if (cfg_8000_is_rom(cfg))
+        if (lower_rom_select(m) == 0)
             return m->basic[0x4000 + (addr - 0x8000)];
+        if (lower_rom_select(m) == 2 && m->cart.attached)
+            return m->cart.rom[addr - 0x8000];
         return m->ram[bank_off(m, addr)];
     }
-    if (addr < 0xD000) {                     /* $C000-$CFFF EDITOR (always ROM in C128 mode) */
-        return m->editor[addr - 0xC000];
+    if (addr < 0xD000) {                     /* $C000-$CFFF */
+        if (upper_rom_select(m) == 0) return m->editor[addr - 0xC000];
+        if (upper_rom_select(m) == 2 && m->cart.attached)
+            return m->cart.rom[addr - 0x8000];
+        return m->ram[bank_off(m, addr)];
     }
     if (addr < 0xE000) {                     /* $D000-$DFFF */
-        /* With I/O banked out and the KERNAL selected for the upper ROM
-         * region, the C128 exposes its native 4K character set here. The
-         * CPU bus handles visible I/O before reaching this layer. */
+        /* The CPU bus dispatches visible I/O before reaching this layer. */
+        if (upper_rom_select(m) == 2 && m->cart.attached)
+            return m->cart.rom[addr - 0x8000];
         if (cfg < 8)
             return m->chargen[0x1000 + (addr & 0x0FFF)];
         return m->ram[bank_off(m, addr)];
     }
     /* $E000-$FFFF */
-    if (cfg_e000_is_rom(cfg)) return m->kernal[addr - 0xE000];
+    if (upper_rom_select(m) == 0) return m->kernal[addr - 0xE000];
+    if (upper_rom_select(m) == 2 && m->cart.attached)
+        return m->cart.rom[addr - 0x8000];
     return m->ram[bank_off(m, addr)];
 }
 

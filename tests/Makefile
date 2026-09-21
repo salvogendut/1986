@@ -5,7 +5,7 @@ CPPFLAGS ?=
 SDL3_CFLAGS ?= $(shell pkg-config --cflags sdl3)
 SDL3_LIBS ?= $(shell pkg-config --libs sdl3)
 
-TESTS = test-cpu test-mmu test-mem test-cia test-sid test-config test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-overlay test-display-footer test-vic
+TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-overlay test-display-footer test-vic
 
 .PHONY: all check clean
 
@@ -22,6 +22,10 @@ test-mmu: test_mmu.c ../src/mmu.c ../src/mmu.h
 test-mem: test_mem.c ../src/mem.c ../src/mem.h ../src/mmu.c ../src/mmu.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_mem.c ../src/mem.c ../src/mmu.c -o $@
+
+test-cartridge: test_cartridge.c ../src/cartridge.c ../src/cartridge.h ../src/mem.c ../src/mmu.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
+		test_cartridge.c ../src/cartridge.c ../src/mem.c ../src/mmu.c -o $@
 
 test-cia: test_cia.c ../src/cia.c ../src/cia.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
@@ -55,9 +59,9 @@ test-drive: test_drive.c ../src/drive.c ../src/drive.h ../src/disk_image.c ../sr
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_drive.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c -o $@
 
-test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c
+test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/cartridge.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
-		test_overlay.c ../src/overlay.c ../src/config.c ../src/drive.c \
+		test_overlay.c ../src/overlay.c ../src/config.c ../src/cartridge.c ../src/drive.c \
 		../src/disk_image.c ../src/virtual_drive.c $(SDL3_LIBS) -o $@
 
 test-display-footer: test_display_footer.c ../src/display.c ../src/display.h
@@ -72,6 +76,7 @@ check: $(TESTS)
 	./test-cpu
 	./test-mmu
 	./test-mem
+	./test-cartridge
 	./test-cia
 	./test-sid
 	./test-config

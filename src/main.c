@@ -80,6 +80,7 @@ static void usage(const char *argv0) {
         "  --fast           run the 8502 at 2 MHz\n"
         "  --rom DIR        directory holding the machine ROM images\n"
         "  --disk PATH      attach a D64, D71, or D81 image at launch\n"
+        "  --cart PATH      attach a generic C128 CRT or raw function ROM\n"
         "  --gif-out PATH   start recording a GIF at launch\n"
         "  --paste TEXT     inject text through the keyboard matrix\n"
         "  --paste-at N     delay --paste until emulated frame N\n"
@@ -106,6 +107,7 @@ int main(int argc, char **argv) {
     config_set_defaults(&cfg);
     const char *rom_dir = NULL;
     const char *disk_path = NULL;
+    const char *cart_path = NULL;
     const char *gif_out = NULL;
     const char *paste_arg = NULL;
     long paste_frame = 0;
@@ -119,6 +121,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--fast")) cfg.fast = true;
         else if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom_dir = argv[++i];
         else if (!strcmp(argv[i], "--disk") && i + 1 < argc) disk_path = argv[++i];
+        else if (!strcmp(argv[i], "--cart") && i + 1 < argc) cart_path = argv[++i];
         else if (!strcmp(argv[i], "--gif-out") && i + 1 < argc) gif_out = argv[++i];
         else if (!strcmp(argv[i], "--paste") && i + 1 < argc) paste_arg = argv[++i];
         else if (!strcmp(argv[i], "--paste-at") && i + 1 < argc) paste_frame = atol(argv[++i]);
@@ -136,6 +139,7 @@ int main(int argc, char **argv) {
         config_save(&cfg, cfg_path);
     if (rom_dir) snprintf(cfg.rom_dir, sizeof(cfg.rom_dir), "%s", rom_dir);
     if (disk_path) snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s", disk_path);
+    if (cart_path) snprintf(cfg.cart_path, sizeof(cfg.cart_path), "%s", cart_path);
     g_boot_trace = getenv("C128_BOOT_TRACE") != NULL;
     g_sid_trace = getenv("C128_SID_TRACE") != NULL;
     g_debug_enabled = g_boot_trace;
@@ -215,6 +219,18 @@ int main(int argc, char **argv) {
         if (cfg.disk2_path[0] && drive_attach_disk(&c.drive2, cfg.disk2_path) != 0)
             fprintf(stderr, "1986: could not attach second disk '%s'\n",
                     cfg.disk2_path);
+        if (cfg.cart_path[0]) {
+            CartridgeResult result = cartridge_attach(&c.mem.cart, cfg.cart_path);
+            if (result != CART_OK) {
+                fprintf(stderr, "1986: cartridge '%s': %s\n", cfg.cart_path,
+                        cartridge_result_name(result));
+                notify_post("%s", cartridge_result_name(result));
+                cfg.cart_path[0] = '\0';
+                config_save(&cfg, cfg_path);
+            } else {
+                notify_post("CARTRIDGE LOADED - F10 SWITCHES DISPLAY");
+            }
+        }
     }
 
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */

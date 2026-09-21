@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static int failures;
 #define CHECK(cond, msg) do { \
@@ -21,6 +22,8 @@ void display_set_crt(Display *d, bool enabled, int scanlines, int brightness,
     (void)contrast; (void)red; (void)green; (void)blue;
 }
 void display_set_one_display(Display *d, bool one) { (void)d; (void)one; }
+static int machine_resets;
+void c128_reset(C128 *c) { (void)c; machine_resets++; }
 
 static void key(Overlay *ov, SDL_Scancode sc) {
     SDL_Event event;
@@ -94,6 +97,50 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!ov.about_visible && ov.visible, "Enter dismisses About");
 
+    /* Cartridge selection is a live hardware change, not just a saved path.
+     * Isolate configuration writes from the actual user profile. */
+    char temp_home[] = "/tmp/1986-overlay-test-XXXXXX";
+    CHECK(mkdtemp(temp_home) != NULL, "create temporary config home");
+    char config_file[CONFIG_PATH_MAX];
+    snprintf(config_file, sizeof(config_file), "%s/1986.conf", temp_home);
+    setenv("C128_CONFIG_PATH", config_file, 1);
+    char cart_file[CONFIG_PATH_MAX];
+    snprintf(cart_file, sizeof(cart_file), "%s/test-cart.bin", temp_home);
+    FILE *cart_output = fopen(cart_file, "wb");
+    CHECK(cart_output != NULL, "create temporary raw cartridge");
+    if (cart_output) {
+        unsigned char block[0x2000];
+        memset(block, 0x5A, sizeof(block));
+        CHECK(fwrite(block, 1, sizeof(block), cart_output) == sizeof(block),
+              "write temporary raw cartridge");
+        fclose(cart_output);
+    }
+    CHECK(overlay_set_cartridge(&ov, cart_file), "insert raw cartridge from Media");
+    CHECK(c->mem.cart.attached && c->mem.cart.rom[0] == 0x5A &&
+          strcmp(cfg.cart_path, cart_file) == 0 && machine_resets == 1,
+          "insert maps the cartridge, persists its path, and resets");
+    Config saved;
+    config_set_defaults(&saved);
+    CHECK(config_load(&saved, config_file) &&
+          strcmp(saved.cart_path, cart_file) == 0,
+          "live cartridge path is saved to config");
+
+    CHECK(!overlay_set_cartridge(&ov, "/tmp/1986-missing-cartridge.bin"),
+          "invalid replacement reports failure");
+    CHECK(!c->mem.cart.attached && cfg.cart_path[0] == '\0' &&
+          machine_resets == 2,
+          "failed replacement ejects old image and clears saved path");
+    CHECK(overlay_set_cartridge(&ov, cart_file), "reattach cartridge");
+    ov.section = OV_MEDIA;
+    ov.row = 3; /* cartridge when second drive is disabled */
+    key(&ov, SDL_SCANCODE_DELETE);
+    CHECK(!c->mem.cart.attached && cfg.cart_path[0] == '\0' &&
+          machine_resets == 4,
+          "Del ejects cartridge and resets the machine");
+    config_set_defaults(&saved);
+    CHECK(config_load(&saved, config_file) && saved.cart_path[0] == '\0',
+          "ejection is persisted");
+
     const char *preview = getenv("C128_OVERLAY_PREVIEW");
     if (preview) {
         SDL_Window *window = NULL;
@@ -124,6 +171,10 @@ int main(void) {
         }
         SDL_Quit();
     }
+
+    unlink(cart_file);
+    unlink(config_file);
+    rmdir(temp_home);
 
     free(c);
     if (failures == 0) { puts("test-overlay: OK"); return 0; }

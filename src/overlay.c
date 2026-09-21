@@ -131,6 +131,38 @@ static bool replace_disk_image(Overlay *ov, int which, const char *path) {
     return true;
 }
 
+bool overlay_set_cartridge(Overlay *ov, const char *path) {
+    char selected[CONFIG_PATH_MAX];
+    if (path && strlen(path) >= sizeof(selected)) {
+        notify_post("CARTRIDGE PATH TOO LONG");
+        return false;
+    }
+    snprintf(selected, sizeof(selected), "%s", path ? path : "");
+    Cartridge *cart = &ov->c128->mem.cart;
+    bool had_cart = cart->attached;
+    cartridge_detach(cart);
+    ov->cfg->cart_path[0] = '\0';
+    if (selected[0]) {
+        CartridgeResult result = cartridge_attach(cart, selected);
+        if (result != CART_OK) {
+            fprintf(stderr, "1986: cartridge '%s': %s\n", selected,
+                    cartridge_result_name(result));
+            notify_post("%s", cartridge_result_name(result));
+            if (had_cart) c128_reset(ov->c128);
+            save_config(ov);
+            return false;
+        }
+        snprintf(ov->cfg->cart_path, sizeof(ov->cfg->cart_path), "%s", selected);
+        c128_reset(ov->c128); /* a cartridge is sampled at machine startup */
+        notify_post("CARTRIDGE INSERTED - F10 SWITCHES DISPLAY");
+    } else if (had_cart) {
+        c128_reset(ov->c128);
+        notify_post("CARTRIDGE EJECTED - MACHINE RESET");
+    }
+    save_config(ov);
+    return true;
+}
+
 static int media_item(const Overlay *ov, int row) {
     return !ov->cfg->second_drive && row >= 2 ? row + 2 : row;
 }
@@ -139,6 +171,11 @@ static void clear_media_entry(Overlay *ov) {
     if (ov->section != OV_MEDIA) return;
 
     int item = media_item(ov, ov->row);
+    if (item == MEDIA_CART) {
+        if (ov->cfg->cart_path[0] || ov->c128->mem.cart.attached)
+            overlay_set_cartridge(ov, NULL);
+        return;
+    }
     if (item == MEDIA_DISK1 || item == MEDIA_DISK2) {
         int which = item == MEDIA_DISK2 ? 2 : 1;
         Drive *drive = which == 2 ? &ov->c128->drive2 : &ov->c128->drive;
@@ -180,7 +217,7 @@ static const char *media_label(int row) {
 
 static const char *media_extension(int row) {
     static const char *const exts[MEDIA_ITEM_COUNT] = {
-        "", ".d64/.d71/.d81", "", ".d64/.d71/.d81", ".tap", ".crt"
+        "", ".d64/.d71/.d81", "", ".d64/.d71/.d81", ".tap", ".crt/.bin/.rom"
     };
     return exts[row];
 }
@@ -229,7 +266,7 @@ static void open_media_dialog(Overlay *ov, int row) {
         { "All files", "*"       },
     };
     static const SDL_DialogFileFilter cart_filters[] = {
-        { "CRT cartridges", "crt;CRT" },
+        { "C128 CRT or function ROM", "crt;CRT;bin;BIN;rom;ROM" },
         { "All files",      "*"       },
     };
     const SDL_DialogFileFilter *filters = disk_filters;
@@ -497,10 +534,13 @@ void overlay_tick(Overlay *ov) {
                            ov->dialog_path);
         return;
     }
+    if (kind == OV_DIALOG_CART) {
+        overlay_set_cartridge(ov, ov->dialog_path);
+        return;
+    }
 
     char *dest = NULL;
     if (kind == OV_DIALOG_TAPE)      dest = ov->cfg->tape_path;
-    else if (kind == OV_DIALOG_CART) dest = ov->cfg->cart_path;
     else if (kind == OV_DIALOG_ROM)  dest = ov->cfg->rom_dir;
     if (dest) {
         snprintf(dest, CONFIG_PATH_MAX, "%s", ov->dialog_path);

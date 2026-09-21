@@ -1,6 +1,7 @@
 #pragma once
 #include "types.h"
 #include "mmu.h"
+#include "cartridge.h"
 
 /*
  * C128 memory: 128 KiB of RAM (two 64K banks), the ROM images, and the I/O
@@ -32,6 +33,7 @@ typedef struct {
     u8   kernal[ROM_KERNAL];
     u8   chargen[ROM_CHARGEN];
     u8   color_ram[0x800];   /* $D800-$DBFF nibbles, two 1K banks */
+    Cartridge cart;          /* native external function ROM, if attached */
     u8   pla_data;           /* 8502 $01 port decoded value (PLA output) */
 } Mem;
 

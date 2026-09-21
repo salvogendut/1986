@@ -54,6 +54,13 @@ void config_normalize_drive_units(Config *cfg) {
 /* Resolve the config file location: $HOME/.config/1986/1986.conf, falling
  * back to a relative "1986.conf" if HOME is unset. Creates the directory. */
 void config_path(char *out, size_t sz) {
+    /* Isolated test runs (and portable installations) can select an explicit
+     * config file without redirecting the entire process home directory. */
+    const char *override = getenv("C128_CONFIG_PATH");
+    if (override && *override) {
+        snprintf(out, sz, "%s", override);
+        return;
+    }
     const char *home = getenv("HOME");
     if (home && *home) {
         char dir[CONFIG_PATH_MAX];

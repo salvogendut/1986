@@ -271,13 +271,15 @@ static void migrate_vdc_to_vic(C128 *c) {
         }
 }
 
-/* Toggle the 40/80 column mode: flip the MMU sense key, the KERNAL mode flag
- * ($00D7) and migrate the text screen to the newly-selected display. */
+/* Toggle the 40/80 column mode: flip the MMU sense key and KERNAL mode flag.
+ * A running cartridge owns its video RAM; copying the other display's text
+ * over it would erase cartridge graphics (or a diagnostic screen). */
 void c128_switch_4080(C128 *c) {
-    c->col_mode_80 = !c->col_mode_80;
+    c->col_mode_80 = !c->display.vdc_active;
     c->mem.mmu.col4080 = !c->col_mode_80;
     c->mem.ram[0xD7] = c->col_mode_80 ? 0x80 : 0x00;
     display_set_vdc_active(&c->display, c->col_mode_80);
+    if (c->mem.cart.attached) return;
     if (c->col_mode_80)
         migrate_vic_to_vdc(c);   /* switched to 80-col VDC */
     else

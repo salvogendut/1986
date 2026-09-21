@@ -33,11 +33,11 @@ typedef struct {
     bool       gif_ffmpeg;         /* optimize GIF via ffmpeg if present */
     char       rom_dir[CONFIG_PATH_MAX];  /* directory holding machine ROMs */
 
-    /* Media files chosen in the overlay (not yet connected to a device). */
+    /* Media files chosen in the overlay. Tape remains a placeholder. */
     char       disk_path[CONFIG_PATH_MAX];  /* D64/D71/D81 disk image */
     char       disk2_path[CONFIG_PATH_MAX]; /* second drive disk image */
     char       tape_path[CONFIG_PATH_MAX];  /* Tape .tap image */
-    char       cart_path[CONFIG_PATH_MAX];  /* Cartridge .crt image */
+    char       cart_path[CONFIG_PATH_MAX];  /* native C128 CRT/raw function ROM */
 
     /* Disk drive (Commodore 1571). */
     int        drive_unit;        /* IEC device number (8-11) */
@@ -65,5 +65,6 @@ bool config_save(const Config *cfg, const char *path);
 bool config_save_column_mode(const char *path, bool col_mode_80);
 
 /* Resolve the config file location: $HOME/.config/1986/1986.conf (or a
- * relative "1986.conf" if HOME is unset). Creates the directory. */
+ * relative "1986.conf" if HOME is unset). C128_CONFIG_PATH overrides this
+ * for isolated/portable runs. Creates the default directory. */
 void config_path(char *out, size_t sz);
