@@ -153,6 +153,7 @@ void c128_init(C128 *c, Config *cfg) {
                            .ctx = c };
     vic_init(&c->vic);
     vdc_init(&c->vdc);
+    vdc_set_ram_size_kb(&c->vdc, cfg->vdc_ram_kb);
     cia_init(&c->cia1);
     cia_init(&c->cia2);
     sid_init(&c->sid);
