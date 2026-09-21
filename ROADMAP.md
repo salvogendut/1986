@@ -191,6 +191,8 @@ cycle-level 1571 implementation without conflating their interfaces.
 - [x] Virtual-drive `LOAD`/`DLOAD` and DOS error handling (#31).
 - [x] Live D64 eject/insert from the Media Overlay, including persisted media
   state and immediate `DIRECTORY` visibility after a swap (#44).
+- [x] Read-only standalone PRG loading from either Drive picker or `--disk`,
+  with single-file directory listing and normal IEC `LOAD`/`DLOAD` (#80).
 - [x] Virtual-drive `SAVE`/`DSAVE` to D64 with BAM/directory updates and
   atomic write-back (#53).
 - [x] SCRATCH and RENAME command-channel operations on D64/D71/D81 root

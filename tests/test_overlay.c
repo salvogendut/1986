@@ -35,15 +35,17 @@ static int machine_resets;
 void c128_reset(C128 *c) { (void)c; machine_resets++; }
 
 static char picker_location[CONFIG_PATH_MAX];
+static char picker_filter[128];
 static bool picker_was_folder;
 static bool cancel_next_picker;
 void SDL_ShowOpenFileDialog(SDL_DialogFileCallback callback, void *userdata,
                             SDL_Window *window, const SDL_DialogFileFilter *filters,
                             int nfilters, const char *default_location,
                             bool allow_many) {
-    (void)callback; (void)userdata; (void)window; (void)filters;
-    (void)nfilters; (void)allow_many;
+    (void)callback; (void)userdata; (void)window; (void)allow_many;
     picker_was_folder = false;
+    snprintf(picker_filter, sizeof(picker_filter), "%s",
+             filters && nfilters ? filters[0].pattern : "");
     snprintf(picker_location, sizeof(picker_location), "%s",
              default_location ? default_location : "");
     if (cancel_next_picker) {
@@ -269,6 +271,48 @@ int main(void) {
           strcmp(saved.last_tape_dir, disk_a) == 0,
           "recent picker directories survive configuration reload");
 
+    char prg_file[CONFIG_PATH_MAX];
+    snprintf(prg_file, sizeof(prg_file), "%s/overlay-test.prg", temp_home);
+    FILE *prg_output = fopen(prg_file, "wb");
+    const unsigned char prg_bytes[] = { 0x01, 0x1C, 0x00, 0x00, 0x00 };
+    CHECK(prg_output != NULL, "create Overlay PRG fixture");
+    if (prg_output) {
+        CHECK(fwrite(prg_bytes, 1, sizeof(prg_bytes), prg_output) ==
+              sizeof(prg_bytes), "write Overlay PRG fixture");
+        fclose(prg_output);
+    }
+    ov.section = OV_MEDIA;
+    ov.row = 1;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(strstr(picker_filter, "prg;PRG") != NULL,
+          "Drive 1 picker includes PRG files");
+    snprintf(ov.dialog_path, sizeof(ov.dialog_path), "%s", prg_file);
+    ov.dialog_ready = true;
+    overlay_tick(&ov);
+    CHECK(c->drive.disk_attached && c->drive.image.format == DISK_FORMAT_PRG &&
+          strcmp(cfg.disk_path, prg_file) == 0,
+          "Drive 1 Overlay selection attaches and persists standalone PRG");
+    config_set_defaults(&saved);
+    CHECK(config_load(&saved, config_file) &&
+          strcmp(saved.disk_path, prg_file) == 0,
+          "standalone PRG selection restores from saved configuration");
+    key(&ov, SDL_SCANCODE_DELETE);
+    CHECK(!c->drive.disk_attached && cfg.disk_path[0] == '\0',
+          "Del ejects standalone PRG media");
+    cfg.second_drive = true;
+    ov.row = 3;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(strstr(picker_filter, "prg;PRG") != NULL,
+          "Drive 2 picker includes PRG files");
+    snprintf(ov.dialog_path, sizeof(ov.dialog_path), "%s", prg_file);
+    ov.dialog_ready = true;
+    overlay_tick(&ov);
+    CHECK(c->drive2.disk_attached && c->drive2.image.format == DISK_FORMAT_PRG &&
+          strcmp(cfg.disk2_path, prg_file) == 0,
+          "Drive 2 Overlay selection attaches standalone PRG independently");
+    key(&ov, SDL_SCANCODE_DELETE);
+    cfg.second_drive = false;
+
     /* Cartridge selection is a live hardware change, not just a saved path. */
     char cart_file[CONFIG_PATH_MAX];
     snprintf(cart_file, sizeof(cart_file), "%s/test-cart.bin", temp_home);
@@ -379,6 +423,7 @@ int main(void) {
     }
 
     unlink(cart_file);
+    unlink(prg_file);
     unlink(u36_file);
     unlink(config_file);
     rmdir(disk_a);

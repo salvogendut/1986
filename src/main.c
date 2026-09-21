@@ -118,7 +118,7 @@ static void usage(const char *argv0) {
         "  --fullscreen     start fullscreen\n"
         "  --fast           run the 8502 at 2 MHz\n"
         "  --rom DIR        directory holding the machine ROM images\n"
-        "  --disk PATH      attach a D64, D71, or D81 image at launch\n"
+        "  --disk PATH      attach a D64, D71, D81, or PRG at launch\n"
         "  --cart PATH      attach a generic C128 CRT or raw function ROM\n"
         "  --gif-out PATH   start recording a GIF at launch\n"
         "  --paste TEXT     inject text through the keyboard matrix\n"
@@ -253,12 +253,12 @@ int main(int argc, char **argv) {
         } else {
             fprintf(stderr, "1986: loaded %d ROM image(s) from '%s'\n", n, dir);
         }
-        /* Virtual-drive mode reads the image directly and deliberately does
+        /* Virtual-drive mode reads mounted media directly and deliberately does
          * not load a 1571 ROM. A future true-drive module will own that ROM. */
         if (cfg.disk_path[0] && drive_attach_disk(&c.drive, cfg.disk_path) != 0)
-            fprintf(stderr, "1986: could not attach disk '%s'\n", cfg.disk_path);
+            fprintf(stderr, "1986: could not attach drive media '%s'\n", cfg.disk_path);
         if (cfg.disk2_path[0] && drive_attach_disk(&c.drive2, cfg.disk2_path) != 0)
-            fprintf(stderr, "1986: could not attach second disk '%s'\n",
+            fprintf(stderr, "1986: could not attach second-drive media '%s'\n",
                     cfg.disk2_path);
         if (cfg.cart_path[0]) {
             CartridgeResult result = cartridge_attach(&c.mem.cart, cfg.cart_path);

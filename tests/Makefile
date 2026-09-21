@@ -5,7 +5,7 @@ CPPFLAGS ?=
 SDL3_CFLAGS ?= $(shell pkg-config --cflags sdl3)
 SDL3_LIBS ?= $(shell pkg-config --libs sdl3)
 
-TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-overlay test-display-footer test-vic test-vdc
+TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-prg-drive test-overlay test-display-footer test-vic test-vdc
 
 .PHONY: all check clean
 
@@ -68,6 +68,10 @@ test-drive: test_drive.c ../src/drive.c ../src/drive.h ../src/disk_image.c ../sr
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_drive.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c -o $@
 
+test-prg-drive: test_prg_drive.c ../src/drive.c ../src/drive.h ../src/disk_image.c ../src/disk_image.h ../src/virtual_drive.c ../src/virtual_drive.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
+		test_prg_drive.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c -o $@
+
 test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_overlay.c ../src/overlay.c ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c \
@@ -100,6 +104,7 @@ check: $(TESTS)
 	./test-d64-save
 	./test-disk-formats
 	./test-drive
+	./test-prg-drive
 	./test-overlay
 	./test-display-footer
 	./test-vic

@@ -145,12 +145,12 @@ static bool replace_disk_image(Overlay *ov, int which, const char *path) {
     if (path && path[0]) {
         snprintf(configured, CONFIG_PATH_MAX, "%s", path);
         char message[64];
-        snprintf(message, sizeof(message), "DRIVE %d: %s IMAGE INSERTED",
+        snprintf(message, sizeof(message), "DRIVE %d: %s MEDIA INSERTED",
                  which, disk_image_format_name(&drive->image));
         notify_post(message);
     } else {
-        notify_post(which == 2 ? "DRIVE 2 IMAGE EJECTED" :
-                                 "DRIVE 1 IMAGE EJECTED");
+        notify_post(which == 2 ? "DRIVE 2 MEDIA EJECTED" :
+                                 "DRIVE 1 MEDIA EJECTED");
     }
     save_config(ov);
     return true;
@@ -284,7 +284,7 @@ static const char *media_label(int row) {
 
 static const char *media_extension(int row) {
     static const char *const exts[MEDIA_ITEM_COUNT] = {
-        "", ".d64/.d71/.d81", "", ".d64/.d71/.d81", ".tap",
+        "", ".d64/.d71/.d81/.prg", "", ".d64/.d71/.d81/.prg", ".tap",
         ".crt/.bin/.rom", ".bin/.rom"
     };
     return exts[row];
@@ -394,7 +394,7 @@ static void remember_dialog_directory(Overlay *ov, OvDialogKind kind,
 
 static void open_media_dialog(Overlay *ov, int row) {
     static const SDL_DialogFileFilter disk_filters[] = {
-        { "D64/D71/D81 disk images", "d64;D64;d71;D71;d81;D81" },
+        { "D64/D71/D81 disk images or PRG", "d64;D64;d71;D71;d81;D81;prg;PRG" },
         { "All files",       "*"       },
     };
     static const SDL_DialogFileFilter tape_filters[] = {
