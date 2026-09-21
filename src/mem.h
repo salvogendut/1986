@@ -37,6 +37,8 @@ typedef struct {
 
 void mem_init(Mem *m);
 void mem_reset(Mem *m);
+/* Decode the effective 8502 port pins; input lines float high. */
+void mem_set_processor_port(Mem *m, u8 dir, u8 data);
 u8   mem_read(Mem *m, u16 addr);
 void mem_write(Mem *m, u16 addr, u8 val);
 /* CR bit 0 is active-low: zero exposes I/O at $D000-$DFFF. */

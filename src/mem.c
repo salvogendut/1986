@@ -7,11 +7,15 @@
 void mem_init(Mem *m) {
     memset(m, 0, sizeof(*m));
     mmu_init(&m->mmu);
-    m->pla_data = 0xFF;   /* all $01 port lines floating high until written */
+    mem_set_processor_port(m, 0, 0); /* all input lines float high */
 }
 
 void mem_reset(Mem *m) {
     mmu_reset(&m->mmu);
+}
+
+void mem_set_processor_port(Mem *m, u8 dir, u8 data) {
+    m->pla_data = (u8)((data & dir) | (u8)~dir);
 }
 
 static u32 bank_off(const Mem *m, u16 addr) {

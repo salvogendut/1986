@@ -67,11 +67,10 @@ static void io_write(C128 *c, u16 addr, u8 val) {
 }
 
 /* Decode the 8502 $01 port (the PLA). The effective port value is
- * (data & dir) | ~dir; its low bits select the colour-RAM banks and chargen. */
+ * (data & dir) | ~dir; bits 0-1 select colour-RAM banks and bit 2 determines
+ * whether the VIC sees character ROM or RAM in its $1000-$1FFF window. */
 static void pla_update(C128 *c) {
-    u8 data = c->cpu.io_port & c->cpu.io_ddr;
-    u8 dir  = c->cpu.io_ddr;
-    c->mem.pla_data = (u8)(data | ~dir);
+    mem_set_processor_port(&c->mem, c->cpu.io_ddr, c->cpu.io_port);
 }
 
 u8 c128_mem_read(void *ctx, u16 addr) {

@@ -79,19 +79,25 @@ layouts without relying on emulator-only shortcuts.
 ## Milestone 3 — Native C128 PLA accuracy  `[ ]`
 
 **Goal.** Finish the 8502 `$00`/`$01` port and remaining native C128 memory
-visibility rules without introducing a partial C64 personality.
+visibility rules without introducing a partial C64 personality. On the
+International/US model, `$01` bit 6 does not select the character-ROM half;
+localized DIN/ASCII variants are a separate future scope decision.
 
 - [x] `data_read = (data & dir) | ~dir` decoded.
 - [x] Low bits select the CPU/VIC colour-RAM banks at `$D800`.
 - [x] Native MMU character-ROM visibility at `$D000-$DFFF`, allowing BASIC
   7.0 `CHAR` to fetch real glyph data in bitmap mode.
-- [ ] Chargen select: `$01` bit 6 (`mem_update_chargen(pport.data_read & 0x40)`)
-  selects the chargen address.
+- [x] VIC character-ROM visibility follows effective `$01` bit 2 and the
+  `$D018` character address; RAM-defined character sets use the selected VIC
+  bank when ROM is not mapped (#47).
+- [ ] Verify remaining native PLA memory visibility and processor-port
+  electrical/readback details against VICE's tests.
 - [x] Reject `$D505` C64-mode requests with a one-shot user notification and
   recover through the native C128 reset path.
 
-**Done when.** Native chargen and colour-RAM visibility track the KERNAL's
-`$01` writes, and unsupported mode requests cannot leave partial MMU state.
+**Done when.** Native processor-port visibility and readback track the
+KERNAL's `$00/$01` writes and remaining VICE hardware tests, without leaving
+partial MMU state on unsupported mode requests.
 
 ---
 
