@@ -37,12 +37,14 @@ Settings are read from `~/.config/1986/1986.conf` (or from `1986.conf` when
 [`1986.conf.example`](1986.conf.example).
 For an isolated run, `C128_CONFIG_PATH` can point to a specific config file.
 
-The last display selected with F10 is stored as `display_columns = 40` or
-`display_columns = 80` when the application closes normally and restored on
-the next launch. Existing configurations without this key default to the
-80-column VDC display. With Unified Display enabled, the shared window shows
-that output. With Unified Display disabled, both output windows open and the
-last selected output receives window focus.
+**General > 40/80 key** selects the emulated keyboard's 40- or 80-column
+default, equivalent to setting the C128's physical 40/80 key. It takes effect
+immediately and is saved as `display_columns = 40` or `display_columns = 80`.
+F10 switches between the outputs too; its last choice is saved when the
+application closes normally. Existing configurations without this key default
+to the 80-column VDC display. With Unified Display enabled, the shared window
+shows the selected output. With Unified Display disabled, both output windows
+open and the selected output receives window focus.
 
 ## Media overlay
 
@@ -67,8 +69,9 @@ ROMs are mirrored through the 32 KiB function-ROM space. Inserting, replacing,
 or ejecting a cartridge resets the machine, and Del ejects it. A failed
 replacement leaves the slot empty and clears the saved path. C64-only CRTs
 cannot be used because the C64 personality is intentionally unsupported.
-Some cartridges draw on the VIC 40-column output even when the saved display
-mode is VDC 80-column; press F10 if the selected output appears blank.
+Some cartridges draw on the VIC 40-column output even when the saved default
+is VDC 80-column; select **General > 40/80 key > 40 columns (VIC)** to make
+the VIC output the persistent default, or press F10 to switch while running.
 Selection is restored at launch from `cart` in the config; `--cart PATH`
 overrides it for that run. Tape selection remains a placeholder for now.
 

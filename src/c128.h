@@ -52,6 +52,7 @@ void c128_reset(C128 *c);
 int  c128_frame(C128 *c);      /* run one frame; returns CPU cycles consumed */
 u64  c128_cycles_to_ns(const C128 *c, int cycles);
 void c128_key_event(C128 *c, int scancode, bool down);
+void c128_set_4080(C128 *c, bool col80); /* set the latched 40/80 key and active display */
 void c128_switch_4080(C128 *c);   /* toggle 40-column VIC <-> 80-column VDC */
 
 /* IEC serial-bus forwarding (installed via cpu_install_iec_traps). */

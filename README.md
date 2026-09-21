@@ -57,7 +57,8 @@ Current working pieces include:
   pause, F8 monitor, F9 options overlay, F10 40/80 switch, F11 fullscreen,
   F12 quit.
 - An in-window function-key reminder in both display windows and an About
-  dialog in General showing the emulator version and build commit.
+  dialog in General showing the emulator version and build commit. General
+  also has a persistent 40/80 key setting for the default VIC/VDC output.
 - Compact options overlay that reads and writes `1986.conf`, with an optional
   second virtual IEC drive and separately selected disk image/unit.
 - VICE's 8502/6510 core and a reused Z80 core wired to the C128 bus.

@@ -405,7 +405,7 @@ int main(int argc, char **argv) {
                     ev.key.scancode == SDL_SCANCODE_RSHIFT)
                     pc_shift_held = false;
                 if (ev.key.scancode == SDL_SCANCODE_PRINTSCREEN)
-                    c.mem.mmu.col4080 = true;   /* 40/80 key released */
+                    c.mem.mmu.col4080 = !c.col_mode_80; /* restore latched key */
                 bool fkey = (ev.key.scancode >= SDL_SCANCODE_F1 &&
                              ev.key.scancode <= SDL_SCANCODE_F8);
                 if (fkey) {

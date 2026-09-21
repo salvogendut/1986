@@ -27,7 +27,7 @@ typedef struct {
     int        crt_blue;
     C128Model  model;              /* which C128 variant to emulate */
     bool       fast;               /* run the 8502 at 2 MHz (C128 fast mode) */
-    bool       col_mode_80;        /* last selected display: VDC vs VIC-II */
+    bool       col_mode_80;        /* latched 40/80 key: VDC vs VIC-II */
     int        gif_width;          /* F6 GIF capture width */
     int        gif_fps;            /* F6 GIF capture fps */
     bool       gif_ffmpeg;         /* optimize GIF via ffmpeg if present */

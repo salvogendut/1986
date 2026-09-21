@@ -316,7 +316,7 @@ static bool section_available(const Overlay *ov, OvSection s) {
 /* Number of selectable rows in each section. */
 static int section_rows(const Overlay *ov, OvSection s) {
     switch (s) {
-        case OV_GENERAL:  return 3;   /* Tinker, ROMS PATH, About */
+        case OV_GENERAL:  return 4;   /* 40/80 key, Tinker, ROMS PATH, About */
         case OV_MEDIA:    return ov->cfg->second_drive ? 6 : 4;
         case OV_ADVANCED: return ADV_ROWS;
         default:          return 0;
@@ -344,11 +344,18 @@ static void overlay_activate(Overlay *ov) {
     switch (ov->section) {
         case OV_GENERAL:
             if (ov->row == 0) {
+                ov->cfg->col_mode_80 = !ov->cfg->col_mode_80;
+                c128_set_4080(ov->c128, ov->cfg->col_mode_80);
+                display_focus_active(&ov->c128->display);
+                if (ov->cfg->display_change_reset)
+                    c128_reset(ov->c128);
+                save_config(ov);
+            } else if (ov->row == 1) {
                 ov->cfg->tinker = !ov->cfg->tinker;
                 /* Leaving Tinker off hides Advanced; fall back to General. */
                 if (!ov->cfg->tinker && ov->section == OV_ADVANCED)
                     ov->section = OV_GENERAL;
-            } else if (ov->row == 1) {
+            } else if (ov->row == 2) {
                 open_rom_dialog(ov);
             } else {
                 ov->about_visible = true;
@@ -607,7 +614,7 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
     int lw = (int)(rw / scale);
     int panel_w = lw - 20 < 820 ? lw - 20 : 820;
     int rows = ov->section == OV_ADVANCED ? ADV_ROWS :
-               ov->section == OV_MEDIA ? section_rows(ov, OV_MEDIA) : 10;
+               ov->section == OV_MEDIA ? section_rows(ov, OV_MEDIA) : 11;
     int panel_h = 48 + rows * OV_LINE_H + 42;
 
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
@@ -655,13 +662,16 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, panel_w, y, "Emulator", PACKAGE_VERSION, false); y += OV_LINE_H;
 #endif
         y += OV_LINE_H;
-        draw_row(r, panel_w, y, "Tinker", ov->cfg->tinker ? "On" : "Off",
+        draw_row(r, panel_w, y, "40/80 key",
+                 ov->cfg->col_mode_80 ? "80 columns (VDC)" : "40 columns (VIC)",
                  ov->row == 0); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Tinker", ov->cfg->tinker ? "On" : "Off",
+                 ov->row == 1); y += OV_LINE_H;
         char rd[CONFIG_PATH_MAX];
         rom_path_display(ov, rd, sizeof(rd));
-        draw_row(r, panel_w, y, "ROMS PATH", rd, ov->row == 1);
+        draw_row(r, panel_w, y, "ROMS PATH", rd, ov->row == 2);
         y += OV_LINE_H;
-        draw_row(r, panel_w, y, "About", "Program details", ov->row == 2);
+        draw_row(r, panel_w, y, "About", "Program details", ov->row == 3);
     } else if (ov->section == OV_MEDIA) {
         for (int i = 0; i < section_rows(ov, OV_MEDIA); i++) {
             int item = media_item(ov, i);

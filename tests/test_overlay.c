@@ -22,6 +22,14 @@ void display_set_crt(Display *d, bool enabled, int scanlines, int brightness,
     (void)contrast; (void)red; (void)green; (void)blue;
 }
 void display_set_one_display(Display *d, bool one) { (void)d; (void)one; }
+static int display_focuses;
+void display_focus_active(Display *d) { (void)d; display_focuses++; }
+void c128_set_4080(C128 *c, bool col80) {
+    c->col_mode_80 = col80;
+    c->mem.mmu.col4080 = !col80;
+    c->mem.ram[0xD7] = col80 ? 0x80 : 0;
+    c->display.vdc_active = col80;
+}
 static int machine_resets;
 void c128_reset(C128 *c) { (void)c; machine_resets++; }
 
@@ -47,7 +55,30 @@ int main(void) {
     Overlay ov;
     overlay_init(&ov, &cfg, c);
 
+    /* Isolate all overlay configuration writes from the user profile. */
+    char temp_home[] = "/tmp/1986-overlay-test-XXXXXX";
+    CHECK(mkdtemp(temp_home) != NULL, "create temporary config home");
+    char config_file[CONFIG_PATH_MAX];
+    snprintf(config_file, sizeof(config_file), "%s/1986.conf", temp_home);
+    setenv("C128_CONFIG_PATH", config_file, 1);
+
     key(&ov, SDL_SCANCODE_F9);
+    CHECK(cfg.col_mode_80, "80-column key is selected by default");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(!cfg.col_mode_80 && !c->col_mode_80 && c->mem.mmu.col4080 &&
+          !c->display.vdc_active && display_focuses == 1,
+          "General 40/80 key selects VIC and focuses its window");
+    Config saved;
+    config_set_defaults(&saved);
+    CHECK(config_load(&saved, config_file) && !saved.col_mode_80,
+          "40-column key selection is persisted");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.col_mode_80 && c->col_mode_80 && !c->mem.mmu.col4080 &&
+          c->display.vdc_active && display_focuses == 2,
+          "General 40/80 key selects VDC and focuses its window");
+    config_set_defaults(&saved);
+    CHECK(config_load(&saved, config_file) && saved.col_mode_80,
+          "80-column key selection is persisted");
     key(&ov, SDL_SCANCODE_RIGHT);
     key(&ov, SDL_SCANCODE_RIGHT);
     CHECK(ov.visible && ov.section == OV_ADVANCED,
@@ -84,6 +115,7 @@ int main(void) {
           "General opens with first selectable row");
     key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_DOWN);
+    key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.about_visible, "General About opens program details");
     key(&ov, SDL_SCANCODE_RIGHT);
@@ -97,13 +129,7 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!ov.about_visible && ov.visible, "Enter dismisses About");
 
-    /* Cartridge selection is a live hardware change, not just a saved path.
-     * Isolate configuration writes from the actual user profile. */
-    char temp_home[] = "/tmp/1986-overlay-test-XXXXXX";
-    CHECK(mkdtemp(temp_home) != NULL, "create temporary config home");
-    char config_file[CONFIG_PATH_MAX];
-    snprintf(config_file, sizeof(config_file), "%s/1986.conf", temp_home);
-    setenv("C128_CONFIG_PATH", config_file, 1);
+    /* Cartridge selection is a live hardware change, not just a saved path. */
     char cart_file[CONFIG_PATH_MAX];
     snprintf(cart_file, sizeof(cart_file), "%s/test-cart.bin", temp_home);
     FILE *cart_output = fopen(cart_file, "wb");
@@ -119,7 +145,6 @@ int main(void) {
     CHECK(c->mem.cart.attached && c->mem.cart.rom[0] == 0x5A &&
           strcmp(cfg.cart_path, cart_file) == 0 && machine_resets == 1,
           "insert maps the cartridge, persists its path, and resets");
-    Config saved;
     config_set_defaults(&saved);
     CHECK(config_load(&saved, config_file) &&
           strcmp(saved.cart_path, cart_file) == 0,
@@ -153,7 +178,7 @@ int main(void) {
             c->display.window = window;
             if (getenv("C128_OVERLAY_PREVIEW_ABOUT")) {
                 ov.section = OV_GENERAL;
-                ov.row = 2;
+                ov.row = 3;
                 ov.about_visible = true;
             } else {
                 ov.section = OV_ADVANCED;

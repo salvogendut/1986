@@ -214,12 +214,12 @@ int c128_frame(C128 *c) {
     vic_bank |= (unsigned)(~cia2_pa) & 0x03;
     vic_set_bank(&c->vic, vic_bank);
 
-    /* Render the VIC-IIe frame (40-column) and the VDC 8563 (80-column)
-     * framebuffer every frame. The active display is selected from the
-     * KERNAL's 40/80 mode flag ($00D7: 0 = 40-col, non-zero = 80-col). */
+    /* Render both video devices. The latched physical 40/80 key selects the
+     * visible output; $00D7 is a KERNAL software flag and can disagree with
+     * it (notably when a cartridge draws to VIC while BASIC is in 80-col). */
     vic_render(&c->vic, &c->mem, &c->display);
     vdc_render(&c->vdc, c->display.vdc_pixels, VDC_SCREEN_W, VDC_SCREEN_H);
-    c->display.vdc_active = (c->mem.ram[0x00D7] != 0);
+    display_set_vdc_active(&c->display, !c->mem.mmu.col4080);
     return total;
 }
 
@@ -271,14 +271,19 @@ static void migrate_vdc_to_vic(C128 *c) {
         }
 }
 
-/* Toggle the 40/80 column mode: flip the MMU sense key and KERNAL mode flag.
- * A running cartridge owns its video RAM; copying the other display's text
- * over it would erase cartridge graphics (or a diagnostic screen). */
-void c128_switch_4080(C128 *c) {
-    c->col_mode_80 = !c->display.vdc_active;
+/* Latch the physical 40/80 key and mirror the choice into the KERNAL flag so
+ * the running BASIC environment follows the host's display choice too. */
+void c128_set_4080(C128 *c, bool col80) {
+    c->col_mode_80 = col80;
     c->mem.mmu.col4080 = !c->col_mode_80;
     c->mem.ram[0xD7] = c->col_mode_80 ? 0x80 : 0x00;
     display_set_vdc_active(&c->display, c->col_mode_80);
+}
+
+/* F10 also migrates the BASIC text screen. A running cartridge owns its video
+ * RAM, so copying the other display over it would erase its graphics. */
+void c128_switch_4080(C128 *c) {
+    c128_set_4080(c, c->mem.mmu.col4080);
     if (c->mem.cart.attached) return;
     if (c->col_mode_80)
         migrate_vic_to_vdc(c);   /* switched to 80-col VDC */
