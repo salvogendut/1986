@@ -17,9 +17,21 @@
 typedef struct {
     u8  *data;        /* whole image in memory */
     size_t size;      /* image size in bytes */
-    int  tracks;      /* number of tracks (35 or 70) */
+    int  tracks;      /* 35 tracks; D71 is a distinct future format */
     bool has_errors;  /* a trailing D64 error-information block is present */
+    char *path;       /* source path for atomic write-back */
+    bool writable;    /* regular, writable image (not a symlink) */
 } D64;
+
+typedef enum {
+    D64_SAVE_OK = 0,
+    D64_SAVE_EXISTS,
+    D64_SAVE_DISK_FULL,
+    D64_SAVE_DIR_ERROR,
+    D64_SAVE_WRITE_PROTECT,
+    D64_SAVE_IO_ERROR,
+    D64_SAVE_BAD_NAME,
+} D64SaveResult;
 
 /* One decoded directory entry (CBM DOS slot layout). */
 typedef struct {
@@ -32,7 +44,7 @@ typedef struct {
     char name[17];    /* PETSCII->ASCII filename, NUL terminated */
 } D64DirEntry;
 
-/* Number of sectors on a track (1-35 for side 0; 36-70 for side 1). */
+/* Number of sectors on a D64 track (1-35). */
 int  d64_track_sectors(int track);
 
 /* Byte offset of a track within the image. */
@@ -70,3 +82,9 @@ int d64_find_file(const D64 *d, const char *name, D64DirEntry *entry);
  * the two-byte PRG load address. Returns the byte count, or -1 for a malformed
  * chain or insufficient output space. */
 int d64_read_file(const D64 *d, const D64DirEntry *entry, u8 *out, size_t cap);
+
+/* Save raw PRG bytes (including the two-byte load address) and atomically
+ * replace the D64 file. Existing names require replace=true. Both the live
+ * image and the file remain unchanged on error. */
+D64SaveResult d64_save_prg(D64 *d, const char *name, const u8 *data,
+                          size_t length, bool replace);

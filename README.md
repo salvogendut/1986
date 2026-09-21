@@ -58,15 +58,16 @@ Current working pieces include:
 - Options overlay that reads and writes
   `1986.conf`.
 - VICE's 8502/6510 core and a reused Z80 core wired to the C128 bus.
-- A fast virtual IEC drive that reads D64 images and supports `DIRECTORY`,
-  `LOAD`, and BASIC 7.0 `DLOAD`, including DOS status errors.
+- A fast virtual IEC drive that reads and writes D64 images, supporting
+  `DIRECTORY`, `LOAD`/`DLOAD`, and `SAVE`/`DSAVE` with DOS status errors.
 - Tests for the CPU, MMU, CIA/SID, VIC graphics and sprites, configuration,
   GIF encoder, D64 format, KERNAL IEC traps, and virtual-drive channels.
 
-Saving to the virtual drive, true cycle-level 1571 emulation, high-fidelity SID
-filter/combined-waveform emulation, CP/M mode, and several accuracy features
-remain unfinished. The virtual drive and future true 1571 are intentionally
-separate implementations; they will share only the media/image layer.
+Write-side DOS commands beyond PRG saving, true cycle-level 1571 emulation,
+high-fidelity SID filter/combined-waveform emulation, CP/M mode, and several
+accuracy features remain unfinished. The virtual drive and future true 1571
+are intentionally separate implementations; they will share only the
+media/image layer.
 
 See [DEVELOPMENT.md](Development.md) for technical notes and
 [ROADMAP.md](ROADMAP.md) for the forward plan.

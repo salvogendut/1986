@@ -23,7 +23,7 @@ src/
   vdc.*       - MOS 8563 VDC (80-column) register file
   cia.*       - MOS 6526 CIA1/CIA2 register file
   sid.*       - MOS 8580 SID oscillator/envelope/filter and PCM output
-  d64.*       - single-sided D64 image and directory decoding
+  d64.*       - single-sided D64 image, BAM/directory, atomic PRG saving
   virtual_drive.* - fast logical IEC device used by KERNAL ROM traps
   drive.*     - machine-facing media/virtual-drive holder
   z80.*       - cycle-stepped Z80 (reused from 1983/1984/1985) for CP/M
@@ -40,6 +40,7 @@ tests/
   test_config.c - config roundtrip
   test_gifcap.c - GIF encoder output
   test_d64.c  - D64 directory bytes + virtual IEC channel lifecycle
+  test_d64_save.c - D64 write-back, replacement, and error cases
 ```
 
 ## Machine-mode scope
@@ -131,7 +132,10 @@ UNLISTEN/UNTALK, secondary channels, status responses, and D64 directory
 streams without running a drive CPU. It follows D64 file-sector chains and
 serves raw PRG streams (including their load address) for `LOAD` and `DLOAD`.
 Missing files report DOS error 62 both on the IEC status byte and command
-channel. It does not require a 1571 DOS ROM.
+channel. `SAVE` and `DSAVE` buffer PRG data on IEC channel 1, then update the
+D64 BAM and directory on CLOSE. The image is written through a temporary file
+and replaced atomically; errors leave the live image untouched. `@:` requests
+replace an existing unlocked file. This does not require a 1571 DOS ROM.
 
 The C128 KERNAL's burst-mode flag is cleared while this command-level backend
 is active, keeping transfers on the trapped byte routines. A true 1571 will
@@ -154,8 +158,8 @@ capture the playback stream with `SDL_AUDIO_DRIVER=disk` and
 
 ## Roadmap
 
-1. **Virtual drive writes and formats** — add `SAVE`, D71, and D81 support to
-   the tested logical IEC/media layer.
+1. **Virtual drive formats and DOS commands** — add D71/D81 and remaining
+   write-side DOS commands to the tested logical IEC/media layer.
 2. **True 1571** — implement the independent drive CPU, chips, mechanism and
    line-level IEC connection.
 3. **Native PLA accuracy** — finish chargen selection and native C128 memory

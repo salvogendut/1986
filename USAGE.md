@@ -51,6 +51,14 @@ application restart. Press Del on a populated Media entry to clear it; for a
 Disk image this also ejects the live disk. Press F9 or Esc to close the
 overlay.
 
+`SAVE "NAME",8` and BASIC 7.0 `DSAVE "NAME"` write PRG files to the attached
+D64; `DIRECTORY` and `LOAD` see them immediately, and they persist after the
+application closes. Saving an existing name leaves it unchanged and sets DOS
+status `63,FILE EXISTS` (check with `PRINT DS$`). Use the DOS replace prefix,
+for example `SAVE "@:NAME",8`, to overwrite an unlocked file.
+Writes modify the host D64 file; keep a backup of any irreplaceable image.
+Symlinked or read-only images can still be loaded but cannot be saved to.
+
 ## Sound
 
 The C128DCR's 8580 SID plays through the default SDL3 audio device. At the

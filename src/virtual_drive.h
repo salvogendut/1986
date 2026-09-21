@@ -13,6 +13,7 @@
 #define VDRIVE_CHANNELS     16
 #define VDRIVE_NAME_MAX     64
 #define VDRIVE_RESPONSE_MAX 65536
+#define VDRIVE_SAVE_MAX     170000
 
 typedef enum {
     VDRIVE_WRITE_NONE = 0,
@@ -22,7 +23,7 @@ typedef enum {
 
 typedef struct {
     int unit;
-    const D64 *disk;
+    D64 *disk;
 
     bool addressed;
     bool listening;
@@ -31,7 +32,12 @@ typedef struct {
     VirtualDriveWriteMode write_mode;
 
     bool channel_open[VDRIVE_CHANNELS];
+    bool channel_save[VDRIVE_CHANNELS];
     char channel_name[VDRIVE_CHANNELS][VDRIVE_NAME_MAX];
+    u8 *channel_data[VDRIVE_CHANNELS];
+    size_t channel_len[VDRIVE_CHANNELS];
+    size_t channel_cap[VDRIVE_CHANNELS];
+    bool channel_overflow[VDRIVE_CHANNELS];
 
     u8 write_buf[256];
     size_t write_len;
@@ -47,7 +53,7 @@ typedef struct {
 void virtual_drive_init(VirtualDrive *v, int unit);
 void virtual_drive_reset(VirtualDrive *v);
 void virtual_drive_set_unit(VirtualDrive *v, int unit);
-void virtual_drive_attach(VirtualDrive *v, const D64 *disk);
+void virtual_drive_attach(VirtualDrive *v, D64 *disk);
 
 void virtual_drive_attention(VirtualDrive *v, u8 byte);
 void virtual_drive_send(VirtualDrive *v, u8 byte);
