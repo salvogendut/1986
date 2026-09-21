@@ -79,7 +79,7 @@ static void usage(const char *argv0) {
         "  --fullscreen     start fullscreen\n"
         "  --fast           run the 8502 at 2 MHz\n"
         "  --rom DIR        directory holding the machine ROM images\n"
-        "  --disk PATH      attach a D64 image at launch\n"
+        "  --disk PATH      attach a D64, D71, or D81 image at launch\n"
         "  --gif-out PATH   start recording a GIF at launch\n"
         "  --paste TEXT     inject text through the keyboard matrix\n"
         "  --paste-at N     delay --paste until emulated frame N\n"

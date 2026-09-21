@@ -34,7 +34,7 @@ typedef struct {
     char       rom_dir[CONFIG_PATH_MAX];  /* directory holding machine ROMs */
 
     /* Media files chosen in the overlay (not yet connected to a device). */
-    char       disk_path[CONFIG_PATH_MAX];  /* Disk Drive .d64 image */
+    char       disk_path[CONFIG_PATH_MAX];  /* D64/D71/D81 disk image */
     char       tape_path[CONFIG_PATH_MAX];  /* Tape .tap image */
     char       cart_path[CONFIG_PATH_MAX];  /* Cartridge .crt image */
 

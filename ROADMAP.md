@@ -34,9 +34,9 @@ READY.
 - [x] VIC-IIe text, hires/multicolor bitmap, BASIC `CHAR`, and eight sprites.
 - [x] VDC 80x25 text with attributes/cursor and selectable display output.
 - [x] Persistent 40/80-column selection in unified and dual-window modes.
-- [x] Fast virtual IEC drive with D64 `DIRECTORY`, `LOAD`/`DLOAD`, and
-  `SAVE`/`DSAVE`.
-- [x] Live D64 replacement/ejection from the Media Overlay.
+- [x] Fast virtual IEC drive with D64/D71/D81 `DIRECTORY`, `LOAD`/`DLOAD`,
+  and `SAVE`/`DSAVE`.
+- [x] Live disk-image replacement/ejection from the Media Overlay.
 - [x] Explicit rejection of the out-of-scope C64 personality (`GO64`).
 
 The remaining milestones focus on hardware completeness and accuracy rather
@@ -185,7 +185,9 @@ cycle-level 1571 implementation without conflating their interfaces.
 - [x] Virtual-drive `SAVE`/`DSAVE` to D64 with BAM/directory updates and
   atomic write-back (#53).
 - [ ] Other write-side DOS commands (for example scratch and rename).
-- [ ] D71 and D81 media formats.
+- [x] D71 and D81 image formats with two-sided BAM handling and PRG
+  read/write support (#55).
+- [ ] D81 partition navigation and REL-file operations.
 - [ ] True integrated 1571: drive CPU, 2K RAM, DOS ROM, CIA/VIA/FDC,
   mechanism timing, line-level IEC, and fast serial (#30).
 
@@ -235,7 +237,8 @@ The main unfinished areas, grouped by likely development scale, are:
    effects, and CIA TOD/serial/CNT completion.
 2. **Audio accuracy:** SID analog filter, combined waveforms, and edge-case
    timing beyond the working three-voice SDL3 output.
-3. **Storage formats and writes:** remaining DOS write commands, D71, and D81.
+3. **Storage features:** remaining DOS write commands, D81 partitions, and
+   REL-file operations.
 4. **Large machine subsystems:** true cycle-level 1571 hardware and CP/M/Z80
    bus switching.
 5. **Usability and validation:** snapshots, complete keyboard handling,

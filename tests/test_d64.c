@@ -1,4 +1,4 @@
-#include "d64.h"
+#include "disk_image.h"
 #include "virtual_drive.h"
 #include <stdio.h>
 #include <string.h>
@@ -11,7 +11,7 @@ static int failures = 0;
 static u8 image[174848];
 
 /* Build a single-sided 35-track D64 with a BAM header and one directory entry. */
-static void build_d64(D64 *d) {
+static void build_d64(DiskImage *d) {
     memset(image, 0, sizeof(image));
     memset(d, 0, sizeof(*d));
     d->data = image;
@@ -20,7 +20,7 @@ static void build_d64(D64 *d) {
     d->has_errors = false;
 
     /* BAM at track 18, sector 0: disk name, ID, DOS version. */
-    int bam_off = d64_track_offset(18);
+    int bam_off = disk_image_d64_track_offset(18);
     u8 *bam = image + bam_off;
     const char *dn = "DISK";
     for (int i = 0; i < 16; i++) bam[0x90 + i] = (i < 4) ? (u8)dn[i] : 0xA0;
@@ -34,7 +34,7 @@ static void build_d64(D64 *d) {
     bam[5 + 17 * 4] = 0x01;
 
     /* Directory at track 18, sector 1. Bytes 0-1 = next-sector link (end). */
-    int dir_off = d64_track_offset(18) + 1 * D64_SECTOR_BYTES;
+    int dir_off = disk_image_d64_track_offset(18) + 1 * DISK_SECTOR_BYTES;
     u8 *dir = image + dir_off;
     dir[0] = 0x00; dir[1] = 0xFF;
 
@@ -56,27 +56,27 @@ static void build_d64(D64 *d) {
 
     /* HELLO is a one-sector PRG: load address $1C01 + three data bytes. The
      * final link byte stores data length + 1. */
-    u8 *hello = image + d64_track_offset(17) + 1 * D64_SECTOR_BYTES;
+    u8 *hello = image + disk_image_d64_track_offset(17) + 1 * DISK_SECTOR_BYTES;
     hello[0] = 0;
     hello[1] = 6;
     hello[2] = 0x01; hello[3] = 0x1C;
     hello[4] = 0xAA; hello[5] = 0xBB; hello[6] = 0xCC;
 
     /* DATA spans a full sector and a three-byte final sector. */
-    u8 *data1 = image + d64_track_offset(17) + 2 * D64_SECTOR_BYTES;
+    u8 *data1 = image + disk_image_d64_track_offset(17) + 2 * DISK_SECTOR_BYTES;
     data1[0] = 17; data1[1] = 3;
     for (int i = 0; i < 254; i++) data1[2 + i] = (u8)i;
-    u8 *data2 = image + d64_track_offset(17) + 3 * D64_SECTOR_BYTES;
+    u8 *data2 = image + disk_image_d64_track_offset(17) + 3 * DISK_SECTOR_BYTES;
     data2[0] = 0; data2[1] = 4;
     data2[2] = 0xDE; data2[3] = 0xAD; data2[4] = 0xBE;
 }
 
 int main(void) {
-    D64 d;
+    DiskImage d;
     build_d64(&d);
 
-    D64DirEntry ents[16];
-    int n = d64_read_directory_entries(&d, ents, 16);
+    DiskDirEntry ents[16];
+    int n = disk_image_read_directory_entries(&d, ents, 16);
     CHECK(n == 2, "two entries read");
 
     CHECK(ents[0].blocks == 5, "entry 0 block count");
@@ -93,38 +93,38 @@ int main(void) {
     CHECK(ents[0].start_track == 17 && ents[0].start_sector == 1,
           "entry exposes first file sector");
 
-    D64DirEntry found;
-    CHECK(d64_find_file(&d, "hello", &found) == 0,
+    DiskDirEntry found;
+    CHECK(disk_image_find_file(&d, "hello", &found) == 0,
           "filename lookup is case insensitive");
     CHECK(strcmp(found.name, "HELLO") == 0, "found expected file");
-    CHECK(d64_find_file(&d, "0:HE*", &found) == 0,
+    CHECK(disk_image_find_file(&d, "0:HE*", &found) == 0,
           "filename lookup supports drive prefix and wildcard");
-    CHECK(d64_find_file(&d, "MISSING", &found) != 0,
+    CHECK(disk_image_find_file(&d, "MISSING", &found) != 0,
           "missing filename is rejected");
 
     u8 file_data[300];
-    int file_len = d64_read_file(&d, &ents[0], file_data, sizeof(file_data));
+    int file_len = disk_image_read_file(&d, &ents[0], file_data, sizeof(file_data));
     CHECK(file_len == 5, "single-sector PRG length");
     CHECK(file_data[0] == 0x01 && file_data[1] == 0x1C &&
           file_data[2] == 0xAA && file_data[4] == 0xCC,
           "single-sector PRG includes load address and payload");
-    file_len = d64_read_file(&d, &ents[1], file_data, sizeof(file_data));
+    file_len = disk_image_read_file(&d, &ents[1], file_data, sizeof(file_data));
     CHECK(file_len == 257, "multi-sector file length");
     CHECK(file_data[253] == 253 && file_data[254] == 0xDE &&
           file_data[256] == 0xBE, "multi-sector chain contents");
-    CHECK(d64_read_file(&d, &ents[1], file_data, 256) < 0,
+    CHECK(disk_image_read_file(&d, &ents[1], file_data, 256) < 0,
           "short file output buffer is rejected");
 
     char disk_name[17], id[2];
     int free_blocks = -1;
-    CHECK(d64_read_bam(&d, disk_name, sizeof(disk_name), id, NULL,
+    CHECK(disk_image_read_bam(&d, disk_name, sizeof(disk_name), id, NULL,
                        &free_blocks) == 0, "BAM read");
     CHECK(free_blocks == 3, "free blocks use all bitmap bytes and exclude track 18");
 
     u8 listing[256];
-    size_t listing_len = d64_build_directory_program(&d, listing, sizeof(listing));
+    size_t listing_len = disk_image_build_directory_program(&d, listing, sizeof(listing));
     CHECK(listing_len == 32 + 2 * 32 + 31, "fixed-width directory stream length");
-    CHECK(d64_build_directory_program(&d, listing, listing_len - 1) == 0,
+    CHECK(disk_image_build_directory_program(&d, listing, listing_len - 1) == 0,
           "short directory output buffer is rejected");
     CHECK(listing[0] == 0x01 && listing[1] == 0x04, "directory load address");
     CHECK(listing[31] == 0, "header ends at byte 31");
@@ -228,8 +228,8 @@ int main(void) {
           "other IEC device address is ignored");
 
     /* Block-count is read from offset 30-31 (not 4-5, the old bug). */
-    CHECK(ents[0].blocks != (image[d64_track_offset(18) + 1 * 256 + 4] |
-                            (image[d64_track_offset(18) + 1 * 256 + 5] << 8)),
+    CHECK(ents[0].blocks != (image[disk_image_d64_track_offset(18) + 1 * 256 + 4] |
+                            (image[disk_image_d64_track_offset(18) + 1 * 256 + 5] << 8)),
           "block count not from bytes 4-5");
 
     if (failures == 0) { printf("test-d64: OK\n"); return 0; }

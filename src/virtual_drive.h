@@ -1,6 +1,6 @@
 #pragma once
 #include "types.h"
-#include "d64.h"
+#include "disk_image.h"
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -12,8 +12,8 @@
 
 #define VDRIVE_CHANNELS     16
 #define VDRIVE_NAME_MAX     64
-#define VDRIVE_RESPONSE_MAX 65536
-#define VDRIVE_SAVE_MAX     170000
+#define VDRIVE_DIRECTORY_MAX (32u + 512u * 32u + 31u)
+#define VDRIVE_SAVE_MAX     (3200u * 254u)
 
 typedef enum {
     VDRIVE_WRITE_NONE = 0,
@@ -23,7 +23,7 @@ typedef enum {
 
 typedef struct {
     int unit;
-    D64 *disk;
+    DiskImage *disk;
 
     bool addressed;
     bool listening;
@@ -41,7 +41,8 @@ typedef struct {
 
     u8 write_buf[256];
     size_t write_len;
-    u8 response[VDRIVE_RESPONSE_MAX];
+    u8 *response;
+    size_t response_cap;
     size_t response_len;
     size_t response_pos;
     int response_channel;
@@ -53,7 +54,7 @@ typedef struct {
 void virtual_drive_init(VirtualDrive *v, int unit);
 void virtual_drive_reset(VirtualDrive *v);
 void virtual_drive_set_unit(VirtualDrive *v, int unit);
-void virtual_drive_attach(VirtualDrive *v, D64 *disk);
+void virtual_drive_attach(VirtualDrive *v, DiskImage *disk);
 
 void virtual_drive_attention(VirtualDrive *v, u8 byte);
 void virtual_drive_send(VirtualDrive *v, u8 byte);

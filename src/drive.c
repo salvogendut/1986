@@ -18,13 +18,13 @@ void drive_reset(Drive *d) {
 int drive_attach_disk(Drive *d, const char *path) {
     virtual_drive_attach(&d->virtual_drive, NULL);
     if (d->disk_attached) {
-        d64_close(&d->d64);
+        disk_image_close(&d->image);
         d->disk_attached = false;
     }
     if (!path || !path[0]) return 0;
-    if (d64_open(&d->d64, path) != 0) return -1;
+    if (disk_image_open(&d->image, path) != 0) return -1;
     d->disk_attached = true;
-    virtual_drive_attach(&d->virtual_drive, &d->d64);
+    virtual_drive_attach(&d->virtual_drive, &d->image);
     return 0;
 }
 
