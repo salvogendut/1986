@@ -50,7 +50,8 @@ Current working pieces include:
 
 - VIC-IIe 40-column text/bitmap display with eight hardware sprites, and the
   VDC 80-column text display.
-- Host keyboard input, paste, cursor, CIA timer and raster IRQ handling.
+- Host keyboard input, paste, cursor, CIA timers/TOD/serial/FLAG interrupts,
+  and VIC raster IRQ handling.
 - Audible three-voice 8580 SID synthesis through SDL3, including the standard
   waveforms, envelopes, voice routing, and a basic filter approximation.
 - Function-key conventions: F4 screenshot, F5 reset, F6 GIF capture, F7

@@ -127,9 +127,11 @@ partial MMU state on unsupported mode requests.
 - [x] ICR/IMR semantics (`$DC0D` read = flags, write = mask).
 - [x] Timer B Phi2/cascade counting, reload/one-shot, and ICR bit 1 on both
   CIAs; CIA2 delivers its masked interrupt as NMI (#49).
-- [ ] External CNT input and CNT-gated timer modes.
-- [ ] Time-of-day (TOD) alarm.
-- [ ] Serial shift register (SDR) and the FLAG line.
+- [x] External CNT pin edges and CNT-driven/gated timer modes (no harness
+  connected by default).
+- [x] 50/60 Hz time-of-day (TOD) clock, latch, and alarm interrupt.
+- [x] Serial shift register (SDR) input/output interrupts and FLAG falling-edge
+  interrupt; external CIA-to-CIA wiring remains optional future work.
 - [x] CIA2 port A VIC-bank bits.
 - [ ] CIA2 RS-232 behavior.
 
@@ -242,7 +244,7 @@ ROM through emulated hardware.
 The main unfinished areas, grouped by likely development scale, are:
 
 1. **Core accuracy:** remaining native PLA tests, VIC-IIe bad-lines/raster
-   effects, and CIA TOD/serial/CNT completion.
+   effects, CIA2 RS-232, and optional external harness wiring.
 2. **Audio accuracy:** SID analog filter, combined waveforms, and edge-case
    timing beyond the working three-voice SDL3 output.
 3. **Storage features:** further DOS write commands, D81 partitions, and
