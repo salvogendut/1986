@@ -200,7 +200,9 @@ int main(int argc, char **argv) {
     notify_init();
     notify_set_mode(cfg.notify_mode);
 
-    C128 c;
+    /* The framebuffers make C128 larger than Windows' default thread stack.
+     * This is the single machine instance for the lifetime of the process. */
+    static C128 c;
     c128_init(&c, &cfg);
 
     if (display_init(&c.display, "1986 — Commodore C128DCR", cfg.scale) != 0) {
