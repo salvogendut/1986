@@ -353,11 +353,16 @@ int main(int argc, char **argv) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
             if (f9_trace &&
-                (ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED ||
-                 ev.type == SDL_EVENT_WINDOW_FOCUS_LOST))
-                fprintf(stderr, "[f9] focus %s window=%u\n",
-                        ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED ? "gained" : "lost",
-                        ev.window.windowID);
+                (ev.type == SDL_EVENT_WINDOW_SHOWN ||
+                 ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED ||
+                 ev.type == SDL_EVENT_WINDOW_FOCUS_LOST)) {
+                SDL_Window *focused = SDL_GetKeyboardFocus();
+                fprintf(stderr, "[f9] window %s id=%u keyboard-focus=%u\n",
+                        ev.type == SDL_EVENT_WINDOW_SHOWN ? "shown" :
+                        ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED ? "focus-gained" :
+                        "focus-lost",
+                        ev.window.windowID, focused ? SDL_GetWindowID(focused) : 0);
+            }
             if (f9_trace &&
                 (ev.type == SDL_EVENT_KEY_DOWN || ev.type == SDL_EVENT_KEY_UP))
                 fprintf(stderr, "[f9] %s window=%u scancode=%d key=%d repeat=%d visible-before=%d\n",
