@@ -34,6 +34,7 @@ typedef struct {
     SDL_Window   *window;
     SDL_Renderer *renderer;
     SDL_Texture  *texture;
+    int           scale;          /* configured window magnification (1..4) */
     u32           pixels[C128_SCREEN_W * C128_SCREEN_H];
     u8            touched[C128_SCREEN_W * C128_SCREEN_H];
     u32           crt_pixels[C128_SCREEN_W * C128_SCREEN_H];
@@ -72,9 +73,11 @@ u32  display_hash(Display *d);
 void display_set_smoothing(Display *d, bool smooth);
 void display_set_crt(Display *d, bool enabled, int scanlines, int brightness,
                      int contrast, int red, int green, int blue);
+void display_set_scale(Display *d, int scale);       /* resize both output windows */
 void display_set_one_display(Display *d, bool one);   /* create/destroy VDC window */
 void display_set_vdc_active(Display *d, bool active); /* select VIC vs VDC (one-window) */
 void display_focus_active(Display *d);                /* focus selected output window */
+SDL_Renderer *display_active_renderer(const Display *d); /* renderer for modal UI */
 bool display_vdc_window_open(const Display *d);
 void display_apply_greyscale(Display *d);
 void display_draw_paused_label(Display *d);

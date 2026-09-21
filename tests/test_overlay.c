@@ -71,6 +71,31 @@ static void key(Overlay *ov, SDL_Scancode sc) {
     overlay_handle_event(ov, &event);
 }
 
+static bool overlay_draws_after_one_f9(const Overlay *ov) {
+    setenv("SDL_VIDEODRIVER", "dummy", 1);
+    if (!SDL_Init(SDL_INIT_VIDEO)) return false;
+    SDL_Window *window = SDL_CreateWindow("overlay test", 1100, 800, 0);
+    SDL_Renderer *renderer = window ? SDL_CreateRenderer(window, NULL) : NULL;
+    bool drawn = false;
+    if (renderer) {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        overlay_render(ov, renderer);
+        SDL_Surface *pixels = SDL_RenderReadPixels(renderer, NULL);
+        if (pixels) {
+            Uint8 red, green, blue, alpha;
+            drawn = SDL_ReadSurfacePixel(pixels, 15, 15,
+                                         &red, &green, &blue, &alpha) &&
+                    red == 0x30 && green == 0x40 && blue == 0x60;
+            SDL_DestroySurface(pixels);
+        }
+        SDL_DestroyRenderer(renderer);
+    }
+    if (window) SDL_DestroyWindow(window);
+    SDL_Quit();
+    return drawn;
+}
+
 int main(void) {
     Config cfg;
     config_set_defaults(&cfg);
@@ -93,6 +118,9 @@ int main(void) {
     setenv("C128_CONFIG_PATH", config_file, 1);
 
     key(&ov, SDL_SCANCODE_F9);
+    CHECK(overlay_is_visible(&ov), "one F9 keypress opens the options overlay");
+    CHECK(overlay_draws_after_one_f9(&ov),
+          "options overlay is drawn after one F9 keypress");
     CHECK(cfg.col_mode_80, "80-column key is selected by default");
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!cfg.col_mode_80 && !c->col_mode_80 && c->mem.mmu.col4080 &&
