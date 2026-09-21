@@ -9,6 +9,21 @@
 #define OV_LINE_H     20
 #define OV_VALUE_X    230
 
+#ifndef PACKAGE_VERSION
+#define PACKAGE_VERSION "unknown"
+#endif
+#ifndef PROG_GIT_COMMIT
+#define PROG_GIT_COMMIT "unknown"
+#endif
+
+static const char *const about_lines[] = {
+    "1986 Commodore C128DCR emulator",
+    "(c) 2026 salvogendut",
+    "Version " PACKAGE_VERSION " (commit " PROG_GIT_COMMIT ")",
+    "VICE-derived emulation core - see README"
+};
+#define ABOUT_LINE_COUNT ((int)(sizeof(about_lines) / sizeof(about_lines[0])))
+
 /* Logical Media rows; Drive 2 rows collapse away when disabled. */
 #define MEDIA_DRIVE1   0
 #define MEDIA_DISK1    1
@@ -83,6 +98,7 @@ static void save_config(const Overlay *ov) {
 /* Persist the current config and hide the overlay. */
 static void overlay_close(Overlay *ov) {
     save_config(ov);
+    ov->about_visible = false;
     ov->visible = false;
 }
 
@@ -263,7 +279,7 @@ static bool section_available(const Overlay *ov, OvSection s) {
 /* Number of selectable rows in each section. */
 static int section_rows(const Overlay *ov, OvSection s) {
     switch (s) {
-        case OV_GENERAL:  return 2;   /* Tinker, ROMS PATH */
+        case OV_GENERAL:  return 3;   /* Tinker, ROMS PATH, About */
         case OV_MEDIA:    return ov->cfg->second_drive ? 6 : 4;
         case OV_ADVANCED: return ADV_ROWS;
         default:          return 0;
@@ -295,8 +311,10 @@ static void overlay_activate(Overlay *ov) {
                 /* Leaving Tinker off hides Advanced; fall back to General. */
                 if (!ov->cfg->tinker && ov->section == OV_ADVANCED)
                     ov->section = OV_GENERAL;
-            } else {
+            } else if (ov->row == 1) {
                 open_rom_dialog(ov);
+            } else {
+                ov->about_visible = true;
             }
             break;
         case OV_MEDIA:
@@ -426,6 +444,12 @@ bool overlay_handle_event(Overlay *ov, SDL_Event *ev) {
 
     if (!ov->visible) return false;
 
+    if (ov->about_visible) {
+        if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_ESCAPE)
+            ov->about_visible = false;
+        return true;
+    }
+
     switch (sc) {
         case SDL_SCANCODE_LEFT:
         case SDL_SCANCODE_RIGHT:
@@ -543,7 +567,7 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
     int lw = (int)(rw / scale);
     int panel_w = lw - 20 < 820 ? lw - 20 : 820;
     int rows = ov->section == OV_ADVANCED ? ADV_ROWS :
-               ov->section == OV_MEDIA ? section_rows(ov, OV_MEDIA) : 9;
+               ov->section == OV_MEDIA ? section_rows(ov, OV_MEDIA) : 10;
     int panel_h = 48 + rows * OV_LINE_H + 42;
 
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
@@ -596,6 +620,8 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         char rd[CONFIG_PATH_MAX];
         rom_path_display(ov, rd, sizeof(rd));
         draw_row(r, panel_w, y, "ROMS PATH", rd, ov->row == 1);
+        y += OV_LINE_H;
+        draw_row(r, panel_w, y, "About", "Program details", ov->row == 2);
     } else if (ov->section == OV_MEDIA) {
         for (int i = 0; i < section_rows(ov, OV_MEDIA); i++) {
             int item = media_item(ov, i);
@@ -681,6 +707,36 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         : "Left/Right section  Up/Down select  Enter toggle/choose  F9/Esc close";
     SDL_RenderDebugText(r, 20,
                         (float)(panel_h - 20), footer);
+
+    if (ov->about_visible) {
+        int lh = (int)(rh / scale);
+        int text_w = 0;
+        for (int i = 0; i < ABOUT_LINE_COUNT; ++i) {
+            int w = (int)strlen(about_lines[i]) * 8;
+            if (w > text_w) text_w = w;
+        }
+        int box_w = text_w + 32;
+        int box_h = 28 + ABOUT_LINE_COUNT * 16 + 28;
+        float bx = (float)(lw - box_w) * 0.5f;
+        float by = (float)(lh - box_h) * 0.5f;
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(r, 0, 0, 0, 180);
+        SDL_FRect dim = { 0, 0, (float)lw, (float)lh };
+        SDL_RenderFillRect(r, &dim);
+        SDL_SetRenderDrawColor(r, 0x19, 0x20, 0x34, 255);
+        SDL_FRect box = { bx, by, (float)box_w, (float)box_h };
+        SDL_RenderFillRect(r, &box);
+        SDL_SetRenderDrawColor(r, 0x89, 0xA3, 0xCB, 255);
+        SDL_RenderRect(r, &box);
+        SDL_SetRenderDrawColor(r, 0xF0, 0xF0, 0xF0, 255);
+        for (int i = 0; i < ABOUT_LINE_COUNT; ++i)
+            SDL_RenderDebugText(r, bx + 16, by + 16 + i * 16,
+                                about_lines[i]);
+        SDL_SetRenderDrawColor(r, 0xFF, 0xDA, 0x79, 255);
+        SDL_RenderDebugText(r, bx + (box_w - 16) * 0.5f,
+                            by + box_h - 20, "OK");
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    }
 
     SDL_SetRenderScale(r, 1.0f, 1.0f);
 }

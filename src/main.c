@@ -304,7 +304,7 @@ int main(int argc, char **argv) {
                     if (cfg.scale > 4) cfg.scale = 4;
                     SDL_SetWindowSize(c.display.window,
                                       WINDOW_W * cfg.scale,
-                                      WINDOW_H * cfg.scale + LED_BAR_HEIGHT);
+                                      WINDOW_H * cfg.scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT);
                     continue;
                 }
                 /* Shift+PrintScreen toggles the 40/80 column key. */
@@ -478,6 +478,7 @@ int main(int argc, char **argv) {
         /* --- Frame present --- */
         display_upload(&c.display);
         overlay_render(&overlay, c.display.renderer);
+        display_render_function_keys(&c.display);
         if (paused) display_draw_paused_label(&c.display);
         notify_render(c.display.renderer);
         if (!c.display.one_display && c.display.vdc_renderer)

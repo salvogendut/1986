@@ -76,6 +76,24 @@ int main(void) {
     for (int i = 0; i < 8; ++i) key(&ov, SDL_SCANCODE_DOWN);
     CHECK(ov.row == 3, "disabled Media section hides both Drive 2 rows");
 
+    key(&ov, SDL_SCANCODE_LEFT);
+    CHECK(ov.section == OV_GENERAL && ov.row == 0,
+          "General opens with first selectable row");
+    key(&ov, SDL_SCANCODE_DOWN);
+    key(&ov, SDL_SCANCODE_DOWN);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.about_visible, "General About opens program details");
+    key(&ov, SDL_SCANCODE_RIGHT);
+    CHECK(ov.about_visible && ov.section == OV_GENERAL,
+          "About dialog consumes navigation keys");
+    key(&ov, SDL_SCANCODE_ESCAPE);
+    CHECK(!ov.about_visible && ov.visible,
+          "Escape closes About without closing options");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.about_visible, "Enter reopens About");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(!ov.about_visible && ov.visible, "Enter dismisses About");
+
     const char *preview = getenv("C128_OVERLAY_PREVIEW");
     if (preview) {
         SDL_Window *window = NULL;
@@ -86,8 +104,14 @@ int main(void) {
               "create overlay preview renderer");
         if (renderer) {
             c->display.window = window;
-            ov.section = OV_ADVANCED;
-            ov.row = 6;
+            if (getenv("C128_OVERLAY_PREVIEW_ABOUT")) {
+                ov.section = OV_GENERAL;
+                ov.row = 2;
+                ov.about_visible = true;
+            } else {
+                ov.section = OV_ADVANCED;
+                ov.row = 6;
+            }
             SDL_SetRenderDrawColor(renderer, 0x20, 0x40, 0x20, 255);
             SDL_RenderClear(renderer);
             overlay_render(&ov, renderer);

@@ -19,7 +19,8 @@
 #define WINDOW_W            768   /* 2x display width */
 #define WINDOW_H            544   /* 2x display height */
 #define LED_BAR_HEIGHT      22    /* drive-activity LED strip below the C128 area */
-#define WINDOW_H_TOTAL      (WINDOW_H + LED_BAR_HEIGHT)
+#define FUNCTION_KEY_BAR_HEIGHT 16 /* host shortcut strip above the LED bar */
+#define WINDOW_H_TOTAL      (WINDOW_H + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT)
 
 #define VDC_SCREEN_W        640   /* VDC 8563 text screen width (80 x 8 px) */
 #define VDC_SCREEN_H        480   /* 4:3 display height (25 rows scaled, ~19.2 px/row) */
@@ -63,6 +64,7 @@ void display_next_line(Display *d);
 void display_vsync(Display *d);
 void display_finalize_frame(Display *d, u32 blank); /* fill pixels not scanned this frame */
 void display_upload(Display *d);   /* update texture + blit to renderer (no flip) */
+void display_render_function_keys(Display *d); /* draw shortcut strips in both windows */
 void display_flip(Display *d);     /* SDL_RenderPresent */
 void display_save_ppm(Display *d, const char *path);
 void display_save_ppm_active(Display *d, const char *path);  /* saves the active output (VIC or VDC) */
