@@ -102,15 +102,16 @@ jobs:
           autoreconf -iv
           ./configure
           make -j$(nproc)
-          ./1986.exe --help
       - name: Stage portable bundle
         run: |
           mkdir -p dist/windows/roms
           cp 1986.exe LICENSE README.md INSTALL.md 1986.conf.example dist/windows/
           cp roms/README dist/windows/roms/
+          ldd dist/windows/1986.exe
           for dll in $(ldd dist/windows/1986.exe | awk '/mingw64/ {print $3}'); do
             cp "$dll" dist/windows/
           done
+          (cd dist/windows && ./1986.exe --help)
       - uses: actions/upload-artifact@v4
         with:
           name: 1986-windows-x86_64
