@@ -62,20 +62,21 @@ static const char *const keyboard_map_lines[] = {
 #define ADV_CRT_SCANLINES       2
 #define ADV_ONE_DISPLAY         3
 #define ADV_DISPLAY_CHANGE_RESET 4
-#define ADV_REAL_DISK_DRIVE     5
-#define ADV_SECOND_DRIVE        6
-#define ADV_GIF_WIDTH           7
-#define ADV_GIF_FPS             8
-#define ADV_GIF_ENCODER         9
-#define ADV_TAPE_AUDIO          10
-#define ADV_TAPE_VIDEO          11
-#define ADV_NOTIFICATIONS       12
-#define ADV_DEBUG               13
-#define ADV_JOY_HIDAPI          14
-#define ADV_KEYBOARD_MAP        15
-#define ADV_RESET               16
-#define ADV_VERSION             17
-#define ADV_ROWS                18
+#define ADV_VDC_RAM             5
+#define ADV_REAL_DISK_DRIVE     6
+#define ADV_SECOND_DRIVE        7
+#define ADV_GIF_WIDTH           8
+#define ADV_GIF_FPS             9
+#define ADV_GIF_ENCODER         10
+#define ADV_TAPE_AUDIO          11
+#define ADV_TAPE_VIDEO          12
+#define ADV_NOTIFICATIONS       13
+#define ADV_DEBUG               14
+#define ADV_JOY_HIDAPI          15
+#define ADV_KEYBOARD_MAP        16
+#define ADV_RESET               17
+#define ADV_VERSION             18
+#define ADV_ROWS                19
 
 static int cycle_gif_width(int width) {
     switch (width) {
@@ -557,6 +558,13 @@ static void overlay_activate(Overlay *ov) {
                 case ADV_DISPLAY_CHANGE_RESET:
                     ov->cfg->display_change_reset = !ov->cfg->display_change_reset;
                     break;
+                case ADV_VDC_RAM:
+                    ov->cfg->vdc_ram_kb = ov->cfg->vdc_ram_kb == 64 ? 16 : 64;
+                    vdc_set_ram_size_kb(&ov->c128->vdc, ov->cfg->vdc_ram_kb);
+                    notify_post("VDC RAM: %dK - RESET FOR SOFTWARE TO REDETECT",
+                                ov->cfg->vdc_ram_kb);
+                    save_config(ov);
+                    break;
                 case ADV_REAL_DISK_DRIVE:
                     ov->cfg->real_disk_drive = !ov->cfg->real_disk_drive;
                     notify_post(ov->cfg->real_disk_drive
@@ -601,6 +609,7 @@ static void overlay_activate(Overlay *ov) {
                     break;
                 case ADV_RESET:
                     config_set_defaults(ov->cfg);
+                    vdc_set_ram_size_kb(&ov->c128->vdc, ov->cfg->vdc_ram_kb);
                     drive_attach_disk(&ov->c128->drive, NULL);
                     drive_attach_disk(&ov->c128->drive2, NULL);
                     drive_set_unit(&ov->c128->drive, ov->cfg->drive_unit);
@@ -896,6 +905,9 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, panel_w, y, "Display Change reset",
                  ov->cfg->display_change_reset ? "On" : "Off",
                  ov->row == ADV_DISPLAY_CHANGE_RESET); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "VDC RAM",
+                 ov->cfg->vdc_ram_kb == 16 ? "16K" : "64K",
+                 ov->row == ADV_VDC_RAM); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Real Disk Drive",
                  ov->cfg->real_disk_drive ? "On (pending)" : "Off",
                  ov->row == ADV_REAL_DISK_DRIVE); y += OV_LINE_H;

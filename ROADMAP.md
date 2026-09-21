@@ -150,6 +150,8 @@ and more accurate VDC behavior.
 
 - [x] VDC register file, update-address counter, block fill/copy, and 64K
   internal video RAM for the C128DCR.
+- [x] Persistent Advanced 16K/64K VDC RAM selection (64K default), including
+  physical address mirroring and register-28 readback.
 - [x] 80x25 text rendering, attribute colours/reverse, and cursor blink.
 - [x] Alternative VIC/VDC output in unified and dual-window display modes.
 - [x] F10 display switching with the last active 40/80 mode persisted across

@@ -22,10 +22,16 @@ static const u8 regmask[38] = {
 
 void vdc_init(Vdc *v) {
     memset(v, 0, sizeof(*v));
+    v->address_mask = 0xFFFF; /* C128DCR default: 64 KiB */
     v->fb_w = VDC_MAX_COLS * VDC_CHAR_WIDTH;   /* 640 */
     v->fb_h = VDC_MAX_LINES * VDC_CHAR_HEIGHT; /* 200 */
     v->fb = (u32 *)malloc((size_t)v->fb_w * v->fb_h * sizeof(u32));
     vdc_reset(v);
+}
+
+void vdc_set_ram_size_kb(Vdc *v, int kb) {
+    v->address_mask = kb == 16 ? 0x3FFF : 0xFFFF;
+    v->dirty = true;
 }
 
 void vdc_reset(Vdc *v) {
@@ -70,25 +76,25 @@ void vdc_write_data(Vdc *v, u8 val) {
         case 13: v->screen_adr = (u16)((v->screen_adr & 0xFF00) | val);       v->dirty = true; break;
         case 14: v->cursor_adr = (u16)((v->cursor_adr & 0x00FF) | (val << 8)); break;
         case 15: v->cursor_adr = (u16)((v->cursor_adr & 0xFF00) | val);        break;
-        case 18: v->update_adr = (u16)((v->regs[18] << 8) | v->regs[19]); break;
-        case 19: v->update_adr = (u16)((v->regs[18] << 8) | v->regs[19]); break;
+        case 18: v->update_adr = (u16)(((v->regs[18] << 8) | v->regs[19]) & v->address_mask); break;
+        case 19: v->update_adr = (u16)(((v->regs[18] << 8) | v->regs[19]) & v->address_mask); break;
         case 20: v->attribute_adr = (u16)((v->attribute_adr & 0x00FF) | (val << 8)); v->dirty = true; break;
         case 21: v->attribute_adr = (u16)((v->attribute_adr & 0xFF00) | val);        v->dirty = true; break;
-        case 28: v->chargen_adr = (u16)((val << 8) & 0xE000); v->dirty = true; break;
+        case 28: v->chargen_adr = (u16)((val << 8) & 0xE000 & v->address_mask); v->dirty = true; break;
         case 30: { /* R30 word count -> fill or copy block */
             u16 ptr = (u16)((v->regs[18] << 8) | v->regs[19]);
             int blklen = val ? val : 256;
             if (v->regs[24] & 0x80) { /* copy */
                 u16 src = (u16)((v->regs[32] << 8) | v->regs[33]);
                 for (int i = 0; i < blklen; i++)
-                    v->ram[(ptr + i) & 0xFFFF] = v->ram[(src + i) & 0xFFFF];
+                    v->ram[(ptr + i) & v->address_mask] = v->ram[(src + i) & v->address_mask];
                 src = (u16)(src + blklen);
-                v->regs[31] = v->ram[(src - 1) & 0xFFFF];
+                v->regs[31] = v->ram[(src - 1) & v->address_mask];
                 v->regs[32] = (u8)(src >> 8);
                 v->regs[33] = (u8)src;
             } else { /* fill */
                 for (int i = 0; i < blklen; i++)
-                    v->ram[(ptr + i) & 0xFFFF] = v->regs[31];
+                    v->ram[(ptr + i) & v->address_mask] = v->regs[31];
             }
             ptr += blklen;
             v->regs[18] = (u8)(ptr >> 8);
@@ -99,7 +105,7 @@ void vdc_write_data(Vdc *v, u8 val) {
         }
         case 31: { /* R31 data -> write to update address, auto-increment */
             u16 ptr = (u16)((v->regs[18] << 8) | v->regs[19]);
-            v->ram[ptr & 0xFFFF] = val;
+            v->ram[ptr & v->address_mask] = val;
             ptr++;
             v->regs[18] = (u8)(ptr >> 8);
             v->regs[19] = (u8)(ptr & 0xFF);
@@ -115,16 +121,17 @@ void vdc_write_data(Vdc *v, u8 val) {
 u8 vdc_read_data(Vdc *v) {
     if (v->reg == 31) {
         u16 ptr = (u16)((v->regs[18] << 8) | v->regs[19]);
-        u8 val = v->ram[ptr & 0xFFFF];
-        ptr++;
+        u8 val = v->ram[ptr & v->address_mask];
+        ptr = (u16)((ptr + 1) & v->address_mask);
         v->regs[18] = (u8)(ptr >> 8);
         v->regs[19] = (u8)(ptr & 0xFF);
         v->update_adr = ptr;
         return val;
     }
-    /* R28 bit 4 reports fitted 64 KiB RAM on the C128DCR. The lower bits
-     * read high on the 8568, as they do in VICE's 64 KiB VDC model. */
-    if (v->reg == 28) return v->regs[28] | 0x1F;
+    /* R28 readback follows VICE: 64 KiB forces bit 4 high, while 16 KiB
+     * leaves the written bit 4 intact. The low nibble reads high in both. */
+    if (v->reg == 28)
+        return v->regs[28] | (v->address_mask == 0xFFFF ? 0x1F : 0x0F);
     if (v->reg < 38) return v->regs[v->reg] | regmask[v->reg];
     return 0xFF;
 }
@@ -184,12 +191,12 @@ static void render_bitmap(const Vdc *v, u32 *pixels, int fbw, int fbh,
             int source_x = x * logical_width / fbw / pixel_width;
             int byte_col = source_x >> 3;
             int bit = 7 - (source_x & 7);
-            u8 bits = v->ram[(v->screen_adr + bitmap_row + byte_col) & 0xFFFF];
+            u8 bits = v->ram[(v->screen_adr + bitmap_row + byte_col) & v->address_mask];
             if (reverse_screen) bits = (u8)~bits;
             u32 dot_fg = fg;
             u32 dot_bg = bg;
             if (attr_mode) {
-                u8 attr = v->ram[(v->attribute_adr + attr_row + byte_col) & 0xFFFF];
+                u8 attr = v->ram[(v->attribute_adr + attr_row + byte_col) & v->address_mask];
                 dot_fg = VDC_COLORS[attr >> 4];
                 dot_bg = VDC_COLORS[attr & 0x0F];
             }
@@ -240,8 +247,8 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
     for (int row = 0; row < rows; row++) {
         for (int col = 0; col < cols; col++) {
             u16 idx = (u16)(row * cols + col);
-            u8 c = v->ram[(v->screen_adr + idx) & 0xFFFF];
-            u8 attr = attr_mode ? v->ram[(v->attribute_adr + idx) & 0xFFFF] : 0;
+            u8 c = v->ram[(v->screen_adr + idx) & v->address_mask];
+            u8 attr = attr_mode ? v->ram[(v->attribute_adr + idx) & v->address_mask] : 0;
             u32 c_fg = attr_mode ? VDC_COLORS[attr & 0x0F] : fg;
             u32 c_bg = bg;
             bool rev = reverse_screen || (attr_mode && (attr & VDC_ATTR_REVERSE));
@@ -254,7 +261,7 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
                 (u16)(c * v->bytes_per_char));
             u8 glyph[VDC_CHAR_HEIGHT];
             for (int l = 0; l < VDC_CHAR_HEIGHT; l++)
-                glyph[l] = v->ram[(co + l) & 0xFFFF];
+                glyph[l] = v->ram[(co + l) & v->address_mask];
             put_glyph(v, pixels, fbw, fbh, col, row, glyph, c_fg, c_bg, rev,
                       cell_w, cell_h);
         }

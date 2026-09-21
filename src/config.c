@@ -22,6 +22,7 @@ void config_set_defaults(Config *cfg) {
     cfg->model = C128_MODEL_DCR;
     cfg->fast = false;
     cfg->col_mode_80 = true;
+    cfg->vdc_ram_kb = 64;
     cfg->gif_width = 320;
     cfg->gif_fps = 25;
     cfg->gif_ffmpeg = false;
@@ -108,6 +109,7 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "model"))         cfg->model = (C128Model)atoi(value);
     else if (!strcasecmp(key, "fast"))          cfg->fast = atoi(value) != 0;
     else if (!strcasecmp(key, "display_columns")) cfg->col_mode_80 = atoi(value) != 40;
+    else if (!strcasecmp(key, "vdc_ram_kb")) cfg->vdc_ram_kb = atoi(value);
     else if (!strcasecmp(key, "gif_width"))     cfg->gif_width = atoi(value);
     else if (!strcasecmp(key, "gif_fps"))       cfg->gif_fps = atoi(value);
     else if (!strcasecmp(key, "gif_ffmpeg"))    cfg->gif_ffmpeg = atoi(value) != 0;
@@ -171,6 +173,7 @@ bool config_load(Config *cfg, const char *path) {
     while (fgets(line, sizeof(line), f)) parse_line(cfg, line);
     fclose(f);
     config_normalize_drive_units(cfg);
+    if (cfg->vdc_ram_kb != 16 && cfg->vdc_ram_kb != 64) cfg->vdc_ram_kb = 64;
     if (cfg->main_input_port != 1 && cfg->main_input_port != 2) cfg->main_input_port = 2;
     for (int i = 0; i < 2; ++i)
         if (cfg->joy_port_mode[i] != JOYPORT_JOYSTICK &&
@@ -198,6 +201,7 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "model = %d\n", (int)cfg->model);
     fprintf(f, "fast = %d\n", cfg->fast ? 1 : 0);
     fprintf(f, "display_columns = %d\n", cfg->col_mode_80 ? 80 : 40);
+    fprintf(f, "vdc_ram_kb = %d\n", cfg->vdc_ram_kb);
     fprintf(f, "gif_width = %d\n", cfg->gif_width);
     fprintf(f, "gif_fps = %d\n", cfg->gif_fps);
     fprintf(f, "gif_ffmpeg = %d\n", cfg->gif_ffmpeg ? 1 : 0);

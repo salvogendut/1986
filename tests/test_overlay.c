@@ -23,6 +23,9 @@ void display_set_crt(Display *d, bool enabled, int scanlines, int brightness,
     (void)contrast; (void)red; (void)green; (void)blue;
 }
 void display_set_one_display(Display *d, bool one) { (void)d; (void)one; }
+void vdc_set_ram_size_kb(Vdc *v, int kb) {
+    v->address_mask = kb == 16 ? 0x3FFF : 0xFFFF;
+}
 static int display_focuses;
 void display_focus_active(Display *d) { (void)d; display_focuses++; }
 void c128_set_4080(C128 *c, bool col80) {
@@ -155,7 +158,16 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!cfg.one_display && display_focuses == 4,
           "restoring separate windows focuses the selected output");
-    for (int i = 0; i < 3; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 2; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.vdc_ram_kb == 16 && c->vdc.address_mask == 0x3FFF,
+          "Advanced VDC RAM selects live 16K address mirroring");
+    CHECK(config_load(&saved, config_file) && saved.vdc_ram_kb == 16,
+          "Advanced VDC RAM selection is persisted");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.vdc_ram_kb == 64 && c->vdc.address_mask == 0xFFFF,
+          "Advanced VDC RAM switches back to 64K");
+    for (int i = 0; i < 2; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.second_drive, "Second Drive toggle enables the extra device");
 
@@ -175,7 +187,7 @@ int main(void) {
     CHECK(ov.row == 6, "Tinker Media includes U36 with Drive 2 enabled");
 
     key(&ov, SDL_SCANCODE_RIGHT);
-    for (int i = 0; i < 6; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 7; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!cfg.second_drive, "Second Drive toggle disables the extra device");
     key(&ov, SDL_SCANCODE_LEFT);
@@ -203,7 +215,7 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RIGHT);
     CHECK(ov.section == OV_ADVANCED && ov.row == 0,
           "Advanced opens at its first row for keyboard map");
-    for (int i = 0; i < 15; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 16; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.keyboard_map_visible, "Advanced opens the keyboard map");
     key(&ov, SDL_SCANCODE_LEFT);
@@ -434,7 +446,7 @@ int main(void) {
             c->display.window = window;
             if (getenv("C128_OVERLAY_PREVIEW_KEYBOARD")) {
                 ov.section = OV_ADVANCED;
-                ov.row = 15;
+                ov.row = 16;
                 ov.keyboard_map_visible = true;
             } else if (getenv("C128_OVERLAY_PREVIEW_ABOUT")) {
                 ov.section = OV_GENERAL;
@@ -442,7 +454,7 @@ int main(void) {
                 ov.about_visible = true;
             } else {
                 ov.section = OV_ADVANCED;
-                ov.row = 6;
+                ov.row = 7;
             }
             SDL_SetRenderDrawColor(renderer, 0x20, 0x40, 0x20, 255);
             SDL_RenderClear(renderer);

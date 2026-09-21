@@ -8,8 +8,9 @@
  *
  * The VDC drives the 640x200 (text) / 640x400 (high-res) display and has its
  * own character set and video RAM. This is a frame-based emulation: the
- * register interface ($D600 index / $D601 data) and the 64K video RAM are
- * modelled, and text and standard bitmap modes are rendered once per frame.
+ * register interface ($D600 index / $D601 data) and selectable 16K/64K video
+ * RAM are modelled, and text and standard bitmap modes are rendered once per
+ * frame.
  * Interlace and cycle-accurate timing are not yet implemented.
  */
 
@@ -41,6 +42,7 @@ typedef struct {
     unsigned screen_text_cols;  /* characters per line (R1) */
     unsigned screen_textlines;  /* visible rows (R6) */
     unsigned bytes_per_char;    /* chargen bytes per character (R9) */
+    u16 address_mask;           /* fitted RAM: $3FFF (16K) or $FFFF (64K) */
 
     u8  ram[VDC_RAM_SIZE];      /* VDC video RAM (byte-addressed model) */
 
@@ -52,6 +54,7 @@ typedef struct {
 
 void vdc_init(Vdc *v);
 void vdc_reset(Vdc *v);
+void vdc_set_ram_size_kb(Vdc *v, int kb);
 void vdc_write_index(Vdc *v, u8 val);   /* $D600 */
 void vdc_write_data(Vdc *v, u8 val);    /* $D601 */
 u8   vdc_read_data(Vdc *v);             /* $D601 */
