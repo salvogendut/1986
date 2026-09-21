@@ -151,17 +151,21 @@ and more accurate VDC behavior.
 - [x] VDC register file, update-address counter, block fill/copy, and 64K
   internal video RAM for the C128DCR.
 - [x] Persistent Advanced 16K/64K VDC RAM selection (64K default), including
-  physical address mirroring and register-28 readback.
+  physical address mapping. Register 28 selects an independent addressing mode,
+  rather than reporting the fitted RAM size.
 - [x] 80x25 text rendering, attribute colours/reverse, and cursor blink.
+- [x] Programmable text row stride and raster/row geometry, plus flash,
+  underline, and semigraphics character effects.
 - [x] Alternative VIC/VDC output in unified and dual-window display modes.
 - [x] F10 display switching with the last active 40/80 mode persisted across
   application restarts and focused correctly in dual-window mode.
 - [x] Alternate-charset text attribute for upper/lowercase switching.
-- [ ] Remaining attribute effects: flash and underline.
 - [x] Standard 640x200 VDC bitmap mode with register and attribute colours,
   reverse video, and C128DCR 16-byte character slots.
+- [x] 8568 revision status, approximate ready/busy and VBLANK, and read-only
+  light-pen position registers.
 - [ ] 640x400 VDC interlace and extended bitmap modes.
-- [ ] VDC timing, ready/busy status, and scan timing accuracy.
+- [ ] Accurate VDC borders, smooth scrolling, address latching, and scan timing.
 - [ ] Investigate BASIC 8 selecting 16K VRAM despite the 64K C128DCR model.
 
 **Done when.** Native VDC text, bitmap, and interlace software renders with

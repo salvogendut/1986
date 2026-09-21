@@ -93,9 +93,10 @@ Current working pieces include:
   window manager permits; focusing either window selects and remembers it
   for the next launch.
 - With Tinker enabled, Advanced > VDC RAM selects 64K (C128DCR default) or
-  16K video RAM. The setting is saved and changes VDC address mirroring;
-  reset the emulated machine after changing it so software can detect the
-  new size.
+  16K fitted video RAM. The setting is saved; VDC register 28 separately
+  selects 16K/64K addressing, including the address-line mapping when that
+  mode differs from the fitted RAM. Reset the emulated machine after changing
+  the fitted size.
 - Compact options overlay that reads and writes `1986.conf`, with an optional
   second virtual IEC drive, separately selected disk image/unit, and
   per-entry remembered file-picker directories.
