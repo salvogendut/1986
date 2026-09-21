@@ -20,6 +20,9 @@ fast = 0
 # Last selected VIC-II (40) or VDC (80) display mode
 display_columns = 80
 
+# Advanced: future hardware drive backend (currently pending; virtual remains active)
+real_disk_drive = 0
+
 # F6 GIF capture
 gif_width = 320
 gif_fps = 25

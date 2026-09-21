@@ -17,17 +17,18 @@
 #define ADV_CRT_SCANLINES       2
 #define ADV_ONE_DISPLAY         3
 #define ADV_DISPLAY_CHANGE_RESET 4
-#define ADV_GIF_WIDTH           5
-#define ADV_GIF_FPS             6
-#define ADV_GIF_ENCODER         7
-#define ADV_TAPE_AUDIO          8
-#define ADV_TAPE_VIDEO          9
-#define ADV_NOTIFICATIONS       10
-#define ADV_DEBUG               11
-#define ADV_JOY_HIDAPI          12
-#define ADV_RESET               13
-#define ADV_VERSION             14
-#define ADV_ROWS                15
+#define ADV_REAL_DISK_DRIVE     5
+#define ADV_GIF_WIDTH           6
+#define ADV_GIF_FPS             7
+#define ADV_GIF_ENCODER         8
+#define ADV_TAPE_AUDIO          9
+#define ADV_TAPE_VIDEO          10
+#define ADV_NOTIFICATIONS       11
+#define ADV_DEBUG               12
+#define ADV_JOY_HIDAPI          13
+#define ADV_RESET               14
+#define ADV_VERSION             15
+#define ADV_ROWS                16
 
 static int cycle_gif_width(int width) {
     switch (width) {
@@ -303,6 +304,12 @@ static void overlay_activate(Overlay *ov) {
                 case ADV_DISPLAY_CHANGE_RESET:
                     ov->cfg->display_change_reset = !ov->cfg->display_change_reset;
                     break;
+                case ADV_REAL_DISK_DRIVE:
+                    ov->cfg->real_disk_drive = !ov->cfg->real_disk_drive;
+                    notify_post(ov->cfg->real_disk_drive
+                        ? "REAL DRIVE EMULATOR PENDING - USING VIRTUAL DRIVE"
+                        : "FAST VIRTUAL DRIVE ACTIVE");
+                    break;
                 case ADV_GIF_WIDTH:
                     ov->cfg->gif_width = cycle_gif_width(ov->cfg->gif_width);
                     break;
@@ -559,6 +566,9 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, lw, y, "Display Change reset",
                  ov->cfg->display_change_reset ? "On" : "Off",
                  ov->row == ADV_DISPLAY_CHANGE_RESET); y += OV_LINE_H;
+        draw_row(r, lw, y, "Real Disk Drive",
+                 ov->cfg->real_disk_drive ? "On (pending)" : "Off",
+                 ov->row == ADV_REAL_DISK_DRIVE); y += OV_LINE_H;
         draw_row(r, lw, y, "GIF resolution", gline,
                  ov->row == ADV_GIF_WIDTH); y += OV_LINE_H;
         {

@@ -60,8 +60,18 @@ Replacement is limited to PRG files; other file types (including D81
 partitions) are left untouched and report `64,FILE TYPE MISMATCH`.
 Writes modify the host disk-image file; keep a backup of any irreplaceable image.
 Symlinked or read-only images can still be loaded but cannot be saved to.
-The fast virtual drive supports PRG files in the root directory; it does not
-emulate 1571/1581 hardware or D81 partitions and REL-file operations.
+The DOS command channel also supports scratch and rename on unlocked root
+SEQ/PRG/USR files. For example, `OPEN 15,8,15,"S:OLD*":CLOSE 15` scratches
+matching files, and `OPEN 15,8,15,"R:NEW=OLD":CLOSE 15` renames one.
+`PRINT DS$` shows the command result; scratch reports the number of files removed.
+The commands write the host image atomically. Locked files, REL files, D81
+partitions, and malformed chains are not modified.
+
+With Tinker enabled in General, Advanced > Real Disk Drive stores a future
+backend preference. It defaults to Off. On currently displays `On (pending)`:
+the hardware drive emulator is not yet implemented, so the fast virtual drive
+remains active. It does not emulate 1571/1581 hardware or D81 partition and
+REL-file operations.
 
 ## Sound
 

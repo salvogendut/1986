@@ -41,6 +41,7 @@ typedef struct {
     /* Disk drive (Commodore 1571). */
     int        drive_unit;        /* IEC device number (8-11) */
     int        drive_type;        /* DRIVE_TYPE_* (1571) */
+    bool       real_disk_drive;   /* future hardware backend preference */
 
     /* Tinker-gated Advanced overlay section. */
     bool       tinker;              /* enable the Advanced section */

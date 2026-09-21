@@ -192,12 +192,36 @@ static void test_format(DiskFormat format) {
           disk_image_read_bam(&d, name, sizeof(name), id, NULL, &free_blocks) == 0 &&
           free_blocks == expected_free - 1,
           "@ replacement releases old sectors and updates BAM");
+    CHECK(disk_image_rename(&d, "INNER", "NEW") == DISK_SAVE_OK &&
+          disk_image_find_file(&d, "NEW", &entry) != 0 &&
+          disk_image_find_file(&d, "INNER", &entry) == 0 &&
+          disk_image_read_file(&d, &entry, bytes, sizeof(bytes)) == 100,
+          "rename changes only the directory name and preserves file data");
+    CHECK(disk_image_rename(&d, "SIDE2", "INNER") == DISK_SAVE_EXISTS &&
+          disk_image_rename(&d, "MISSING", "ABSENT") == DISK_SAVE_NOT_FOUND,
+          "rename rejects duplicate destinations and missing sources");
+    int removed = -1;
+    CHECK(disk_image_scratch(&d, "SIDE?", &removed) == DISK_SAVE_OK &&
+          removed == 2 && disk_image_find_file(&d, "SIDE1", &entry) != 0 &&
+          disk_image_find_file(&d, "SIDE2", &entry) != 0 &&
+          disk_image_read_bam(&d, name, sizeof(name), id, NULL, &free_blocks) == 0 &&
+          free_blocks == expected_free + 1,
+          "wildcard scratch frees files on both sides and updates both BAMs");
+    CHECK(disk_image_scratch(&d, "SIDE?", &removed) == DISK_SAVE_OK &&
+          removed == 0, "scratch of missing files reports zero removed");
+    CHECK(disk_image_save_prg(&d, "SIDE1", prg, 100, false) == DISK_SAVE_OK,
+          "scratch releases its directory slot for reuse");
     if (format == DISK_FORMAT_D81) {
         u8 *slot = d.data + sector_offset(format, 40, 3);
         slot[2] = 0x85; /* model a CBM partition entry */
         CHECK(disk_image_save_prg(&d, "SIDE1", prg, 100, true) ==
               DISK_SAVE_TYPE_MISMATCH,
               "@ replacement never overwrites a D81 partition entry");
+        CHECK(disk_image_scratch(&d, "SIDE1", &removed) ==
+              DISK_SAVE_TYPE_MISMATCH &&
+              disk_image_rename(&d, "OTHER", "SIDE1") ==
+              DISK_SAVE_TYPE_MISMATCH,
+              "partition entries are not modified by DOS commands");
         slot[2] = 0x82;
     }
     size_t base = format == DISK_FORMAT_D81 ? 819200u : 349696u;
@@ -209,8 +233,9 @@ static void test_format(DiskFormat format) {
           "error bytes for both BAM sectors are valid after saving");
     disk_image_close(&d);
     CHECK(disk_image_open(&d, path) == 0 &&
-          disk_image_find_file(&d, "NEW", &entry) == 0,
-          "saved PRG persists after reopening image");
+          disk_image_find_file(&d, "INNER", &entry) == 0 &&
+          disk_image_find_file(&d, "SIDE2", &entry) != 0,
+          "renamed and scratched files persist after reopening image");
     disk_image_close(&d);
 
     CHECK(disk_image_open(&d, full_side) == 0, "open first-side-full image");

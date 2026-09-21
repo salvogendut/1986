@@ -66,6 +66,13 @@ static void send_close(VirtualDrive *v) {
     virtual_drive_attention(v, 0x3F);
 }
 
+static void send_command(VirtualDrive *v, const char *command, bool via_open) {
+    virtual_drive_attention(v, 0x28);
+    virtual_drive_attention(v, via_open ? 0xFF : 0x6F);
+    for (const char *p = command; *p; ++p) virtual_drive_send(v, (u8)*p);
+    virtual_drive_attention(v, 0x3F);
+}
+
 int main(void) {
     char path[] = "/tmp/1986-d64-save-test-XXXXXX";
     char full_path[] = "/tmp/1986-d64-save-full-XXXXXX";
@@ -163,13 +170,65 @@ int main(void) {
     CHECK(disk_image_read_sector(&d, 18, 0, bam) == 0 && bam[4 + 17 * 4] == 16,
           "directory expansion consumes one track-18 BAM sector");
 
+    send_command(&v, "R:RENAMED=NEW1", true);
+    CHECK(strncmp(v.status, "00,", 3) == 0 &&
+          disk_image_find_file(&d, "NEW1", &found) != 0 &&
+          disk_image_find_file(&d, "RENAMED", &found) == 0,
+          "OPEN command channel renames a PRG");
+    send_command(&v, "R:NEW8=RENAMED", false);
+    CHECK(strncmp(v.status, "63,", 3) == 0,
+          "PRINT command channel reports duplicate destination");
+    virtual_drive_take_bus_status(&v);
+    send_command(&v, "R:NOPE=ABSENT", false);
+    CHECK(strncmp(v.status, "62,", 3) == 0,
+          "rename reports missing source");
+    virtual_drive_take_bus_status(&v);
+    send_command(&v, "S:NEW?", false);
+    CHECK(strncmp(v.status, "01,FILES SCRATCHED,07,00", 24) == 0 &&
+          disk_image_find_file(&d, "NEW8", &found) != 0 &&
+          disk_image_find_file(&d, "NEW2", &found) != 0,
+          "wildcard scratch reports count and removes matching files");
+    send_command(&v, "S:RENAMED", true);
+    CHECK(strncmp(v.status, "01,FILES SCRATCHED,01,00", 24) == 0 &&
+          disk_image_find_file(&d, "RENAMED", &found) != 0,
+          "OPEN command channel scratches a named file");
+    send_command(&v, "S:", false);
+    CHECK(strncmp(v.status, "33,", 3) == 0,
+          "empty scratch name reports syntax error");
+    virtual_drive_take_bus_status(&v);
+    send_command(&v, "R:MISSING", false);
+    CHECK(strncmp(v.status, "33,", 3) == 0,
+          "rename without equals reports syntax error");
+    virtual_drive_take_bus_status(&v);
+
+    int renamed_slot = disk_image_d64_track_offset(18) + 256 + 2;
+    d.data[renamed_slot] |= 0x40; /* lock TEST */
+    int removed = -1;
+    CHECK(disk_image_scratch(&d, "TEST", &removed) ==
+          DISK_SAVE_WRITE_PROTECT && removed == 0 &&
+          disk_image_rename(&d, "LOCKED", "TEST") == DISK_SAVE_WRITE_PROTECT,
+          "locked files reject scratch and rename");
+    d.data[renamed_slot] &= (u8)~0x40;
+    int file_offset = disk_image_d64_track_offset(d.data[dir_offset + 3]) +
+                      (int)d.data[dir_offset + 4] * DISK_SECTOR_BYTES;
+    u8 next_track = d.data[file_offset], next_sector = d.data[file_offset + 1];
+    d.data[file_offset] = d.data[dir_offset + 3];
+    d.data[file_offset + 1] = d.data[dir_offset + 4]; /* chain loop */
+    CHECK(disk_image_scratch(&d, "TEST", &removed) == DISK_SAVE_DIR_ERROR &&
+          removed == 0 && disk_image_find_file(&d, "TEST", &found) == 0,
+          "corrupt chain cannot partially scratch a file");
+    d.data[file_offset] = next_track;
+    d.data[file_offset + 1] = next_sector;
+
     d.writable = false;
     CHECK(disk_image_save_prg(&d, "PROTECTED", small, sizeof(small), false) ==
           DISK_SAVE_WRITE_PROTECT, "read-only media rejects SAVE");
     d.writable = true;
     disk_image_close(&d);
-    CHECK(disk_image_open(&d, path) == 0 && disk_image_find_file(&d, "NEW8", &found) == 0,
-          "saved directory and files persist after reopening D64");
+    CHECK(disk_image_open(&d, path) == 0 &&
+          disk_image_find_file(&d, "NEW8", &found) != 0 &&
+          disk_image_find_file(&d, "TEST", &found) == 0,
+          "scratch and surviving files persist after reopening D64");
 
     /* A disk changed outside the emulator must not be overwritten by a
      * stale attached copy, even when the size remains the same. */
@@ -182,6 +241,9 @@ int main(void) {
     }
     CHECK(disk_image_save_prg(&d, "STALE", small, sizeof(small), false) ==
           DISK_SAVE_IO_ERROR, "stale attached image refuses write-back");
+    CHECK(disk_image_scratch(&d, "TEST", &removed) == DISK_SAVE_IO_ERROR &&
+          disk_image_rename(&d, "STALE", "TEST") == DISK_SAVE_IO_ERROR,
+          "external edits also block scratch and rename write-back");
     CHECK(disk_image_find_file(&d, "STALE", &found) != 0,
           "external-change error leaves live directory untouched");
     disk_image_close(&d);
