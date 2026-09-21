@@ -106,6 +106,10 @@ make -j"$(nproc)"
 
 See [INSTALL.md](INSTALL.md) for other platforms.
 
+Tagged releases provide Fedora RPM, Debian DEB, Windows portable ZIP,
+macOS app bundles for Apple Silicon and Intel, and a Linux Flatpak bundle.
+They use the icon derived from `1986_logo.png`; machine ROMs are not bundled.
+
 ## Run the tests
 
 ```bash

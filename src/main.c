@@ -241,10 +241,12 @@ int main(int argc, char **argv) {
             base = SDL_GetBasePath();
             if (base) {
                 snprintf(rom_default, sizeof(rom_default), "%s/roms", base);
-                dir = rom_default;
-            } else {
-                dir = ROM_INSTALL_DIR;
+                SDL_PathInfo info;
+                if (SDL_GetPathInfo(rom_default, &info) &&
+                    info.type == SDL_PATHTYPE_DIRECTORY)
+                    dir = rom_default;
             }
+            if (!dir) dir = ROM_INSTALL_DIR;
         }
         int n = mem_load_c128_roms(&c.mem, dir);
         if (n == 0) {

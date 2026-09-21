@@ -26,6 +26,22 @@ sudo make install
 
 A Flatpak manifest is provided in
 [`packaging/io.github.salvogendut.Emulator1986.yml`](packaging/io.github.salvogendut.Emulator1986.yml).
+It builds the current checkout, including on pull requests. To build locally,
+run `flatpak-builder --install-deps-from=flathub --force-clean build-dir
+packaging/io.github.salvogendut.Emulator1986.yml`.
+
+## Release packages
+
+GitHub Actions builds Fedora x86_64 RPM, Debian amd64 DEB, Windows x86_64
+portable ZIP, macOS arm64 and x86_64 app ZIPs, and a Linux x86_64 Flatpak
+bundle on pull requests and main. Pushing a `v*` tag publishes those artifacts
+in a GitHub Release. The Linux packages install a desktop entry and icons;
+the Windows executable embeds the icon, and the macOS app includes an `.icns`.
+
+The packages contain no copyrighted Commodore machine ROMs. Supply your own
+ROM images as described in [`USAGE.md`](USAGE.md). Portable Windows and macOS
+bundles look for a `roms` directory next to the executable. Installed Linux
+packages use `/usr/share/1986/roms` by default (or a configured ROM path).
 
 ## Running headless (smoke test)
 

@@ -7,6 +7,8 @@ bin/
 *.g64
 *.ppm
 *.png
+!/icons/
+!/icons/**/*.png
 *.gif
 
 # Machine ROM dumps are never committed; keep the ROMs/README.
@@ -31,6 +33,7 @@ roms/*
 # dist tarballs produced by `make dist`
 /1986-*.tar.gz
 /1986-0.1.0/
+/dist/
 
 # flatpak-builder artifacts and bundles
 /.flatpak-builder/
@@ -43,6 +46,7 @@ roms/*
 # runtime screenshots / capture
 1986_*.ppm
 1986_*.png
+!/1986_logo.png
 1986_*.gif
 
 # local scratch / working dirs — never commit

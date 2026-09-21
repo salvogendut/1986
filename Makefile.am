@@ -81,7 +81,11 @@ noinst_HEADERS = \
 1986_CFLAGS = $(AM_CFLAGS) $(SDL3_CFLAGS) -Wall -Wextra \
 	-DROM_INSTALL_DIR=\"$(pkgdatadir)/roms\" \
 	-DPROG_GIT_COMMIT=\"$(PROG_GIT_COMMIT)\"
-1986_LDADD  = $(SDL3_LIBS) -lm
+1986_LDADD  = $(SDL3_LIBS) -lm $(WIN_RC_OBJ)
+1986_DEPENDENCIES = $(WIN_RC_OBJ)
+
+icons/1986-rc.o: $(srcdir)/icons/1986.rc $(srcdir)/icons/1986.ico
+	$(WINDRES) -I$(srcdir)/icons -i $< -O coff -o $@
 
 # Bundled ROM images installed to $(datadir)/1986/roms/
 # (C128/KERNAL ROMs are free for emulator use; user-provided images can be
@@ -96,9 +100,31 @@ dist_desktop_DATA  = io.github.salvogendut.Emulator1986.desktop
 metainfodir        = $(datadir)/metainfo
 dist_metainfo_DATA = io.github.salvogendut.Emulator1986.metainfo.xml
 
+icon16dir          = $(datadir)/icons/hicolor/16x16/apps
+dist_icon16_DATA   = icons/16x16/apps/io.github.salvogendut.Emulator1986.png
+icon32dir          = $(datadir)/icons/hicolor/32x32/apps
+dist_icon32_DATA   = icons/32x32/apps/io.github.salvogendut.Emulator1986.png
+icon48dir          = $(datadir)/icons/hicolor/48x48/apps
+dist_icon48_DATA   = icons/48x48/apps/io.github.salvogendut.Emulator1986.png
+icon64dir          = $(datadir)/icons/hicolor/64x64/apps
+dist_icon64_DATA   = icons/64x64/apps/io.github.salvogendut.Emulator1986.png
+icon128dir         = $(datadir)/icons/hicolor/128x128/apps
+dist_icon128_DATA  = icons/128x128/apps/io.github.salvogendut.Emulator1986.png
+icon256dir         = $(datadir)/icons/hicolor/256x256/apps
+dist_icon256_DATA  = icons/256x256/apps/io.github.salvogendut.Emulator1986.png
+icon512dir         = $(datadir)/icons/hicolor/512x512/apps
+dist_icon512_DATA  = icons/512x512/apps/io.github.salvogendut.Emulator1986.png
+
 # Files shipped in the dist tarball but not built (license, docs, examples).
-EXTRA_DIST = Makefile LICENSE Development.md USAGE.md CONTROLS.md INSTALL.md \
-	ROADMAP.md 1986.conf.example packaging/io.github.salvogendut.Emulator1986.yml \
-	roms/README tests/Makefile tests/test_cpu.c tests/test_mmu.c \
-	tests/test_config.c tests/test_gifcap.c tests/test_d64.c \
-	tests/test_d64_save.c tests/test_disk_formats.c tests/test_sid.c
+EXTRA_DIST = LICENSE README.md Development.md USAGE.md CONTROLS.md INSTALL.md \
+	ROADMAP.md 1986.conf.example 1986_logo.png 1986.spec \
+	src/vice/6510core.c \
+	icons/1986.rc icons/1986.ico \
+	packaging/io.github.salvogendut.Emulator1986.yml \
+	packaging/debian/build-deb.sh packaging/macos/package.sh \
+	tests/Makefile tests/test_cpu.c tests/test_mmu.c tests/test_mem.c \
+	tests/test_cartridge.c tests/test_cia.c tests/test_sid.c tests/test_config.c \
+	tests/test_joyport.c tests/test_c128_keyboard.c tests/test_gifcap.c \
+	tests/test_d64.c tests/test_d64_save.c tests/test_disk_formats.c \
+	tests/test_drive.c tests/test_prg_drive.c tests/test_overlay.c \
+	tests/test_display_footer.c tests/test_vic.c tests/test_vdc.c

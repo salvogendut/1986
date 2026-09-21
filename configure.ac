@@ -19,6 +19,17 @@ PKG_PROG_PKG_CONFIG
 PKG_CHECK_MODULES([SDL3], [sdl3], [], [AC_MSG_ERROR([SDL3 not found])])
 AC_CHECK_LIB([m], [sqrt], [], [AC_MSG_ERROR([libm not found])])
 
+# Embed the application icon in native Windows executables.
+case $host_os in
+  mingw*|cygwin*|msys*)
+    AC_CHECK_TOOL([WINDRES], [windres], [windres])
+    WIN_RC_OBJ="icons/1986-rc.o"
+    ;;
+  *) WIN_RC_OBJ="" ;;
+esac
+AC_SUBST([WINDRES])
+AC_SUBST([WIN_RC_OBJ])
+
 # ffmpeg - optional. Enables WebM/VP9 capture and the post-capture GIF
 # optimization pass. The F6-triggered built-in GIF encoder works without it.
 AC_PATH_PROG([FFMPEG], [ffmpeg], [])
