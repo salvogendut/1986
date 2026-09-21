@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <sys/stat.h>
 
 #define OV_SCALE      1.25f
 #define OV_LINE_H     20
@@ -324,6 +325,73 @@ static void rom_path_display(const Overlay *ov, char *out, size_t sz) {
     abbrev_home(path, out, sz);
 }
 
+static bool existing_directory(const char *path) {
+    struct stat info;
+    return path && path[0] && stat(path, &info) == 0 && S_ISDIR(info.st_mode);
+}
+
+static bool file_parent_directory(const char *path, char *out, size_t size) {
+    const char *slash = path ? strrchr(path, '/') : NULL;
+    if (!slash) return false;
+    size_t length = slash == path ? 1 : (size_t)(slash - path);
+    if (length >= size) return false;
+    memcpy(out, path, length);
+    out[length] = '\0';
+    return true;
+}
+
+static char *recent_dialog_directory(Config *cfg, OvDialogKind kind) {
+    switch (kind) {
+        case OV_DIALOG_DISK:  return cfg->last_disk_dir;
+        case OV_DIALOG_DISK2: return cfg->last_disk2_dir;
+        case OV_DIALOG_TAPE:  return cfg->last_tape_dir;
+        case OV_DIALOG_CART:  return cfg->last_cart_dir;
+        case OV_DIALOG_U36:   return cfg->last_u36_dir;
+        default:              return NULL;
+    }
+}
+
+static const char *selected_dialog_path(const Config *cfg, OvDialogKind kind) {
+    switch (kind) {
+        case OV_DIALOG_DISK:  return cfg->disk_path;
+        case OV_DIALOG_DISK2: return cfg->disk2_path;
+        case OV_DIALOG_TAPE:  return cfg->tape_path;
+        case OV_DIALOG_CART:  return cfg->cart_path;
+        case OV_DIALOG_U36:   return cfg->u36_path;
+        default:              return NULL;
+    }
+}
+
+static void set_dialog_start_location(Overlay *ov) {
+    ov->dialog_location[0] = '\0';
+    if (ov->dialog_kind == OV_DIALOG_ROM) {
+        if (existing_directory(ov->cfg->rom_dir))
+            snprintf(ov->dialog_location, sizeof(ov->dialog_location), "%s",
+                     ov->cfg->rom_dir);
+        return;
+    }
+
+    char *recent = recent_dialog_directory(ov->cfg, ov->dialog_kind);
+    if (existing_directory(recent)) {
+        snprintf(ov->dialog_location, sizeof(ov->dialog_location), "%s", recent);
+        return;
+    }
+    const char *selected = selected_dialog_path(ov->cfg, ov->dialog_kind);
+    char parent[CONFIG_PATH_MAX];
+    if (file_parent_directory(selected, parent, sizeof(parent)) &&
+        existing_directory(parent))
+        snprintf(ov->dialog_location, sizeof(ov->dialog_location), "%s", parent);
+}
+
+static void remember_dialog_directory(Overlay *ov, OvDialogKind kind,
+                                      const char *selected) {
+    char *recent = recent_dialog_directory(ov->cfg, kind);
+    char parent[CONFIG_PATH_MAX];
+    if (recent && file_parent_directory(selected, parent, sizeof(parent)) &&
+        existing_directory(parent))
+        snprintf(recent, CONFIG_PATH_MAX, "%s", parent);
+}
+
 static void open_media_dialog(Overlay *ov, int row) {
     static const SDL_DialogFileFilter disk_filters[] = {
         { "D64/D71/D81 disk images", "d64;D64;d71;D71;d81;D81" },
@@ -358,9 +426,12 @@ static void open_media_dialog(Overlay *ov, int row) {
     ov->dialog_ready = false;
     ov->dialog_failed = false;
     ov->dialog_error[0] = '\0';
+    set_dialog_start_location(ov);
     SDL_ShowOpenFileDialog(overlay_file_callback, ov,
                            ov->c128 ? ov->c128->display.window : NULL,
-                           filters, 2, NULL, false);
+                           filters, 2,
+                           ov->dialog_location[0] ? ov->dialog_location : NULL,
+                           false);
 }
 
 /* Folder picker for the ROM directory (General section). */
@@ -369,9 +440,10 @@ static void open_rom_dialog(Overlay *ov) {
     ov->dialog_ready  = false;
     ov->dialog_failed = false;
     ov->dialog_error[0] = '\0';
+    set_dialog_start_location(ov);
     SDL_ShowOpenFolderDialog(overlay_file_callback, ov,
                              ov->c128 ? ov->c128->display.window : NULL,
-                             ov->cfg->rom_dir[0] ? ov->cfg->rom_dir : NULL,
+                             ov->dialog_location[0] ? ov->dialog_location : NULL,
                              false);
 }
 
@@ -630,6 +702,7 @@ void overlay_tick(Overlay *ov) {
     ov->dialog_ready = false;
     OvDialogKind kind = ov->dialog_kind;
     ov->dialog_kind = OV_DIALOG_NONE;
+    remember_dialog_directory(ov, kind, ov->dialog_path);
 
     if (kind == OV_DIALOG_DISK || kind == OV_DIALOG_DISK2) {
         replace_disk_image(ov, kind == OV_DIALOG_DISK2 ? 2 : 1,

@@ -36,6 +36,7 @@ typedef struct {
     bool         dialog_ready;
     bool         dialog_failed;
     char         dialog_path[CONFIG_PATH_MAX];
+    char         dialog_location[CONFIG_PATH_MAX];
     char         dialog_error[256];
 } Overlay;
 

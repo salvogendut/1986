@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int failures;
@@ -32,6 +33,33 @@ void c128_set_4080(C128 *c, bool col80) {
 }
 static int machine_resets;
 void c128_reset(C128 *c) { (void)c; machine_resets++; }
+
+static char picker_location[CONFIG_PATH_MAX];
+static bool picker_was_folder;
+static bool cancel_next_picker;
+void SDL_ShowOpenFileDialog(SDL_DialogFileCallback callback, void *userdata,
+                            SDL_Window *window, const SDL_DialogFileFilter *filters,
+                            int nfilters, const char *default_location,
+                            bool allow_many) {
+    (void)callback; (void)userdata; (void)window; (void)filters;
+    (void)nfilters; (void)allow_many;
+    picker_was_folder = false;
+    snprintf(picker_location, sizeof(picker_location), "%s",
+             default_location ? default_location : "");
+    if (cancel_next_picker) {
+        const char *cancelled[] = { NULL };
+        cancel_next_picker = false;
+        callback(userdata, cancelled, -1);
+    }
+}
+void SDL_ShowOpenFolderDialog(SDL_DialogFileCallback callback, void *userdata,
+                              SDL_Window *window, const char *default_location,
+                              bool allow_many) {
+    (void)callback; (void)userdata; (void)window; (void)allow_many;
+    picker_was_folder = true;
+    snprintf(picker_location, sizeof(picker_location), "%s",
+             default_location ? default_location : "");
+}
 
 static void key(Overlay *ov, SDL_Scancode sc) {
     SDL_Event event;
@@ -155,6 +183,92 @@ int main(void) {
     key(&ov, SDL_SCANCODE_F9);
     CHECK(ov.visible, "reopen options for subsequent media checks");
 
+    char disk_a[CONFIG_PATH_MAX / 2], disk_b[CONFIG_PATH_MAX / 2];
+    snprintf(disk_a, sizeof(disk_a), "%s/disk-a", temp_home);
+    snprintf(disk_b, sizeof(disk_b), "%s/disk-b", temp_home);
+    CHECK(mkdir(disk_a, 0700) == 0 && mkdir(disk_b, 0700) == 0,
+          "create independent picker directories");
+    snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s/old.d64", temp_home);
+    ov.section = OV_MEDIA;
+    ov.row = 1;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.dialog_kind == OV_DIALOG_DISK && !picker_was_folder &&
+          strcmp(picker_location, temp_home) == 0,
+          "legacy Drive 1 image opens in its selected file's directory");
+    snprintf(ov.dialog_path, sizeof(ov.dialog_path), "%s/missing.d64", disk_a);
+    ov.dialog_ready = true;
+    overlay_tick(&ov);
+    CHECK(strcmp(cfg.last_disk_dir, disk_a) == 0 && cfg.disk_path[0] == '\0',
+          "failed disk insertion still remembers its chosen directory");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(strcmp(picker_location, disk_a) == 0,
+          "Drive 1 picker returns to its recent directory after ejection");
+    cancel_next_picker = true;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.dialog_kind == OV_DIALOG_NONE &&
+          strcmp(cfg.last_disk_dir, disk_a) == 0,
+          "cancelling a picker preserves its last-used directory");
+
+    cfg.second_drive = true;
+    snprintf(cfg.last_disk2_dir, sizeof(cfg.last_disk2_dir), "%s", disk_b);
+    ov.row = 3;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.dialog_kind == OV_DIALOG_DISK2 &&
+          strcmp(picker_location, disk_b) == 0,
+          "Drive 2 keeps an independent picker directory");
+    ov.row = 4;
+    snprintf(ov.dialog_path, sizeof(ov.dialog_path), "%s/demo.tap", disk_a);
+    ov.dialog_kind = OV_DIALOG_TAPE;
+    ov.dialog_ready = true;
+    overlay_tick(&ov);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.dialog_kind == OV_DIALOG_TAPE &&
+          strcmp(picker_location, disk_a) == 0,
+          "tape picker remembers its selected directory");
+    key(&ov, SDL_SCANCODE_DELETE);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.tape_path[0] == '\0' && strcmp(picker_location, disk_a) == 0,
+          "clearing tape leaves its picker history intact");
+
+    snprintf(cfg.last_cart_dir, sizeof(cfg.last_cart_dir), "%s/missing", temp_home);
+    cfg.cart_path[0] = '\0';
+    ov.row = 5;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(picker_location[0] == '\0',
+          "picker uses system default when recent and selected dirs are absent");
+    snprintf(cfg.cart_path, sizeof(cfg.cart_path), "%s/example.crt", disk_b);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.dialog_kind == OV_DIALOG_CART &&
+          strcmp(picker_location, disk_b) == 0,
+          "missing recent cartridge directory falls back to selected file");
+    cfg.cart_path[0] = '\0';
+    snprintf(cfg.last_u36_dir, sizeof(cfg.last_u36_dir), "%s", disk_a);
+    ov.row = 6;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.dialog_kind == OV_DIALOG_U36 &&
+          strcmp(picker_location, disk_a) == 0,
+          "U36 picker uses its own recent directory");
+    cfg.second_drive = false;
+    snprintf(cfg.rom_dir, sizeof(cfg.rom_dir), "%s/missing", temp_home);
+    ov.section = OV_GENERAL;
+    ov.row = 5;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(picker_was_folder && picker_location[0] == '\0',
+          "missing machine-ROM directory uses system folder default");
+    snprintf(cfg.rom_dir, sizeof(cfg.rom_dir), "%s", disk_b);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.dialog_kind == OV_DIALOG_ROM && picker_was_folder &&
+          strcmp(picker_location, disk_b) == 0,
+          "machine-ROM folder picker starts in selected directory");
+    cfg.rom_dir[0] = '\0';
+    cfg.last_cart_dir[0] = '\0';
+    cfg.last_u36_dir[0] = '\0';
+    config_set_defaults(&saved);
+    CHECK(config_load(&saved, config_file) &&
+          strcmp(saved.last_disk_dir, disk_a) == 0 &&
+          strcmp(saved.last_tape_dir, disk_a) == 0,
+          "recent picker directories survive configuration reload");
+
     /* Cartridge selection is a live hardware change, not just a saved path. */
     char cart_file[CONFIG_PATH_MAX];
     snprintf(cart_file, sizeof(cart_file), "%s/test-cart.bin", temp_home);
@@ -267,6 +381,8 @@ int main(void) {
     unlink(cart_file);
     unlink(u36_file);
     unlink(config_file);
+    rmdir(disk_a);
+    rmdir(disk_b);
     rmdir(temp_home);
 
     free(c);

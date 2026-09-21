@@ -128,6 +128,21 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "u36")) {
         snprintf(cfg->u36_path, sizeof(cfg->u36_path), "%s", value);
     }
+    else if (!strcasecmp(key, "last_disk_dir")) {
+        snprintf(cfg->last_disk_dir, sizeof(cfg->last_disk_dir), "%s", value);
+    }
+    else if (!strcasecmp(key, "last_disk2_dir")) {
+        snprintf(cfg->last_disk2_dir, sizeof(cfg->last_disk2_dir), "%s", value);
+    }
+    else if (!strcasecmp(key, "last_tape_dir")) {
+        snprintf(cfg->last_tape_dir, sizeof(cfg->last_tape_dir), "%s", value);
+    }
+    else if (!strcasecmp(key, "last_cart_dir")) {
+        snprintf(cfg->last_cart_dir, sizeof(cfg->last_cart_dir), "%s", value);
+    }
+    else if (!strcasecmp(key, "last_u36_dir")) {
+        snprintf(cfg->last_u36_dir, sizeof(cfg->last_u36_dir), "%s", value);
+    }
     else if (!strcasecmp(key, "drive_unit")) cfg->drive_unit = atoi(value);
     else if (!strcasecmp(key, "drive2_unit")) cfg->drive2_unit = atoi(value);
     else if (!strcasecmp(key, "drive_type")) cfg->drive_type = atoi(value);
@@ -191,6 +206,11 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "tape = %s\n", cfg->tape_path);
     fprintf(f, "cart = %s\n", cfg->cart_path);
     fprintf(f, "u36 = %s\n", cfg->u36_path);
+    fprintf(f, "last_disk_dir = %s\n", cfg->last_disk_dir);
+    fprintf(f, "last_disk2_dir = %s\n", cfg->last_disk2_dir);
+    fprintf(f, "last_tape_dir = %s\n", cfg->last_tape_dir);
+    fprintf(f, "last_cart_dir = %s\n", cfg->last_cart_dir);
+    fprintf(f, "last_u36_dir = %s\n", cfg->last_u36_dir);
     fprintf(f, "drive_unit = %d\n", cfg->drive_unit);
     fprintf(f, "drive2_unit = %d\n", cfg->drive2_unit);
     fprintf(f, "drive_type = %d\n", cfg->drive_type);

@@ -66,7 +66,8 @@ Current working pieces include:
   dialog in General showing the emulator version and build commit. General
   also has a persistent 40/80 key setting for the default VIC/VDC output.
 - Compact options overlay that reads and writes `1986.conf`, with an optional
-  second virtual IEC drive and separately selected disk image/unit.
+  second virtual IEC drive, separately selected disk image/unit, and
+  per-entry remembered file-picker directories.
 - VICE's 8502/6510 core and a reused Z80 core wired to the C128 bus.
 - A fast virtual IEC drive that reads and writes D64, D71, and D81 images,
   supporting `DIRECTORY`, `LOAD`/`DLOAD`, `SAVE`/`DSAVE`, and DOS `SCRATCH`/
