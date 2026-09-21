@@ -31,7 +31,8 @@ static const char *const about_lines[] = {
 #define MEDIA_DISK2    3
 #define MEDIA_TAPE     4
 #define MEDIA_CART     5
-#define MEDIA_ITEM_COUNT 6
+#define MEDIA_U36      6
+#define MEDIA_ITEM_COUNT 7
 
 /* Advanced section rows. */
 #define ADV_SMOOTHING           0
@@ -163,8 +164,45 @@ bool overlay_set_cartridge(Overlay *ov, const char *path) {
     return true;
 }
 
+bool overlay_set_u36(Overlay *ov, const char *path) {
+    char selected[CONFIG_PATH_MAX];
+    if (path && strlen(path) >= sizeof(selected)) {
+        notify_post("U36 ROM PATH TOO LONG");
+        return false;
+    }
+    snprintf(selected, sizeof(selected), "%s", path ? path : "");
+    Mem *mem = &ov->c128->mem;
+    bool had_rom = mem->u36_attached;
+    mem_detach_u36(mem);
+    ov->cfg->u36_path[0] = '\0';
+    if (selected[0]) {
+        if (!mem_attach_u36(mem, selected)) {
+            fprintf(stderr, "1986: invalid U36 ROM '%s' (expected raw 8/16/32 KiB)\n",
+                    selected);
+            notify_post("INVALID U36 ROM IMAGE");
+            if (had_rom) c128_reset(ov->c128);
+            save_config(ov);
+            return false;
+        }
+        snprintf(ov->cfg->u36_path, sizeof(ov->cfg->u36_path), "%s", selected);
+        c128_reset(ov->c128);
+        notify_post("U36 ROM INSERTED - MACHINE RESET");
+    } else if (had_rom) {
+        c128_reset(ov->c128);
+        notify_post("U36 ROM EJECTED - MACHINE RESET");
+    }
+    save_config(ov);
+    return true;
+}
+
 static int media_item(const Overlay *ov, int row) {
-    return !ov->cfg->second_drive && row >= 2 ? row + 2 : row;
+    for (int item = 0; item < MEDIA_ITEM_COUNT; item++) {
+        if (!ov->cfg->second_drive &&
+            (item == MEDIA_DRIVE2 || item == MEDIA_DISK2)) continue;
+        if (!ov->cfg->tinker && item == MEDIA_U36) continue;
+        if (row-- == 0) return item;
+    }
+    return -1;
 }
 
 static void clear_media_entry(Overlay *ov) {
@@ -174,6 +212,11 @@ static void clear_media_entry(Overlay *ov) {
     if (item == MEDIA_CART) {
         if (ov->cfg->cart_path[0] || ov->c128->mem.cart.attached)
             overlay_set_cartridge(ov, NULL);
+        return;
+    }
+    if (item == MEDIA_U36) {
+        if (ov->cfg->u36_path[0] || ov->c128->mem.u36_attached)
+            overlay_set_u36(ov, NULL);
         return;
     }
     if (item == MEDIA_DISK1 || item == MEDIA_DISK2) {
@@ -210,14 +253,15 @@ static const char *const MODELS[] = { "C128DCR", "C128", "C128D" };
 static const char *media_label(int row) {
     static const char *const labels[MEDIA_ITEM_COUNT] = {
         "Drive 1", "Drive 1 image", "Drive 2", "Drive 2 image",
-        "Tape", "Cartridge"
+        "Tape", "Cartridge", "U36 internal ROM"
     };
     return labels[row];
 }
 
 static const char *media_extension(int row) {
     static const char *const exts[MEDIA_ITEM_COUNT] = {
-        "", ".d64/.d71/.d81", "", ".d64/.d71/.d81", ".tap", ".crt/.bin/.rom"
+        "", ".d64/.d71/.d81", "", ".d64/.d71/.d81", ".tap",
+        ".crt/.bin/.rom", ".bin/.rom"
     };
     return exts[row];
 }
@@ -228,6 +272,7 @@ static const char *media_path(const Overlay *ov, int row) {
     if (row == MEDIA_DISK2) return ov->cfg->disk2_path;
     if (row == MEDIA_TAPE) return ov->cfg->tape_path;
     if (row == MEDIA_CART) return ov->cfg->cart_path;
+    if (row == MEDIA_U36) return ov->cfg->u36_path;
     return NULL; /* Drive unit number (cycled) */
 }
 
@@ -269,6 +314,10 @@ static void open_media_dialog(Overlay *ov, int row) {
         { "C128 CRT or function ROM", "crt;CRT;bin;BIN;rom;ROM" },
         { "All files",      "*"       },
     };
+    static const SDL_DialogFileFilter u36_filters[] = {
+        { "U36 function ROM", "bin;BIN;rom;ROM" },
+        { "All files", "*" },
+    };
     const SDL_DialogFileFilter *filters = disk_filters;
     if (row == MEDIA_DISK1 || row == MEDIA_DISK2) {
         ov->dialog_kind = row == MEDIA_DISK2 ? OV_DIALOG_DISK2 : OV_DIALOG_DISK;
@@ -276,6 +325,9 @@ static void open_media_dialog(Overlay *ov, int row) {
     } else if (row == MEDIA_TAPE) {
         ov->dialog_kind = OV_DIALOG_TAPE;
         filters = tape_filters;
+    } else if (row == MEDIA_U36) {
+        ov->dialog_kind = OV_DIALOG_U36;
+        filters = u36_filters;
     } else {
         ov->dialog_kind = OV_DIALOG_CART;
         filters = cart_filters;
@@ -317,7 +369,8 @@ static bool section_available(const Overlay *ov, OvSection s) {
 static int section_rows(const Overlay *ov, OvSection s) {
     switch (s) {
         case OV_GENERAL:  return 4;   /* 40/80 key, Tinker, ROMS PATH, About */
-        case OV_MEDIA:    return ov->cfg->second_drive ? 6 : 4;
+        case OV_MEDIA:    return 4 + (ov->cfg->second_drive ? 2 : 0) +
+                                 (ov->cfg->tinker ? 1 : 0);
         case OV_ADVANCED: return ADV_ROWS;
         default:          return 0;
     }
@@ -543,6 +596,10 @@ void overlay_tick(Overlay *ov) {
     }
     if (kind == OV_DIALOG_CART) {
         overlay_set_cartridge(ov, ov->dialog_path);
+        return;
+    }
+    if (kind == OV_DIALOG_U36) {
+        overlay_set_u36(ov, ov->dialog_path);
         return;
     }
 

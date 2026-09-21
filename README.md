@@ -70,6 +70,8 @@ Current working pieces include:
   function-ROM `.bin` images (also repeated 64 KiB EPROM dumps), with live
   Media-overlay insertion/ejection and `--cart` startup loading. C64-only and
   bank-switched cartridges are not yet supported.
+- Optional U36 internal function-ROM slot for raw 8/16/32 KiB `.bin`/`.rom`
+  images, selected from Media when Tinker is enabled and restored at launch.
 - Tests for the CPU, MMU, CIA/SID, VIC graphics and sprites, configuration,
   GIF encoder, disk formats, KERNAL IEC traps, and virtual-drive channels.
 

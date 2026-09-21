@@ -43,6 +43,7 @@ int main(void) {
     cfg.drive2_unit = 10;
     snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s", "keep-me.d64");
     snprintf(cfg.disk2_path, sizeof(cfg.disk2_path), "%s", "second.d81");
+    snprintf(cfg.u36_path, sizeof(cfg.u36_path), "%s", "utility.rom");
     CHECK(config_save(&cfg, path), "config_save");
 
     Config back;
@@ -55,6 +56,8 @@ int main(void) {
     CHECK(back.second_drive && back.drive_unit == 9 && back.drive2_unit == 10 &&
           strcmp(back.disk2_path, "second.d81") == 0,
           "second-drive toggle, unit, and image roundtrip");
+    CHECK(strcmp(back.u36_path, "utility.rom") == 0,
+          "U36 ROM path roundtrip");
 
     CHECK(config_save_column_mode(path, true), "save 80-column mode only");
     CHECK(config_load(&back, path), "reload 80-column mode");
@@ -62,6 +65,8 @@ int main(void) {
     CHECK(back.scale == 3, "mode-only save preserves other settings");
     CHECK(strcmp(back.disk_path, "keep-me.d64") == 0,
           "mode-only save preserves media settings");
+    CHECK(strcmp(back.u36_path, "utility.rom") == 0,
+          "mode-only save preserves U36 setting");
     CHECK(back.real_disk_drive,
           "mode-only save preserves real-drive preference");
     CHECK(back.second_drive && back.drive2_unit == 10 &&

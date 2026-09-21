@@ -29,6 +29,7 @@ void config_set_defaults(Config *cfg) {
     cfg->disk2_path[0] = '\0';
     cfg->tape_path[0] = '\0';
     cfg->cart_path[0] = '\0';
+    cfg->u36_path[0] = '\0';
     cfg->drive_unit = 8;
     cfg->drive2_unit = 9;
     cfg->drive_type = 1571;   /* Commodore 1571 */
@@ -121,6 +122,9 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "cart")) {
         snprintf(cfg->cart_path, sizeof(cfg->cart_path), "%s", value);
     }
+    else if (!strcasecmp(key, "u36")) {
+        snprintf(cfg->u36_path, sizeof(cfg->u36_path), "%s", value);
+    }
     else if (!strcasecmp(key, "drive_unit")) cfg->drive_unit = atoi(value);
     else if (!strcasecmp(key, "drive2_unit")) cfg->drive2_unit = atoi(value);
     else if (!strcasecmp(key, "drive_type")) cfg->drive_type = atoi(value);
@@ -175,6 +179,7 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "disk2 = %s\n", cfg->disk2_path);
     fprintf(f, "tape = %s\n", cfg->tape_path);
     fprintf(f, "cart = %s\n", cfg->cart_path);
+    fprintf(f, "u36 = %s\n", cfg->u36_path);
     fprintf(f, "drive_unit = %d\n", cfg->drive_unit);
     fprintf(f, "drive2_unit = %d\n", cfg->drive2_unit);
     fprintf(f, "drive_type = %d\n", cfg->drive_type);

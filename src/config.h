@@ -38,6 +38,7 @@ typedef struct {
     char       disk2_path[CONFIG_PATH_MAX]; /* second drive disk image */
     char       tape_path[CONFIG_PATH_MAX];  /* Tape .tap image */
     char       cart_path[CONFIG_PATH_MAX];  /* native C128 CRT/raw function ROM */
+    char       u36_path[CONFIG_PATH_MAX];   /* internal function ROM socket */
 
     /* Disk drive (Commodore 1571). */
     int        drive_unit;        /* IEC device number (8-11) */

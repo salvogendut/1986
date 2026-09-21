@@ -227,6 +227,8 @@ ROM through emulated hardware.
 - [x] Persistent active display selection in unified and dual-window modes.
 - [x] Generic native-C128 CRT and raw external function-ROM cartridge loading,
   including live Media attach/eject; bank-switched cartridges remain future work.
+- [x] U36 internal function-ROM socket with Tinker-gated Media selection and
+  persistent live attach/eject.
 - [ ] Snapshots (VICE `.vsf` or a simple own format) for save/load of machine
   state.
 - [ ] Full native C128 keyboard coverage, host layouts, and auto-repeat.

@@ -1,6 +1,9 @@
+#define _POSIX_C_SOURCE 200809L
 #include "mem.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 static int failures = 0;
 
@@ -135,6 +138,67 @@ int main(void) {
     CHECK(mem_read(mem, 0xE100) == 0x91 &&
           mem->ram[0xE100] == 0x92 && mem->ram[0x1E100] == 0,
           "RAM behind KERNAL ROM respects upper common memory");
+
+    /* U36 is selected separately for the lower and upper 16 KiB. */
+    char u36_file[] = "/tmp/1986-u36-test-XXXXXX";
+    int u36_fd = mkstemp(u36_file);
+    CHECK(u36_fd >= 0, "create U36 test image");
+    if (u36_fd >= 0) {
+        u8 image[ROM_U36];
+        memset(image, 0x36, 0x4000);
+        memset(image + 0x4000, 0x63, 0x4000);
+        CHECK(write(u36_fd, image, sizeof(image)) == sizeof(image),
+              "write 32 KiB U36 image");
+        close(u36_fd);
+        CHECK(mem_attach_u36(mem, u36_file), "attach U36 image");
+        mem->basic[0x4000] = 0xBA;
+        mem->kernal[0] = 0xCE;
+        mem->cart.attached = true;
+        mem->cart.rom[0] = 0xCA;
+        mem->cart.rom[0x6000] = 0xCB;
+        mem->mmu.mcr = 0x15; /* lower and upper internal ROM */
+        CHECK(mem_read(mem, 0x8000) == 0x36 &&
+              mem_read(mem, 0xBFFF) == 0x36 &&
+              mem_read(mem, 0xC000) == 0x63 &&
+              mem_read(mem, 0xD000) == 0x63 &&
+              mem_read(mem, 0xFFFF) == 0x63,
+              "U36 maps both 16 KiB halves independently of cartridge");
+        mem_write(mem, 0x8000, 0x77);
+        CHECK(mem_read(mem, 0x8000) == 0x36 && mem->ram[0x8000] == 0x77,
+              "writes pass through U36 to RAM");
+        mem->mmu.mcr = 0x11; /* BASIC lower, U36 upper */
+        CHECK(mem_read(mem, 0x8000) == 0xBA && mem_read(mem, 0xE000) == 0x63,
+              "lower and upper ROM selectors are independent");
+        mem->mmu.mcr = 0x29; /* external lower, external upper */
+        CHECK(mem_read(mem, 0x8000) == 0xCA && mem_read(mem, 0xE000) == 0xCB,
+              "external cartridge selection remains independent");
+        mem_detach_u36(mem);
+        mem->mmu.mcr = 0x15;
+        CHECK(!mem->u36_attached && mem_read(mem, 0x8000) == 0 &&
+              mem_read(mem, 0xE000) == 0,
+              "empty U36 reads as blank ROM, not underlying RAM");
+        FILE *half = fopen(u36_file, "wb");
+        CHECK(half != NULL, "rewrite U36 test image");
+        if (half) {
+            memset(image, 0x16, 0x4000);
+            CHECK(fwrite(image, 1, 0x4000, half) == 0x4000,
+                  "write 16 KiB U36 image");
+            fclose(half);
+            CHECK(mem_attach_u36(mem, u36_file) &&
+                  mem->u36_rom[0] == 0x16 && mem->u36_rom[0x4000] == 0x16,
+                  "16 KiB U36 image mirrors into upper half");
+        }
+        FILE *short_image = fopen(u36_file, "wb");
+        CHECK(short_image != NULL, "rewrite malformed U36 image");
+        if (short_image) {
+            CHECK(fwrite(image, 1, 0x1000, short_image) == 0x1000,
+                  "write malformed U36 image");
+            fclose(short_image);
+            CHECK(!mem_attach_u36(mem, u36_file) && !mem->u36_attached,
+                  "malformed replacement leaves U36 empty");
+        }
+        unlink(u36_file);
+    }
 
     free(mem);
     if (failures == 0) { printf("test-mem: OK\n"); return 0; }

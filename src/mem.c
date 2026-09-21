@@ -53,7 +53,7 @@ static bool cfg_4000_is_rom(unsigned cfg) {
     return (cfg & 1) != 0;
 }
 /* C128 MMU selectors: 00=BASIC/KERNAL, 01=internal function ROM,
- * 10=external function ROM, 11=RAM. Internal ROM remains unimplemented. */
+ * 10=external function ROM, 11=RAM. */
 static unsigned lower_rom_select(const Mem *m) {
     return (m->mmu.mcr >> 2) & 3;
 }
@@ -77,18 +77,24 @@ u8 mem_read(Mem *m, u16 addr) {
     if (addr < 0xC000) {                     /* $8000-$BFFF */
         if (lower_rom_select(m) == 0)
             return m->basic[0x4000 + (addr - 0x8000)];
+        if (lower_rom_select(m) == 1)
+            return m->u36_rom[addr - 0x8000];
         if (lower_rom_select(m) == 2 && m->cart.attached)
             return m->cart.rom[addr - 0x8000];
         return m->ram[bank_off(m, addr)];
     }
     if (addr < 0xD000) {                     /* $C000-$CFFF */
         if (upper_rom_select(m) == 0) return m->editor[addr - 0xC000];
+        if (upper_rom_select(m) == 1)
+            return m->u36_rom[addr - 0x8000];
         if (upper_rom_select(m) == 2 && m->cart.attached)
             return m->cart.rom[addr - 0x8000];
         return m->ram[bank_off(m, addr)];
     }
     if (addr < 0xE000) {                     /* $D000-$DFFF */
         /* The CPU bus dispatches visible I/O before reaching this layer. */
+        if (upper_rom_select(m) == 1)
+            return m->u36_rom[addr - 0x8000];
         if (upper_rom_select(m) == 2 && m->cart.attached)
             return m->cart.rom[addr - 0x8000];
         if (cfg < 8)
@@ -97,6 +103,8 @@ u8 mem_read(Mem *m, u16 addr) {
     }
     /* $E000-$FFFF */
     if (upper_rom_select(m) == 0) return m->kernal[addr - 0xE000];
+    if (upper_rom_select(m) == 1)
+        return m->u36_rom[addr - 0x8000];
     if (upper_rom_select(m) == 2 && m->cart.attached)
         return m->cart.rom[addr - 0x8000];
     return m->ram[bank_off(m, addr)];
@@ -116,6 +124,30 @@ static size_t read_file(const char *path, u8 *buf, size_t cap) {
     size_t got = fread(buf, 1, cap, f);
     fclose(f);
     return got;
+}
+
+void mem_detach_u36(Mem *m) {
+    m->u36_attached = false;
+    /* Match VICE's unpopulated internal-function-ROM image. */
+    memset(m->u36_rom, 0, sizeof(m->u36_rom));
+}
+
+bool mem_attach_u36(Mem *m, const char *path) {
+    mem_detach_u36(m);
+    if (!path || !path[0]) return false;
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+    u8 image[ROM_U36];
+    size_t size = fread(image, 1, sizeof(image), f);
+    int extra = fgetc(f);
+    bool valid = !ferror(f) && extra == EOF &&
+                 (size == 0x2000 || size == 0x4000 || size == ROM_U36);
+    fclose(f);
+    if (!valid) return false;
+    for (size_t off = 0; off < ROM_U36; off += size)
+        memcpy(m->u36_rom + off, image, size);
+    m->u36_attached = true;
+    return true;
 }
 
 int mem_load_c128_roms(Mem *m, const char *dir) {

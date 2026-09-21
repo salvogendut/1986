@@ -75,6 +75,13 @@ the VIC output the persistent default, or press F10 to switch while running.
 Selection is restored at launch from `cart` in the config; `--cart PATH`
 overrides it for that run. Tape selection remains a placeholder for now.
 
+With **General > Tinker** enabled, **Media > U36 internal ROM** selects a raw
+`.bin`/`.rom` image for the C128's internal function-ROM socket. Images must
+be 8, 16, or 32 KiB; smaller images repeat through the 32 KiB address space.
+U36 is independent of the external cartridge slot. Selecting a new image or
+pressing Del to eject it resets the machine. The `u36` config setting restores
+the selection at launch; an invalid replacement leaves the socket empty.
+
 The 785260 diagnostic cartridge expects Commodore's external test harness.
 1986 does not silently connect its user-port, serial, joystick, or cassette
 loopback wiring. Those tests, including the CIA-to-CIA data-line part of

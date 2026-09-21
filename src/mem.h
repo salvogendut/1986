@@ -23,6 +23,7 @@
 #define ROM_Z80BIOS   0x1000
 #define ROM_KERNAL    0x2000
 #define ROM_CHARGEN   0x2000   /* C64 and native-C128 4K character banks */
+#define ROM_U36       0x8000   /* optional internal function ROM socket */
 
 typedef struct {
     Mmu  mmu;
@@ -32,6 +33,8 @@ typedef struct {
     u8   z80bios[ROM_Z80BIOS];
     u8   kernal[ROM_KERNAL];
     u8   chargen[ROM_CHARGEN];
+    u8   u36_rom[ROM_U36];
+    bool u36_attached;
     u8   color_ram[0x800];   /* $D800-$DBFF nibbles, two 1K banks */
     Cartridge cart;          /* native external function ROM, if attached */
     u8   pla_data;           /* 8502 $01 port decoded value (PLA output) */
@@ -52,3 +55,8 @@ bool mem_io_visible(const Mem *m);
  *   are mirrored into both banks). A single-file 32K kernal dump is also
  *   accepted. Returns the number of ROMs loaded. */
 int  mem_load_c128_roms(Mem *m, const char *dir);
+
+/* Raw 8/16/32 KiB U36 images; smaller dumps mirror through the 32 KiB
+ * socket address space. Failed attachment leaves the socket empty. */
+bool mem_attach_u36(Mem *m, const char *path);
+void mem_detach_u36(Mem *m);
