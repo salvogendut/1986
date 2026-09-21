@@ -209,6 +209,12 @@ cycle-level 1571 implementation without conflating their interfaces.
 - [ ] D81 partition navigation and REL-file operations.
 - [ ] True integrated 1571: drive CPU, 2K RAM, DOS ROM, CIA/VIA/FDC,
   mechanism timing, line-level IEC, and fast serial (#30).
+- [x] First 1571CR slice: independent ROM-backed 6502 core, mirrored 2K RAM,
+  hardware address decoder, reset/interrupt vectors, and CPU/bus tests (#92).
+- [ ] Emulate 1571CR VIAs, MOS5710, WD1770, mechanism and physical IEC;
+  clock the core with the machine and switch Advanced > Real Disk Drive to it.
+- [x] Media persists a per-drive hardware type when real-drive mode is selected;
+  1581 is shown as future hardware rather than confused with D81 image support.
 - [x] Persisted Advanced > Real Disk Drive preference, default Off; On is
   marked pending and retains the virtual backend until true-drive support (#57).
 - [x] Optional second fast virtual drive with independent image and a distinct

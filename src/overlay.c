@@ -48,13 +48,15 @@ static const char *const keyboard_map_lines[] = {
 
 /* Logical Media rows; Drive 2 rows collapse away when disabled. */
 #define MEDIA_DRIVE1   0
-#define MEDIA_DISK1    1
-#define MEDIA_DRIVE2   2
-#define MEDIA_DISK2    3
-#define MEDIA_TAPE     4
-#define MEDIA_CART     5
-#define MEDIA_U36      6
-#define MEDIA_ITEM_COUNT 7
+#define MEDIA_TYPE1    1
+#define MEDIA_DISK1    2
+#define MEDIA_DRIVE2   3
+#define MEDIA_TYPE2    4
+#define MEDIA_DISK2    5
+#define MEDIA_TAPE     6
+#define MEDIA_CART     7
+#define MEDIA_U36      8
+#define MEDIA_ITEM_COUNT 9
 
 /* Advanced section rows. */
 #define ADV_SMOOTHING           0
@@ -223,7 +225,9 @@ bool overlay_set_u36(Overlay *ov, const char *path) {
 static int media_item(const Overlay *ov, int row) {
     for (int item = 0; item < MEDIA_ITEM_COUNT; item++) {
         if (!ov->cfg->second_drive &&
-            (item == MEDIA_DRIVE2 || item == MEDIA_DISK2)) continue;
+            (item == MEDIA_DRIVE2 || item == MEDIA_TYPE2 || item == MEDIA_DISK2)) continue;
+        if (!ov->cfg->real_disk_drive &&
+            (item == MEDIA_TYPE1 || item == MEDIA_TYPE2)) continue;
         if (!ov->cfg->tinker && item == MEDIA_U36) continue;
         if (row-- == 0) return item;
     }
@@ -277,7 +281,8 @@ static const char *const MODELS[] = { "C128DCR", "C128", "C128D" };
 
 static const char *media_label(int row) {
     static const char *const labels[MEDIA_ITEM_COUNT] = {
-        "Drive 1", "Drive 1 image", "Drive 2", "Drive 2 image",
+        "Drive 1", "Drive 1 type", "Drive 1 image",
+        "Drive 2", "Drive 2 type", "Drive 2 image",
         "Tape", "Cartridge", "U36 internal ROM"
     };
     return labels[row];
@@ -285,7 +290,7 @@ static const char *media_label(int row) {
 
 static const char *media_extension(int row) {
     static const char *const exts[MEDIA_ITEM_COUNT] = {
-        "", ".d64/.d71/.d81/.prg", "", ".d64/.d71/.d81/.prg", ".tap",
+        "", "", ".d64/.d71/.d81/.prg", "", "", ".d64/.d71/.d81/.prg", ".tap",
         ".crt/.bin/.rom", ".bin/.rom"
     };
     return exts[row];
@@ -466,6 +471,7 @@ static int section_rows(const Overlay *ov, OvSection s) {
     switch (s) {
         case OV_GENERAL:  return 7;   /* display, input ports, Tinker, ROMs, About */
         case OV_MEDIA:    return 4 + (ov->cfg->second_drive ? 2 : 0) +
+                                 (ov->cfg->real_disk_drive ? 1 + (ov->cfg->second_drive ? 1 : 0) : 0) +
                                  (ov->cfg->tinker ? 1 : 0);
         case OV_ADVANCED: return ADV_ROWS;
         default:          return 0;
@@ -530,6 +536,15 @@ static void overlay_activate(Overlay *ov) {
                     ov->cfg->drive2_unit, ov->cfg->drive_unit);
                 drive_reset(&ov->c128->drive2);
                 drive_set_unit(&ov->c128->drive2, ov->cfg->drive2_unit);
+            } else if (media_item(ov, ov->row) == MEDIA_TYPE1 ||
+                       media_item(ov, ov->row) == MEDIA_TYPE2) {
+                int *type = media_item(ov, ov->row) == MEDIA_TYPE1
+                          ? &ov->cfg->drive_type : &ov->cfg->drive2_type;
+                *type = *type == 1571 ? 1581 : 1571;
+                notify_post(*type == 1571
+                    ? "1571CR HARDWARE BACKEND UNDER DEVELOPMENT"
+                    : "1581 HARDWARE BACKEND NOT YET IMPLEMENTED");
+                save_config(ov);
             } else {
                 open_media_dialog(ov, media_item(ov, ov->row));
             }
@@ -871,6 +886,11 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
                 int unit = item == MEDIA_DRIVE2 ? ov->cfg->drive2_unit :
                                                  ov->cfg->drive_unit;
                 snprintf(vbuf, sizeof(vbuf), "#%d", unit);
+            } else if (item == MEDIA_TYPE1 || item == MEDIA_TYPE2) {
+                int type = item == MEDIA_TYPE2 ? ov->cfg->drive2_type :
+                                                  ov->cfg->drive_type;
+                snprintf(vbuf, sizeof(vbuf), "%s", type == 1571
+                         ? "1571CR (pending)" : "1581 (not implemented)");
             } else {
                 const char *path = media_path(ov, item);
                 if (path && path[0])

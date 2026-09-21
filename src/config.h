@@ -52,7 +52,8 @@ typedef struct {
     /* Disk drive (Commodore 1571). */
     int        drive_unit;        /* IEC device number (8-11) */
     int        drive2_unit;       /* distinct IEC device number (8-11) */
-    int        drive_type;        /* DRIVE_TYPE_* (1571) */
+    int        drive_type;        /* drive 1 hardware: 1571 or 1581 */
+    int        drive2_type;       /* drive 2 hardware: 1571 or 1581 */
     bool       real_disk_drive;   /* future hardware backend preference */
     bool       second_drive;      /* expose the second virtual IEC drive */
 

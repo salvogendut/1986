@@ -276,8 +276,17 @@ int main(int argc, char **argv) {
         } else {
             fprintf(stderr, "1986: loaded %d ROM image(s) from '%s'\n", n, dir);
         }
-        /* Virtual-drive mode reads mounted media directly and deliberately does
-         * not load a 1571 ROM. A future true-drive module will own that ROM. */
+        /* The independent 1571CR core owns the optional DOS ROM. It is not
+         * connected to IEC yet, so the Advanced preference remains pending. */
+        char drive_rom_path[CONFIG_PATH_MAX];
+        int drive_rom_len = snprintf(drive_rom_path, sizeof(drive_rom_path),
+                                     "%s/dos1571cr.bin", dir);
+        if (drive_rom_len > 0 && (size_t)drive_rom_len < sizeof(drive_rom_path) &&
+            drive1571cr_load_rom(&c.integrated_drive, drive_rom_path)) {
+            fprintf(stderr, "1986: loaded 1571CR DOS ROM from '%s'\n", drive_rom_path);
+        } else if (cfg.real_disk_drive) {
+            fprintf(stderr, "1986: 1571CR DOS ROM missing/invalid in '%s' (32 KiB required)\n", dir);
+        }
         if (cfg.disk_path[0] && drive_attach_disk(&c.drive, cfg.disk_path) != 0)
             fprintf(stderr, "1986: could not attach drive media '%s'\n", cfg.disk_path);
         if (cfg.disk2_path[0] && drive_attach_disk(&c.drive2, cfg.disk2_path) != 0)

@@ -11,6 +11,7 @@
 #include "kbd.h"
 #include "joyport.h"
 #include "drive.h"
+#include "drive1571cr.h"
 #include "config.h"
 #include <stdbool.h>
 
@@ -40,6 +41,7 @@ typedef struct {
     JoyPorts joyports;
     Drive   drive;
     Drive   drive2;
+    Drive1571Cr integrated_drive; /* independent ROM-backed 1571CR machine */
     Config *cfg;
     bool    paused;
     bool    fast;        /* 8502 at 2 MHz (C128 fast mode) */

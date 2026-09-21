@@ -35,6 +35,7 @@ void config_set_defaults(Config *cfg) {
     cfg->drive_unit = 8;
     cfg->drive2_unit = 9;
     cfg->drive_type = 1571;   /* Commodore 1571 */
+    cfg->drive2_type = 1571;
     cfg->real_disk_drive = false;
     cfg->second_drive = false;
     cfg->tinker = false;
@@ -149,6 +150,7 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "drive_unit")) cfg->drive_unit = atoi(value);
     else if (!strcasecmp(key, "drive2_unit")) cfg->drive2_unit = atoi(value);
     else if (!strcasecmp(key, "drive_type")) cfg->drive_type = atoi(value);
+    else if (!strcasecmp(key, "drive2_type")) cfg->drive2_type = atoi(value);
     else if (!strcasecmp(key, "real_disk_drive")) cfg->real_disk_drive = atoi(value) != 0;
     else if (!strcasecmp(key, "second_drive")) cfg->second_drive = atoi(value) != 0;
     else if (!strcasecmp(key, "tinker"))      cfg->tinker = atoi(value) != 0;
@@ -173,6 +175,8 @@ bool config_load(Config *cfg, const char *path) {
     while (fgets(line, sizeof(line), f)) parse_line(cfg, line);
     fclose(f);
     config_normalize_drive_units(cfg);
+    if (cfg->drive_type != 1571 && cfg->drive_type != 1581) cfg->drive_type = 1571;
+    if (cfg->drive2_type != 1571 && cfg->drive2_type != 1581) cfg->drive2_type = 1571;
     if (cfg->vdc_ram_kb != 16 && cfg->vdc_ram_kb != 64) cfg->vdc_ram_kb = 64;
     if (cfg->main_input_port != 1 && cfg->main_input_port != 2) cfg->main_input_port = 2;
     for (int i = 0; i < 2; ++i)
@@ -219,6 +223,7 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "drive_unit = %d\n", cfg->drive_unit);
     fprintf(f, "drive2_unit = %d\n", cfg->drive2_unit);
     fprintf(f, "drive_type = %d\n", cfg->drive_type);
+    fprintf(f, "drive2_type = %d\n", cfg->drive2_type);
     fprintf(f, "real_disk_drive = %d\n", cfg->real_disk_drive ? 1 : 0);
     fprintf(f, "second_drive = %d\n", cfg->second_drive ? 1 : 0);
     fprintf(f, "tinker = %d\n", cfg->tinker ? 1 : 0);

@@ -103,6 +103,7 @@ int main(void) {
     Config cfg;
     config_set_defaults(&cfg);
     cfg.tinker = true;
+
     C128 *c = calloc(1, sizeof(*c));
     CHECK(c != NULL, "allocate C128 overlay fixture");
     if (!c) return 1;
@@ -433,6 +434,38 @@ int main(void) {
     for (int i = 0; i < 8; ++i) key(&ov, SDL_SCANCODE_DOWN);
     CHECK(ov.row == 3, "U36 Media row is hidden without Tinker");
     cfg.tinker = true;
+
+    /* Real-drive hardware type lives in Media, separately for each unit.
+     * The fast-drive layout above remains unchanged while the gate is off. */
+    ov.section = OV_ADVANCED;
+    ov.row = 6;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.real_disk_drive, "Advanced enables real-drive preference");
+    ov.section = OV_MEDIA;
+    ov.row = 1;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.drive_type == 1581,
+          "Media selects 1581 hardware for drive 1 independently of image");
+    CHECK(config_load(&saved, config_file) && saved.drive_type == 1581,
+          "drive 1 hardware selection persists");
+    ov.section = OV_ADVANCED;
+    ov.row = 7;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.second_drive, "enable second drive for independent type selection");
+    ov.section = OV_MEDIA;
+    ov.row = 4;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.drive2_type == 1581 && cfg.drive_type == 1581,
+          "Media exposes a separate hardware type for drive 2");
+    ov.section = OV_ADVANCED;
+    ov.row = 6;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(!cfg.real_disk_drive, "Advanced disables real-drive preference");
+    ov.section = OV_MEDIA;
+    ov.row = 0;
+    for (int i = 0; i < 12; i++) key(&ov, SDL_SCANCODE_DOWN);
+    CHECK(ov.row == 6,
+          "fast-drive Media layout hides hardware type while gate is off");
 
     const char *preview = getenv("C128_OVERLAY_PREVIEW");
     if (preview) {
