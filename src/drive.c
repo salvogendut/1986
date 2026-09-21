@@ -34,6 +34,9 @@ void drive_set_unit(Drive *d, int unit) {
 }
 
 void drive_attention(Drive *d, u8 byte) {
+    /* cfg->real_disk_drive is a saved request for the future cycle-level
+     * backend. Until that backend exists, keep the working virtual IEC path
+     * connected even when the Advanced overlay preference is on. */
     virtual_drive_attention(&d->virtual_drive, byte);
 }
 

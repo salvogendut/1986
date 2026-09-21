@@ -36,6 +36,7 @@ typedef enum {
     DISK_SAVE_WRITE_PROTECT,
     DISK_SAVE_IO_ERROR,
     DISK_SAVE_BAD_NAME,
+    DISK_SAVE_NOT_FOUND,
 } DiskSaveResult;
 
 /* One decoded directory entry (CBM DOS slot layout). */
@@ -96,3 +97,10 @@ int disk_image_read_file(const DiskImage *d, const DiskDirEntry *entry, u8 *out,
  * image and the file remain unchanged on error. */
 DiskSaveResult disk_image_save_prg(DiskImage *d, const char *name, const u8 *data,
                           size_t length, bool replace);
+
+/* Mutate ordinary SEQ/PRG/USR directory entries. SCRATCH accepts '*' and '?'
+ * and reports the number removed; RENAME requires two literal names. Both
+ * operations leave the image unchanged if validation or write-back fails. */
+DiskSaveResult disk_image_scratch(DiskImage *d, const char *pattern, int *removed);
+DiskSaveResult disk_image_rename(DiskImage *d, const char *new_name,
+                                 const char *old_name);

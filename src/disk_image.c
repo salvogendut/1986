@@ -443,6 +443,48 @@ static bool name_equals(const u8 *slot, const char *name) {
     return true;
 }
 
+static bool valid_write_name(const char *name, bool wildcards) {
+    if (!name) return false;
+    size_t n = strlen(name);
+    if (n == 0 || n > 16) return false;
+    for (size_t i = 0; i < n; ++i) {
+        unsigned char c = (unsigned char)name[i];
+        if (c < 0x20 || c >= 0x80 || c == '/' || c == ':' || c == ',' ||
+            c == '=' || (!wildcards && (c == '*' || c == '?')))
+            return false;
+    }
+    return true;
+}
+
+static bool slot_matches(const u8 *slot, const char *pattern) {
+    DiskDirEntry entry;
+    return disk_image_decode_slot(slot, &entry) == 0 &&
+        filename_matches(pattern, entry.name);
+}
+
+static DiskSaveResult validate_write_layout(const DiskImage *d, const u8 *image) {
+    int track = directory_track(d);
+    int first = directory_start(d);
+    const u8 *header = image + disk_image_track_offset(d, track);
+    if (d->format != DISK_FORMAT_D64 && header[2] != 0 &&
+        header[2] != (d->format == DISK_FORMAT_D71 ? 'A' : 'D'))
+        return DISK_SAVE_DOS_MISMATCH;
+    for (int s = 0; s <= first; ++s)
+        if (bam_free(d, image, track, s)) return DISK_SAVE_DIR_ERROR;
+    if (d->format == DISK_FORMAT_D71 && bam_free(d, image, 53, 0))
+        return DISK_SAVE_DIR_ERROR;
+    return DISK_SAVE_OK;
+}
+
+static void mark_system_errors(const DiskImage *d, u8 *image) {
+    sector_error_ok(d, image, directory_track(d), 0);
+    if (d->format == DISK_FORMAT_D71) sector_error_ok(d, image, 53, 0);
+    if (d->format == DISK_FORMAT_D81) {
+        sector_error_ok(d, image, 40, 1);
+        sector_error_ok(d, image, 40, 2);
+    }
+}
+
 static DiskSaveResult find_save_slot(const DiskImage *d, u8 *image,
                                     const char *name, bool replace,
                                     u8 **slot_out, u8 **tail_out) {
@@ -588,23 +630,8 @@ DiskSaveResult disk_image_save_prg(DiskImage *d, const char *name, const u8 *dat
     memcpy(image, d->data, d->size);
     int dir_track = directory_track(d);
     int first_dir_sector = directory_start(d);
-    u8 *header = sector_in(d, image, dir_track, 0);
-    if (d->format != DISK_FORMAT_D64 &&
-        header[2] != 0 &&
-        header[2] != (d->format == DISK_FORMAT_D71 ? 'A' : 'D')) {
-        free(image);
-        return DISK_SAVE_DOS_MISMATCH;
-    }
-    for (int s = 0; s <= first_dir_sector; ++s) {
-        if (bam_free(d, image, dir_track, s)) {
-            free(image);
-            return DISK_SAVE_DIR_ERROR;
-        }
-    }
-    if (d->format == DISK_FORMAT_D71 && bam_free(d, image, 53, 0)) {
-        free(image);
-        return DISK_SAVE_DIR_ERROR;
-    }
+    DiskSaveResult layout = validate_write_layout(d, image);
+    if (layout != DISK_SAVE_OK) { free(image); return layout; }
     u8 *slot = NULL, *tail = NULL;
     DiskSaveResult result = find_save_slot(d, image, name, replace, &slot, &tail);
     if (result != DISK_SAVE_OK) goto done;
@@ -670,12 +697,7 @@ DiskSaveResult disk_image_save_prg(DiskImage *d, const char *name, const u8 *dat
     memset(slot + 21, 0, 9);
     slot[30] = (u8)blocks;
     slot[31] = (u8)(blocks >> 8);
-    sector_error_ok(d, image, dir_track, 0);
-    if (d->format == DISK_FORMAT_D71) sector_error_ok(d, image, 53, 0);
-    if (d->format == DISK_FORMAT_D81) {
-        sector_error_ok(d, image, 40, 1);
-        sector_error_ok(d, image, 40, 2);
-    }
+    mark_system_errors(d, image);
     u8 *dir_base = sector_in(d, image, dir_track, 0);
     sector_error_ok(d, image, dir_track,
                     (int)((slot - dir_base) / DISK_SECTOR_BYTES));
@@ -683,6 +705,142 @@ DiskSaveResult disk_image_save_prg(DiskImage *d, const char *name, const u8 *dat
                     (int)((tail - dir_base) / DISK_SECTOR_BYTES));
 
     if (persist_image(d, image) != 0) { result = DISK_SAVE_IO_ERROR; goto done; }
+    free(d->data);
+    d->data = image;
+    return DISK_SAVE_OK;
+done:
+    free(image);
+    return result;
+}
+
+DiskSaveResult disk_image_scratch(DiskImage *d, const char *pattern, int *removed) {
+    if (removed) *removed = 0;
+    if (!valid_write_name(pattern, true)) return DISK_SAVE_BAD_NAME;
+    if (!d || !d->data || !d->writable) return DISK_SAVE_WRITE_PROTECT;
+    u8 *image = malloc(d->size);
+    if (!image) return DISK_SAVE_IO_ERROR;
+    memcpy(image, d->data, d->size);
+    DiskSaveResult result = validate_write_layout(d, image);
+    if (result != DISK_SAVE_OK) goto done;
+
+    int dir_track = directory_track(d);
+    int sector = directory_start(d);
+    bool seen[DISK_MAX_SECTORS] = { false };
+    int count = 0;
+    for (int chain = 0; chain < disk_image_track_sectors(d, dir_track); ++chain) {
+        if (sector < directory_start(d) ||
+            sector >= disk_image_track_sectors(d, dir_track) || seen[sector]) {
+            result = DISK_SAVE_DIR_ERROR;
+            goto done;
+        }
+        seen[sector] = true;
+        u8 *dir = sector_in(d, image, dir_track, sector);
+        if (!dir) { result = DISK_SAVE_DIR_ERROR; goto done; }
+        for (int i = 0; i < 8; ++i) {
+            u8 *slot = dir + i * 32;
+            if (slot[2] == 0 || slot[2] == 0xFF ||
+                !slot_matches(slot, pattern)) continue;
+            if (slot[2] & 0x40) {
+                result = DISK_SAVE_WRITE_PROTECT;
+                goto done;
+            }
+            /* REL side sectors and D81 partitions need separate handling. */
+            int type = slot[2] & 7;
+            if (type < 1 || type > 3) {
+                result = DISK_SAVE_TYPE_MISMATCH;
+                goto done;
+            }
+            if (!free_file_chain(d, image, slot[3], slot[4])) {
+                result = DISK_SAVE_DIR_ERROR;
+                goto done;
+            }
+            slot[2] = 0;
+            sector_error_ok(d, image, dir_track, sector);
+            ++count;
+        }
+        if (dir[0] == 0) break;
+        if (dir[0] != dir_track) { result = DISK_SAVE_DIR_ERROR; goto done; }
+        sector = dir[1];
+        if (chain + 1 == disk_image_track_sectors(d, dir_track)) {
+            result = DISK_SAVE_DIR_ERROR;
+            goto done;
+        }
+    }
+    if (count == 0) { result = DISK_SAVE_OK; goto done; }
+    mark_system_errors(d, image);
+    if (persist_image(d, image) != 0) {
+        result = DISK_SAVE_IO_ERROR;
+        goto done;
+    }
+    free(d->data);
+    d->data = image;
+    if (removed) *removed = count;
+    return DISK_SAVE_OK;
+done:
+    free(image);
+    return result;
+}
+
+DiskSaveResult disk_image_rename(DiskImage *d, const char *new_name,
+                                 const char *old_name) {
+    if (!valid_write_name(new_name, false) ||
+        !valid_write_name(old_name, false)) return DISK_SAVE_BAD_NAME;
+    if (!d || !d->data || !d->writable) return DISK_SAVE_WRITE_PROTECT;
+    u8 *image = malloc(d->size);
+    if (!image) return DISK_SAVE_IO_ERROR;
+    memcpy(image, d->data, d->size);
+    DiskSaveResult result = validate_write_layout(d, image);
+    if (result != DISK_SAVE_OK) goto done;
+
+    int dir_track = directory_track(d);
+    int sector = directory_start(d);
+    bool seen[DISK_MAX_SECTORS] = { false };
+    u8 *source = NULL;
+    int source_sector = -1;
+    for (int chain = 0; chain < disk_image_track_sectors(d, dir_track); ++chain) {
+        if (sector < directory_start(d) ||
+            sector >= disk_image_track_sectors(d, dir_track) || seen[sector]) {
+            result = DISK_SAVE_DIR_ERROR;
+            goto done;
+        }
+        seen[sector] = true;
+        u8 *dir = sector_in(d, image, dir_track, sector);
+        if (!dir) { result = DISK_SAVE_DIR_ERROR; goto done; }
+        for (int i = 0; i < 8; ++i) {
+            u8 *slot = dir + i * 32;
+            if (slot[2] == 0 || slot[2] == 0xFF) continue;
+            if (name_equals(slot, new_name)) {
+                result = DISK_SAVE_EXISTS;
+                goto done;
+            }
+            if (name_equals(slot, old_name) && !source) {
+                source = slot;
+                source_sector = sector;
+            }
+        }
+        if (dir[0] == 0) break;
+        if (dir[0] != dir_track) { result = DISK_SAVE_DIR_ERROR; goto done; }
+        sector = dir[1];
+        if (chain + 1 == disk_image_track_sectors(d, dir_track)) {
+            result = DISK_SAVE_DIR_ERROR;
+            goto done;
+        }
+    }
+    if (!source) { result = DISK_SAVE_NOT_FOUND; goto done; }
+    if (source[2] & 0x40) { result = DISK_SAVE_WRITE_PROTECT; goto done; }
+    int type = source[2] & 7;
+    if (type < 1 || type > 3) {
+        result = DISK_SAVE_TYPE_MISMATCH;
+        goto done;
+    }
+    memset(source + 5, 0xA0, 16);
+    for (size_t i = 0; i < strlen(new_name); ++i)
+        source[5 + i] = (u8)toupper((unsigned char)new_name[i]);
+    sector_error_ok(d, image, dir_track, source_sector);
+    if (persist_image(d, image) != 0) {
+        result = DISK_SAVE_IO_ERROR;
+        goto done;
+    }
     free(d->data);
     d->data = image;
     return DISK_SAVE_OK;

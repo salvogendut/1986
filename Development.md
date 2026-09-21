@@ -140,7 +140,13 @@ temporary file and replaced atomically; errors leave the live image untouched.
 second-side BAM at 53/0;
 D81 uses the 1581 header at 40/0 and BAM sectors at 40/1-2. The common IEC
 path does not require a 1571 or 1581 DOS ROM. D81 partitions, REL files,
-formatting, and other DOS write commands are not yet implemented.
+formatting, and other DOS write commands are not yet implemented. The command
+channel accepts `S:pattern` (SCRATCH) and `R:new=old` (RENAME) for unlocked
+SEQ/PRG/USR root-directory entries on all three formats. SCRATCH updates the
+BAM and reports the removed-file count; both commands use the same atomic
+write-back and external-change guard as SAVE. The Advanced overlay's Real Disk
+Drive switch is a persisted future-backend preference, currently shown as
+pending while the fast virtual drive remains active.
 
 The C128 KERNAL's burst-mode flag is cleared while this command-level backend
 is active, keeping transfers on the trapped byte routines. A true 1571 will
@@ -163,8 +169,8 @@ capture the playback stream with `SDL_AUDIO_DRIVER=disk` and
 
 ## Roadmap
 
-1. **Virtual drive DOS commands** — add remaining write-side DOS commands to
-   the tested D64/D71/D81 logical IEC/media layer.
+1. **Virtual drive DOS commands** — SCRATCH and RENAME are done; add further
+   write-side commands to the tested D64/D71/D81 logical IEC/media layer.
 2. **True 1571** — implement the independent drive CPU, chips, mechanism and
    line-level IEC connection.
 3. **Native PLA accuracy** — finish chargen selection and native C128 memory

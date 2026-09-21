@@ -184,12 +184,16 @@ cycle-level 1571 implementation without conflating their interfaces.
   state and immediate `DIRECTORY` visibility after a swap (#44).
 - [x] Virtual-drive `SAVE`/`DSAVE` to D64 with BAM/directory updates and
   atomic write-back (#53).
-- [ ] Other write-side DOS commands (for example scratch and rename).
+- [x] SCRATCH and RENAME command-channel operations on D64/D71/D81 root
+  SEQ/PRG/USR files, with atomic write-back and DOS status (#57).
+- [ ] Further write-side DOS commands (format, copy, etc.).
 - [x] D71 and D81 image formats with two-sided BAM handling and PRG
   read/write support (#55).
 - [ ] D81 partition navigation and REL-file operations.
 - [ ] True integrated 1571: drive CPU, 2K RAM, DOS ROM, CIA/VIA/FDC,
   mechanism timing, line-level IEC, and fast serial (#30).
+- [x] Persisted Advanced > Real Disk Drive preference, default Off; On is
+  marked pending and retains the virtual backend until true-drive support (#57).
 
 **Done when.** Virtual mode is broadly useful and true-drive mode runs the DOS
 ROM through emulated hardware.
@@ -237,7 +241,7 @@ The main unfinished areas, grouped by likely development scale, are:
    effects, and CIA TOD/serial/CNT completion.
 2. **Audio accuracy:** SID analog filter, combined waveforms, and edge-case
    timing beyond the working three-voice SDL3 output.
-3. **Storage features:** remaining DOS write commands, D81 partitions, and
+3. **Storage features:** further DOS write commands, D81 partitions, and
    REL-file operations.
 4. **Large machine subsystems:** true cycle-level 1571 hardware and CP/M/Z80
    bus switching.

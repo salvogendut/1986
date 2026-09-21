@@ -1,4 +1,5 @@
 #include "virtual_drive.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,6 +62,8 @@ static void save_error(VirtualDrive *v, DiskSaveResult result) {
         case DISK_SAVE_WRITE_PROTECT:
             set_status(v, "26,WRITE PROTECT ON,00,00\r"); break;
         case DISK_SAVE_BAD_NAME: set_status(v, "33,SYNTAX ERROR,00,00\r"); break;
+        case DISK_SAVE_NOT_FOUND:
+            set_status(v, "62,FILE NOT FOUND,00,00\r"); break;
         case DISK_SAVE_IO_ERROR: set_status(v, "25,WRITE ERROR,00,00\r"); break;
     }
     v->bus_status |= 0x02;
@@ -80,6 +83,74 @@ static bool save_name(const char *raw, char name[17], bool *replace) {
     while (n && name[n - 1] == ' ') --n;
     name[n] = '\0';
     return n > 0;
+}
+
+static bool command_name(const char *raw, char name[17], bool require_prefix) {
+    if (*raw >= '0' && *raw <= '9' && raw[1] == ':') raw += 2;
+    else if (*raw == ':') ++raw;
+    else if (require_prefix) return false;
+    size_t n = strlen(raw);
+    if (n == 0 || n > 16) return false;
+    memcpy(name, raw, n + 1);
+    return true;
+}
+
+static void execute_command(VirtualDrive *v, const u8 *bytes, size_t length,
+                            bool overflow) {
+    if (length == 0 && !overflow) return;
+    char command[sizeof(v->write_buf) + 1];
+    if (overflow || length >= sizeof(command)) {
+        save_error(v, DISK_SAVE_BAD_NAME);
+        return;
+    }
+    memcpy(command, bytes, length);
+    command[length] = '\0';
+    while (length && (command[length - 1] == '\r' ||
+                      command[length - 1] == '\n'))
+        command[--length] = '\0';
+    if (!length) return;
+    char op = (char)toupper((unsigned char)command[0]);
+    if (op == 'I' || op == 'U') {
+        set_status(v, "00, OK,00,00\r");
+        return;
+    }
+    if (op != 'S' && op != 'R') {
+        set_status(v, "31,SYNTAX ERROR,00,00\r");
+        v->bus_status |= 0x02;
+        return;
+    }
+    if (memchr(bytes, 0, length)) {
+        save_error(v, DISK_SAVE_BAD_NAME);
+        return;
+    }
+    if (!v->disk) {
+        set_status(v, "74,DRIVE NOT READY,00,00\r");
+        v->bus_status |= 0x02;
+        return;
+    }
+    if (op == 'S') {
+        char pattern[17];
+        if (!command_name(command + 1, pattern, true)) {
+            save_error(v, DISK_SAVE_BAD_NAME);
+            return;
+        }
+        int removed = 0;
+        DiskSaveResult result = disk_image_scratch(v->disk, pattern, &removed);
+        if (result != DISK_SAVE_OK) save_error(v, result);
+        else snprintf(v->status, sizeof(v->status),
+                      "01,FILES SCRATCHED,%02d,00\r", removed);
+    } else {
+        char *equals = strchr(command + 1, '=');
+        char new_name[17], old_name[17];
+        if (!equals) { save_error(v, DISK_SAVE_BAD_NAME); return; }
+        *equals = '\0';
+        if (!command_name(command + 1, new_name, true) ||
+            !command_name(equals + 1, old_name, false)) {
+            save_error(v, DISK_SAVE_BAD_NAME);
+            return;
+        }
+        save_error(v, disk_image_rename(v->disk, new_name, old_name));
+    }
 }
 
 void virtual_drive_init(VirtualDrive *v, int unit) {
@@ -196,16 +267,13 @@ static void finish_write(VirtualDrive *v) {
         v->channel_open[channel] = true;
         v->channel_save[channel] = channel == 1;
         if (channel != 15) prepare_channel(v, channel);
+        else execute_command(v, v->write_buf, v->write_len,
+                             v->write_overflow);
     } else if (v->write_mode == VDRIVE_WRITE_DATA && channel == 15) {
-        /* The command channel is intentionally small for now. I initializes
-         * virtual DOS state; U1/U2 commands used by C128 startup are accepted
-         * without pretending that a true 1571 mechanism exists. */
-        if (v->write_len > 0 &&
-            (v->write_buf[0] == 'I' || v->write_buf[0] == 'i' ||
-             v->write_buf[0] == 'U' || v->write_buf[0] == 'u'))
-            set_status(v, "00, OK,00,00\r");
+        execute_command(v, v->write_buf, v->write_len, v->write_overflow);
     }
     v->write_len = 0;
+    v->write_overflow = false;
     v->write_mode = VDRIVE_WRITE_NONE;
 }
 
@@ -271,6 +339,7 @@ void virtual_drive_attention(VirtualDrive *v, u8 byte) {
             v->secondary = 0;
             v->write_mode = VDRIVE_WRITE_NONE;
             v->write_len = 0;
+            v->write_overflow = false;
             break;
         case IEC_TALK:
             v->addressed = (byte & 0x0f) == v->unit;
@@ -283,6 +352,7 @@ void virtual_drive_attention(VirtualDrive *v, u8 byte) {
                 v->secondary = byte & 0x0f;
                 v->write_mode = VDRIVE_WRITE_OPEN;
                 v->write_len = 0;
+                v->write_overflow = false;
             }
             break;
         case IEC_CLOSE:
@@ -304,6 +374,7 @@ void virtual_drive_attention(VirtualDrive *v, u8 byte) {
                 if (v->listening) {
                     v->write_mode = VDRIVE_WRITE_DATA;
                     v->write_len = 0;
+                    v->write_overflow = false;
                 } else if (v->talking) {
                     prepare_talk(v);
                 }
@@ -342,6 +413,7 @@ void virtual_drive_send(VirtualDrive *v, u8 byte) {
     }
     if (v->write_len < sizeof(v->write_buf))
         v->write_buf[v->write_len++] = byte;
+    else v->write_overflow = true;
 }
 
 int virtual_drive_receive(VirtualDrive *v, u8 *byte) {

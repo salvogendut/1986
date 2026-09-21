@@ -13,6 +13,7 @@ int main(void) {
     CHECK(cfg.scale == 2, "default scale");
     CHECK(cfg.model == C128_MODEL_DCR, "default model DCR");
     CHECK(cfg.col_mode_80, "default display is 80 columns");
+    CHECK(!cfg.real_disk_drive, "real drive defaults off");
 
     const char *path = "/tmp/1986-test.conf";
     FILE *legacy = fopen(path, "w");
@@ -25,11 +26,14 @@ int main(void) {
     CHECK(config_load(&legacy_cfg, path), "load config without display mode");
     CHECK(legacy_cfg.col_mode_80,
           "config without display mode defaults to 80 columns");
+    CHECK(!legacy_cfg.real_disk_drive,
+          "config without real-drive selection defaults off");
 
     cfg.scale = 3;
     cfg.fast = true;
     cfg.crt_enabled = true;
     cfg.col_mode_80 = false;
+    cfg.real_disk_drive = true;
     snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s", "keep-me.d64");
     CHECK(config_save(&cfg, path), "config_save");
 
@@ -39,6 +43,7 @@ int main(void) {
     CHECK(back.fast, "fast roundtrip");
     CHECK(back.crt_enabled, "crt roundtrip");
     CHECK(!back.col_mode_80, "40-column mode roundtrip");
+    CHECK(back.real_disk_drive, "real-drive preference roundtrip");
 
     CHECK(config_save_column_mode(path, true), "save 80-column mode only");
     CHECK(config_load(&back, path), "reload 80-column mode");
@@ -46,6 +51,8 @@ int main(void) {
     CHECK(back.scale == 3, "mode-only save preserves other settings");
     CHECK(strcmp(back.disk_path, "keep-me.d64") == 0,
           "mode-only save preserves media settings");
+    CHECK(back.real_disk_drive,
+          "mode-only save preserves real-drive preference");
 
     CHECK(config_save_column_mode(path, false), "save 40-column mode only");
     CHECK(config_load(&back, path), "reload 40-column mode");

@@ -124,6 +124,10 @@ int main(void) {
           "first DiskImage contents are live");
     CHECK(directory_contains(&drive.virtual_drive, "FIRSTFILE"),
           "DIRECTORY reads first DiskImage");
+    cfg.real_disk_drive = true;
+    drive_reset(&drive);
+    CHECK(directory_contains(&drive.virtual_drive, "FIRSTFILE"),
+          "pending real-drive preference keeps virtual backend available");
 
     CHECK(drive_attach_disk(&drive, second) == 0, "replace DiskImage");
     CHECK(drive.disk_attached, "replacement DiskImage is attached");

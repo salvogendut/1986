@@ -41,6 +41,7 @@ typedef struct {
 
     u8 write_buf[256];
     size_t write_len;
+    bool write_overflow;
     u8 *response;
     size_t response_cap;
     size_t response_len;
