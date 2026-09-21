@@ -26,7 +26,7 @@ CP/M is a separate C128 operating mode and remains planned.
 | `--paste TEXT` | Inject text through the emulated keyboard. |
 | `--paste-at N` | Delay `--paste` until emulated frame N. |
 | `--frames N` | Exit after N emulated frames. |
-| `--no-throttle` | Run without real-time frame pacing. |
+| `--no-throttle` | Run without real-time frame pacing; SID state still advances, but host audio playback is disabled. |
 | `--help` | Show help. |
 
 ## Configuration
@@ -50,6 +50,13 @@ inserts the new one, so the next `DIRECTORY` reads the new disk without an
 application restart. Press Del on a populated Media entry to clear it; for a
 Disk image this also ejects the live disk. Press F9 or Esc to close the
 overlay.
+
+## Sound
+
+The C128DCR's 8580 SID plays through the default SDL3 audio device. At the
+BASIC 7.0 prompt, try `VOL 15:PLAY "CDEFGAB"` or
+`VOL 15:SOUND 1,40960,60`. The analog filter and combined waveforms are
+approximations, so some music will sound different from a real 8580 or VICE.
 
 ## ROM layout
 

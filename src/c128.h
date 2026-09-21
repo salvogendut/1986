@@ -20,6 +20,7 @@
  */
 
 #define C128_PAL_FRAME_CYCLES  19656   /* 312 raster lines x 63 cycles at 1 MHz */
+#define C128_AUDIO_FRAME_CAPACITY 1024
 
 typedef struct {
     Display display;
@@ -31,6 +32,9 @@ typedef struct {
     Vdc     vdc;
     Cia     cia1, cia2;
     Sid     sid;
+    s16     audio_frame[C128_AUDIO_FRAME_CAPACITY];
+    int     audio_count;
+    int     sid_fast_remainder;
     Kbd     kbd;
     Drive   drive;
     Config *cfg;

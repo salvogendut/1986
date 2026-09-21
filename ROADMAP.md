@@ -162,10 +162,12 @@ accurate register/status timing.
 **Goal.** Three-voice SID render → SDL3 audio stream.
 
 - [x] SID register address decoding and storage at `$D400-$D41F`.
-- [ ] 6581/8580 oscillators, ADSR, filter, volume at `$D400-$D41F`.
-- [ ] Drive the SDL3 audio callback from the 8502 frame cadence.
+- [x] Three 8580 voices, standard waveforms, ADSR, volume, voice routing,
+  and approximate low/band/high-pass filter (#51).
+- [x] Stream signed 16-bit mono PCM to SDL3 at the PAL SID clock cadence.
+- [ ] Match reSID's analog filter, combined waveforms, and edge-case timing.
 
-**Done when.** Music/SFX play.
+**Done when.** Native C128 music/SFX play with satisfactory 8580 fidelity.
 
 ---
 
@@ -228,7 +230,8 @@ The main unfinished areas, grouped by likely development scale, are:
 
 1. **Core accuracy:** remaining native PLA tests, VIC-IIe bad-lines/raster
    effects, and CIA TOD/serial/CNT completion.
-2. **Audio:** SID voices, envelopes, filter, and SDL3 output.
+2. **Audio accuracy:** SID analog filter, combined waveforms, and edge-case
+   timing beyond the working three-voice SDL3 output.
 3. **Storage formats and writes:** virtual-drive `SAVE`, DOS write commands,
    D71, and D81.
 4. **Large machine subsystems:** true cycle-level 1571 hardware and CP/M/Z80

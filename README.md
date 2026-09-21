@@ -51,6 +51,8 @@ Current working pieces include:
 - VIC-IIe 40-column text/bitmap display with eight hardware sprites, and the
   VDC 80-column text display.
 - Host keyboard input, paste, cursor, CIA timer and raster IRQ handling.
+- Audible three-voice 8580 SID synthesis through SDL3, including the standard
+  waveforms, envelopes, voice routing, and a basic filter approximation.
 - Function-key conventions: F4 screenshot, F5 reset, F6 GIF capture, F8
   monitor, F9 options overlay, F10 40/80 switch, F11 fullscreen, F12 quit.
 - Options overlay that reads and writes
@@ -58,13 +60,13 @@ Current working pieces include:
 - VICE's 8502/6510 core and a reused Z80 core wired to the C128 bus.
 - A fast virtual IEC drive that reads D64 images and supports `DIRECTORY`,
   `LOAD`, and BASIC 7.0 `DLOAD`, including DOS status errors.
-- Tests for the CPU, MMU, CIA timers, VIC graphics and sprites, configuration, GIF encoder,
-  D64 format, KERNAL IEC trap contract, and virtual-drive channel lifecycle.
+- Tests for the CPU, MMU, CIA/SID, VIC graphics and sprites, configuration,
+  GIF encoder, D64 format, KERNAL IEC traps, and virtual-drive channels.
 
-Saving to the virtual drive, true cycle-level 1571 emulation, SID audio, CP/M
-mode, and several accuracy features remain unfinished. The virtual drive and
-future true 1571 are intentionally separate implementations; they will share
-only the media/image layer.
+Saving to the virtual drive, true cycle-level 1571 emulation, high-fidelity SID
+filter/combined-waveform emulation, CP/M mode, and several accuracy features
+remain unfinished. The virtual drive and future true 1571 are intentionally
+separate implementations; they will share only the media/image layer.
 
 See [DEVELOPMENT.md](Development.md) for technical notes and
 [ROADMAP.md](ROADMAP.md) for the forward plan.

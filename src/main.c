@@ -23,6 +23,7 @@ int g_debug_enabled = 0;
 
 /* Boot-progress trace enabled with C128_BOOT_TRACE=1. */
 static bool g_boot_trace = false;
+static bool g_sid_trace = false;
 
 /* One-shot PPM capture (C128_SAVE_PPM=<path>) for visual debugging. */
 static char *g_save_ppm = NULL;
@@ -136,6 +137,7 @@ int main(int argc, char **argv) {
     if (rom_dir) snprintf(cfg.rom_dir, sizeof(cfg.rom_dir), "%s", rom_dir);
     if (disk_path) snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s", disk_path);
     g_boot_trace = getenv("C128_BOOT_TRACE") != NULL;
+    g_sid_trace = getenv("C128_SID_TRACE") != NULL;
     g_debug_enabled = g_boot_trace;
     if (getenv("C128_SAVE_PPM"))
         g_save_ppm = strdup(getenv("C128_SAVE_PPM"));
@@ -165,6 +167,20 @@ int main(int argc, char **argv) {
                     cfg.crt_red, cfg.crt_green, cfg.crt_blue);
     display_set_one_display(&c.display, cfg.one_display);
     if (cfg.fullscreen) SDL_SetWindowFullscreen(c.display.window, true);
+
+    SDL_AudioStream *audio_stream = NULL;
+    if (!no_throttle) {
+        SDL_AudioSpec audio_spec = {
+            .format = SDL_AUDIO_S16, .channels = 1, .freq = SID_SAMPLE_RATE
+        };
+        audio_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+                                                 &audio_spec, NULL, NULL);
+        if (!audio_stream || !SDL_ResumeAudioStreamDevice(audio_stream)) {
+            fprintf(stderr, "1986: SID audio unavailable: %s\n", SDL_GetError());
+            if (audio_stream) SDL_DestroyAudioStream(audio_stream);
+            audio_stream = NULL;
+        }
+    }
 
     /* Disk-drive activity LED at the bottom of the window. */
     leds_set_enabled(LED_FDC_A, true);
@@ -331,6 +347,7 @@ int main(int argc, char **argv) {
                     display_save_ppm_active(&c.display, path);
                 } else if (ev.key.scancode == SDL_SCANCODE_F5) {
                     c128_reset(&c);
+                    if (audio_stream) SDL_ClearAudioStream(audio_stream);
                 } else if (ev.key.scancode == SDL_SCANCODE_F6) {
                     if (videocap_active()) {
                         videocap_stop();
@@ -346,11 +363,15 @@ int main(int argc, char **argv) {
                 } else if (ev.key.scancode == SDL_SCANCODE_F7) {
                     paused = !paused;
                     c.paused = paused;
+                    if (paused && audio_stream) SDL_ClearAudioStream(audio_stream);
                 } else if (ev.key.scancode == SDL_SCANCODE_F10) {
                     c128_switch_4080(&c);   /* toggle 40-col VIC <-> 80-col VDC */
                     cfg.col_mode_80 = c.col_mode_80;
                     display_focus_active(&c.display);
-                    if (cfg.display_change_reset) c128_reset(&c);
+                    if (cfg.display_change_reset) {
+                        c128_reset(&c);
+                        if (audio_stream) SDL_ClearAudioStream(audio_stream);
+                    }
                 } else if (ev.key.scancode == SDL_SCANCODE_V &&
                            (SDL_GetModState() & SDL_KMOD_CTRL)) {
                     char *text = SDL_GetClipboardText();
@@ -399,6 +420,22 @@ int main(int argc, char **argv) {
         if (!paused) {
             int cycles = c128_frame(&c);
             uint64_t emulated_frame_ns = c128_cycles_to_ns(&c, cycles);
+            /* Keep only a few frames queued if the host stalls. The SID core
+             * keeps clocking even without an available audio device. */
+            if (audio_stream && c.audio_count > 0 &&
+                SDL_GetAudioStreamQueued(audio_stream) <
+                    6 * (int)(SID_SAMPLE_RATE / 50) * (int)sizeof(s16))
+                SDL_PutAudioStreamData(audio_stream, c.audio_frame,
+                                       c.audio_count * (int)sizeof(s16));
+            if (g_sid_trace && (c128_frame_count % 10) == 0) {
+                long energy = 0;
+                for (int i = 0; i < c.audio_count; ++i)
+                    energy += labs(c.audio_frame[i]);
+                fprintf(stderr, "[sid] frame=%d vol=%02X v1=%02X/%02X/%02X/%02X env=%u samples=%d energy=%ld\n",
+                        c128_frame_count, c.sid.regs[0x18], c.sid.regs[0],
+                        c.sid.regs[1], c.sid.regs[4], c.sid.regs[6],
+                        c.sid.voice[0].env, c.audio_count, energy);
+            }
 
             /* Optional boot-progress trace (C128_BOOT_TRACE=1). */
             if (g_boot_trace && (c128_frame_count % 10) == 0) {
@@ -447,6 +484,7 @@ int main(int argc, char **argv) {
     }
 
     if (videocap_active()) videocap_stop();
+    if (audio_stream) SDL_DestroyAudioStream(audio_stream);
     if (!config_save_column_mode(cfg_path, c.col_mode_80))
         fprintf(stderr, "1986: could not save display mode to '%s'\n", cfg_path);
     paste_free(&paste);

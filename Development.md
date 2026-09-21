@@ -22,7 +22,7 @@ src/
   vic.*       - MOS 8564 VIC-IIe (40-column text, bitmap, and sprites)
   vdc.*       - MOS 8563 VDC (80-column) register file
   cia.*       - MOS 6526 CIA1/CIA2 register file
-  sid.*       - MOS 6581/8580 SID register file
+  sid.*       - MOS 8580 SID oscillator/envelope/filter and PCM output
   d64.*       - single-sided D64 image and directory decoding
   virtual_drive.* - fast logical IEC device used by KERNAL ROM traps
   drive.*     - machine-facing media/virtual-drive holder
@@ -36,6 +36,7 @@ src/
 tests/
   test_cpu.c  - 8502 sanity (adds, branches, stores)
   test_mmu.c  - MMU register behaviour
+  test_sid.c  - SID oscillator, envelope, routing, and audio samples
   test_config.c - config roundtrip
   test_gifcap.c - GIF encoder output
   test_d64.c  - D64 directory bytes + virtual IEC channel lifecycle
@@ -146,6 +147,11 @@ Visual check (saves a PPM at frame 60):
 SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
 ```
 
+For SID debugging, `C128_SID_TRACE=1` prints register, envelope, sample-count,
+and output-energy snapshots every ten frames. SDL3's disk audio driver can
+capture the playback stream with `SDL_AUDIO_DRIVER=disk` and
+`SDL_AUDIO_DISK_OUTPUT_FILE=/tmp/sid.raw`.
+
 ## Roadmap
 
 1. **Virtual drive writes and formats** — add `SAVE`, D71, and D81 support to
@@ -159,7 +165,8 @@ SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms
 5. **CIA timers + IRQs** — full timer/port emulation (timer B cascade, TOD,
    serial).
 6. **VDC 8563** — render the 80-column framebuffer.
-7. **SID audio** — three-voice render + SDL3 audio stream.
+7. **SID audio** — three-voice 8580 render + SDL3 audio stream are working;
+   analog filter and combined-waveform fidelity remain to be improved.
 8. **1571 drives** — disk images (D64/D81), the C128's fast serial.
 9. **CP/M mode** — switch the bus to the Z80 and map the CP/M RAM bank.
 10. **Media / capture / polish** — snapshots, more keyboard matrix, full

@@ -149,6 +149,8 @@ void c128_reset(C128 *c) {
     cia_reset(&c->cia1);
     cia_reset(&c->cia2);
     sid_reset(&c->sid);
+    c->audio_count = 0;
+    c->sid_fast_remainder = 0;
     kbd_reset(&c->kbd);
     drive_reset(&c->drive);
     c->paused = false;
@@ -165,12 +167,23 @@ int c128_frame(C128 *c) {
     int frame_cycles = c->fast ? 2 * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
     int remaining = frame_cycles;
     int total = 0;
+    c->audio_count = 0;
     while (remaining > 0) {
         int chunk = (remaining > 63) ? 63 : remaining;
         total += cpu_step_budget(&c->cpu, chunk);
         remaining -= chunk;
         cia_tick(&c->cia1, chunk);
         cia_tick(&c->cia2, chunk);
+        /* Fast mode doubles CPU cycles per frame, not the SID's clock. */
+        int sid_cycles = chunk;
+        if (c->fast) {
+            sid_cycles += c->sid_fast_remainder;
+            c->sid_fast_remainder = sid_cycles & 1;
+            sid_cycles /= 2;
+        }
+        c->audio_count += sid_clock(&c->sid, sid_cycles,
+            c->audio_frame + c->audio_count,
+            C128_AUDIO_FRAME_CAPACITY - c->audio_count);
         bool vic_irq = vic_tick(&c->vic);
         cpu_irq(&c->cpu, cia_irq_line(&c->cia1) || vic_irq);
         cpu_nmi(&c->cpu, cia_irq_line(&c->cia2));
