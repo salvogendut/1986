@@ -23,7 +23,7 @@ void vic_reset(Vic *v) {
     v->vmode = 0x1B;             /* 25 rows, bitmap off */
     v->raster = 0;
     v->ctrl1 = 0x80;
-    v->ctrl2 = 0x08;
+    v->ctrl2 = 0x14;             /* screen $0400, character generator $1000 */
     v->memory = 0;
     v->screen_addr = 0x0400;     /* default 40-col screen */
     v->char_addr = 0x1000;
@@ -74,7 +74,7 @@ void vic_write(Vic *v, u16 addr, u8 val) {
         case 0x17: v->sprite_y_expand = val; break;
         case 0x18: v->ctrl2 = val;
                    v->screen_addr = (u16)((val & 0xF0) << 6);
-                   v->char_addr = (u16)((val & 0x0E) << 9);
+                   v->char_addr = (u16)((val & 0x0E) << 10);
                    break;
         case 0x19: v->irq_status &= (u8)~(val & 0x1F); vic_irq_line_update(v);
                    break;
@@ -349,7 +349,16 @@ void vic_render(Vic *v, Mem *m, Display *d) {
                 unsigned cbank = (m->pla_data >> 1) & 0x01;
                 u8 col = m->color_ram[cbank * 0x400 + ((cy * VIC_CHARS_X + cx) & 0x3FF)] & 0x0F;
                 u32 fg = VIC_COLORS[col];
-                const u8 *glyph = &m->chargen[0x1000 + (u16)(ch << 3)];
+                /* Native C128 PLA: $01 bit 2 low maps the character ROM into
+                 * the VIC's $1000-$1FFF window. Else glyph data comes from
+                 * the selected VIC RAM bank at the $D018 character pointer.
+                 * The International/US machine uses the upper 4K ROM half. */
+                u16 glyph_addr = (u16)(v->char_addr + ((u16)ch << 3));
+                bool rom = !(m->pla_data & 0x04) &&
+                           (glyph_addr & 0x3000) == 0x1000;
+                const u8 *glyph = rom
+                    ? &m->chargen[0x1000 + (glyph_addr & 0x0FFF)]
+                    : &m->ram[v->bank_addr + glyph_addr];
                 for (int py = 0; py < 8; py++) {
                     u8 bits = glyph[py];
                     int dy = VIC_TEXT_Y + cy * 8 + py;

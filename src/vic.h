@@ -27,7 +27,7 @@ typedef struct {
     u8  ctrl2;         /* $D018 */
     u8  memory;        /* $D018-derived screen/char pointers */
     u16 screen_addr;   /* current screen RAM base (bank + pointer) */
-    u16 char_addr;     /* current char ROM base */
+    u16 char_addr;     /* $D018 character-data base within the 16K VIC window */
     u8  irq_status;    /* $D019 (bit 0 = raster, bit 7 = IRQ line) */
     u8  irq_mask;      /* $D01A (bit 0 = raster IRQ enable) */
     u8  raster_irq_line; /* raster line for the IRQ compare */

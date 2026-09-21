@@ -39,9 +39,9 @@ test-drive: test_drive.c ../src/drive.c ../src/drive.h ../src/d64.c ../src/d64.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_drive.c ../src/drive.c ../src/d64.c ../src/virtual_drive.c -o $@
 
-test-vic: test_vic.c ../src/vic.c ../src/vic.h ../src/display.h ../src/mem.h
+test-vic: test_vic.c ../src/vic.c ../src/vic.h ../src/display.h ../src/mem.c ../src/mem.h ../src/mmu.c ../src/mmu.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=c11 -Wall -Wextra -I../src \
-		test_vic.c ../src/vic.c -o $@
+		test_vic.c ../src/vic.c ../src/mem.c ../src/mmu.c -o $@
 
 check: $(TESTS)
 	./test-cpu

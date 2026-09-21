@@ -39,6 +39,9 @@ int main(void) {
         return 1;
     }
 
+    mem_init(mem);
+    mem_set_processor_port(mem, 0x07, 0x00); /* VIC colour banks 0, ROM on */
+
     vic_init(&vic);
     vic_write(&vic, 0xD011, 0x3B); /* display on, bitmap mode */
     vic_write(&vic, 0xD018, 0x18); /* screen $0400, bitmap $2000 */
@@ -73,11 +76,70 @@ int main(void) {
     mem->color_ram[0] = 0x01;
     mem->chargen[0x0008] = 0x00;
     mem->chargen[0x1008] = 0x80;
+    mem_set_processor_port(mem, 0x07, 0x00); /* colour banks 0, ROM visible */
     vic_render(&vic, mem, display);
     CHECK(pixel(display, 0, 0) == 0xFFFFFF,
           "native C128 text uses upper character-ROM bank");
     CHECK(pixel(display, 1, 0) == 0x000000,
           "character glyph preserves clear pixels");
+
+    /* CPU ROM and VIC ROM visibility are separate. Input bit 2 floats high,
+     * so the VIC sees RAM even when the CPU's MMU maps character ROM. */
+    mem_set_processor_port(mem, 0x03, 0x00); /* bit 2 floats high */
+    CHECK(mem_read(mem, 0xD008) == 0x80,
+          "CPU retains native character-ROM mapping when VIC uses RAM");
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x000000,
+          "input bit 2 selects RAM, not VIC character ROM");
+
+    mem->ram[0x1008] = 0x40;
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 1, 0) == 0xFFFFFF && pixel(display, 0, 0) == 0x000000,
+          "RAM-defined glyphs come from the $D018 character address");
+
+    mem_set_processor_port(mem, 0x07, 0x04); /* bit 2 driven high */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 1, 0) == 0xFFFFFF && pixel(display, 0, 0) == 0x000000,
+          "output bit 2 high also selects RAM character data");
+
+    mem_set_processor_port(mem, 0x47, 0x00); /* ROM on; bit 6 low on US model */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xFFFFFF,
+          "$01 bit 6 does not switch the US VIC character-ROM bank");
+    vic_write(&vic, 0xD018, 0x16); /* screen $0400, characters $1800 */
+    mem->chargen[0x1808] = 0x40;
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 1, 0) == 0xFFFFFF && pixel(display, 0, 0) == 0x000000,
+          "second half of VIC character-ROM window selects next ROM page");
+
+    vic_write(&vic, 0xD018, 0x18); /* screen $0400, characters $2000 */
+    mem->ram[0x2008] = 0x20;
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 2, 0) == 0xFFFFFF && pixel(display, 0, 0) == 0x000000,
+          "outside ROM window $D018 selects RAM despite port bit 2 low");
+
+    vic_set_bank(&vic, 1);
+    mem->ram[0x4400] = 0x01;
+    mem->ram[0x6008] = 0x10;
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 3, 0) == 0xFFFFFF,
+          "RAM character fetch follows the CIA-selected VIC bank");
+
+    vic_write(&vic, 0xD018, 0x14);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xFFFFFF,
+          "native character ROM remains visible in another VIC bank");
+
+    vic_set_bank(&vic, 4); /* first 16K window in second 64K RAM bank */
+    vic_write(&vic, 0xD018, 0x18);
+    mem->ram[0x10400] = 0x01;
+    mem->ram[0x12008] = 0x08;
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 4, 0) == 0xFFFFFF,
+          "RAM character fetch reaches the second 64K VIC RAM bank");
+
+    vic_reset(&vic);
+    vic_write(&vic, 0xD018, 0x14);
 
     /* Sprite registers retain values and collision registers clear on read. */
     vic_write(&vic, 0xD000, 0x34);
