@@ -23,7 +23,7 @@ src/
   vdc.*       - MOS 8563 VDC (80-column) register file
   cia.*       - MOS 6526 CIA1/CIA2 register file
   sid.*       - MOS 8580 SID oscillator/envelope/filter and PCM output
-  d64.*       - single-sided D64 image, BAM/directory, atomic PRG saving
+  disk_image.* - D64/D71/D81 geometry, BAM/directory, atomic PRG saving
   virtual_drive.* - fast logical IEC device used by KERNAL ROM traps
   drive.*     - machine-facing media/virtual-drive holder
   z80.*       - cycle-stepped Z80 (reused from 1983/1984/1985) for CP/M
@@ -41,6 +41,7 @@ tests/
   test_gifcap.c - GIF encoder output
   test_d64.c  - D64 directory bytes + virtual IEC channel lifecycle
   test_d64_save.c - D64 write-back, replacement, and error cases
+  test_disk_formats.c - D71/D81 two-sided BAM, directory, save/load cases
 ```
 
 ## Machine-mode scope
@@ -128,14 +129,18 @@ latches are modeled. This is sufficient for BASIC 7 `SPRITE`, `SPRCOLOR`,
 
 `virtual_drive.c` is a fast logical IEC device used by the patched KERNAL
 routines. It implements device addressing, OPEN/CLOSE, LISTEN/TALK,
-UNLISTEN/UNTALK, secondary channels, status responses, and D64 directory
-streams without running a drive CPU. It follows D64 file-sector chains and
-serves raw PRG streams (including their load address) for `LOAD` and `DLOAD`.
+UNLISTEN/UNTALK, secondary channels, status responses, and D64/D71/D81
+directory streams without running a drive CPU. It follows file-sector chains
+and serves raw PRG streams (including their load address) for `LOAD` and `DLOAD`.
 Missing files report DOS error 62 both on the IEC status byte and command
 channel. `SAVE` and `DSAVE` buffer PRG data on IEC channel 1, then update the
-D64 BAM and directory on CLOSE. The image is written through a temporary file
-and replaced atomically; errors leave the live image untouched. `@:` requests
-replace an existing unlocked file. This does not require a 1571 DOS ROM.
+D64, D71, or D81 BAM and directory on CLOSE. The image is written through a
+temporary file and replaced atomically; errors leave the live image untouched.
+`@:` requests replacement of an existing unlocked file. D71 uses the 1571
+second-side BAM at 53/0;
+D81 uses the 1581 header at 40/0 and BAM sectors at 40/1-2. The common IEC
+path does not require a 1571 or 1581 DOS ROM. D81 partitions, REL files,
+formatting, and other DOS write commands are not yet implemented.
 
 The C128 KERNAL's burst-mode flag is cleared while this command-level backend
 is active, keeping transfers on the trapped byte routines. A true 1571 will
@@ -158,8 +163,8 @@ capture the playback stream with `SDL_AUDIO_DRIVER=disk` and
 
 ## Roadmap
 
-1. **Virtual drive formats and DOS commands** — add D71/D81 and remaining
-   write-side DOS commands to the tested logical IEC/media layer.
+1. **Virtual drive DOS commands** — add remaining write-side DOS commands to
+   the tested D64/D71/D81 logical IEC/media layer.
 2. **True 1571** — implement the independent drive CPU, chips, mechanism and
    line-level IEC connection.
 3. **Native PLA accuracy** — finish chargen selection and native C128 memory
@@ -171,7 +176,8 @@ capture the playback stream with `SDL_AUDIO_DRIVER=disk` and
 6. **VDC 8563** — render the 80-column framebuffer.
 7. **SID audio** — three-voice 8580 render + SDL3 audio stream are working;
    analog filter and combined-waveform fidelity remain to be improved.
-8. **1571 drives** — disk images (D64/D81), the C128's fast serial.
+8. **1571 drives** — hardware-level emulation of the integrated drive and the
+   C128's fast serial, separate from image-format support.
 9. **CP/M mode** — switch the bus to the Z80 and map the CP/M RAM bank.
 10. **Media / capture / polish** — snapshots, more keyboard matrix, full
    keyboard layout, real 2 MHz timing.

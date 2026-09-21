@@ -1,7 +1,7 @@
 #pragma once
 #include "types.h"
 #include "config.h"
-#include "d64.h"
+#include "disk_image.h"
 #include "virtual_drive.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -18,14 +18,14 @@ typedef struct Drive {
     int     unit;       /* IEC device number (8-11) */
     VirtualDrive virtual_drive;
 
-    D64     d64;        /* attached disk image */
+    DiskImage image;          /* attached D64, D71, or D81 image */
     bool    disk_attached;
 } Drive;
 
 void drive_init(Drive *d, Config *cfg);
 void drive_reset(Drive *d);
 
-/* Attach (or detach with path=NULL) a .d64 image. */
+/* Attach (or detach with path=NULL) a D64, D71, or D81 image. */
 int  drive_attach_disk(Drive *d, const char *path);
 
 /* Select the IEC device number. */

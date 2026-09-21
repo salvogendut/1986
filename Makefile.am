@@ -26,7 +26,7 @@ dist_man1_MANS = 1986.1
 	src/gifcap.c \
 	src/leds.c \
 	src/notify.c \
-	src/d64.c \
+	src/disk_image.c \
 	src/drive.c \
 	src/virtual_drive.c
 
@@ -53,7 +53,7 @@ noinst_HEADERS = \
 	src/gifcap.h \
 	src/leds.h \
 	src/notify.h \
-	src/d64.h \
+	src/disk_image.h \
 	src/drive.h \
 	src/virtual_drive.h \
 	src/vice/vice.h \
@@ -97,4 +97,4 @@ EXTRA_DIST = Makefile LICENSE Development.md USAGE.md CONTROLS.md INSTALL.md \
 	ROADMAP.md 1986.conf.example packaging/io.github.salvogendut.Emulator1986.yml \
 	roms/README tests/Makefile tests/test_cpu.c tests/test_mmu.c \
 	tests/test_config.c tests/test_gifcap.c tests/test_d64.c \
-	tests/test_d64_save.c tests/test_sid.c
+	tests/test_d64_save.c tests/test_disk_formats.c tests/test_sid.c

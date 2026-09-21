@@ -5,7 +5,7 @@ CPPFLAGS ?=
 SDL3_CFLAGS ?= $(shell pkg-config --cflags sdl3)
 SDL3_LIBS ?= $(shell pkg-config --libs sdl3)
 
-TESTS = test-cpu test-mmu test-mem test-cia test-sid test-config test-gifcap test-d64 test-d64-save test-drive test-vic
+TESTS = test-cpu test-mmu test-mem test-cia test-sid test-config test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-vic
 
 .PHONY: all check clean
 
@@ -39,17 +39,21 @@ test-gifcap: test_gifcap.c ../src/gifcap.c ../src/gifcap.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_gifcap.c ../src/gifcap.c -o $@
 
-test-d64: test_d64.c ../src/d64.c ../src/d64.h ../src/virtual_drive.c ../src/virtual_drive.h
+test-d64: test_d64.c ../src/disk_image.c ../src/disk_image.h ../src/virtual_drive.c ../src/virtual_drive.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
-		test_d64.c ../src/d64.c ../src/virtual_drive.c -o $@
+		test_d64.c ../src/disk_image.c ../src/virtual_drive.c -o $@
 
-test-d64-save: test_d64_save.c ../src/d64.c ../src/d64.h ../src/virtual_drive.c ../src/virtual_drive.h
+test-d64-save: test_d64_save.c ../src/disk_image.c ../src/disk_image.h ../src/virtual_drive.c ../src/virtual_drive.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
-		test_d64_save.c ../src/d64.c ../src/virtual_drive.c -o $@
+		test_d64_save.c ../src/disk_image.c ../src/virtual_drive.c -o $@
 
-test-drive: test_drive.c ../src/drive.c ../src/drive.h ../src/d64.c ../src/d64.h ../src/virtual_drive.c ../src/virtual_drive.h
+test-disk-formats: test_disk_formats.c ../src/disk_image.c ../src/disk_image.h ../src/virtual_drive.c ../src/virtual_drive.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
+		test_disk_formats.c ../src/disk_image.c ../src/virtual_drive.c -o $@
+
+test-drive: test_drive.c ../src/drive.c ../src/drive.h ../src/disk_image.c ../src/disk_image.h ../src/virtual_drive.c ../src/virtual_drive.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
-		test_drive.c ../src/drive.c ../src/d64.c ../src/virtual_drive.c -o $@
+		test_drive.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c -o $@
 
 test-vic: test_vic.c ../src/vic.c ../src/vic.h ../src/display.h ../src/mem.c ../src/mem.h ../src/mmu.c ../src/mmu.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=c11 -Wall -Wextra -I../src \
@@ -65,6 +69,7 @@ check: $(TESTS)
 	./test-gifcap
 	./test-d64
 	./test-d64-save
+	./test-disk-formats
 	./test-drive
 	./test-vic
 

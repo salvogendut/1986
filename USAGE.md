@@ -21,7 +21,7 @@ CP/M is a separate C128 operating mode and remains planned.
 | `--fullscreen` | Start fullscreen. |
 | `--fast` | Run the 8502 at 2 MHz (C128 fast mode). |
 | `--rom DIR` | Directory holding the machine ROM images. |
-| `--disk PATH` | Attach a D64 image at launch. |
+| `--disk PATH` | Attach a D64, D71, or D81 image at launch. |
 | `--gif-out PATH` | Start recording a GIF at launch. |
 | `--paste TEXT` | Inject text through the emulated keyboard. |
 | `--paste-at N` | Delay `--paste` until emulated frame N. |
@@ -45,19 +45,23 @@ last selected output receives window focus.
 ## Media overlay
 
 Open the options overlay with F9 and select **Media > Disk image** to insert a
-D64 image. Choosing another image immediately ejects the current disk and
-inserts the new one, so the next `DIRECTORY` reads the new disk without an
-application restart. Press Del on a populated Media entry to clear it; for a
+D64, D71, or D81 image. Choosing another image immediately ejects the current
+disk and inserts the new one, so the next `DIRECTORY` reads the new disk
+without an application restart. Press Del on a populated Media entry to clear it; for a
 Disk image this also ejects the live disk. Press F9 or Esc to close the
 overlay.
 
 `SAVE "NAME",8` and BASIC 7.0 `DSAVE "NAME"` write PRG files to the attached
-D64; `DIRECTORY` and `LOAD` see them immediately, and they persist after the
-application closes. Saving an existing name leaves it unchanged and sets DOS
-status `63,FILE EXISTS` (check with `PRINT DS$`). Use the DOS replace prefix,
+D64, D71, or D81 image; `DIRECTORY` and `LOAD` see them immediately, and they
+persist after the application closes. Saving an existing name leaves it
+unchanged and sets DOS status `63,FILE EXISTS` (check with `PRINT DS$`). Use the DOS replace prefix,
 for example `SAVE "@:NAME",8`, to overwrite an unlocked file.
-Writes modify the host D64 file; keep a backup of any irreplaceable image.
+Replacement is limited to PRG files; other file types (including D81
+partitions) are left untouched and report `64,FILE TYPE MISMATCH`.
+Writes modify the host disk-image file; keep a backup of any irreplaceable image.
 Symlinked or read-only images can still be loaded but cannot be saved to.
+The fast virtual drive supports PRG files in the root directory; it does not
+emulate 1571/1581 hardware or D81 partitions and REL-file operations.
 
 ## Sound
 

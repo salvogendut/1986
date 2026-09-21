@@ -85,16 +85,19 @@ static bool replace_disk_image(Overlay *ov, const char *path) {
 
     if (drive_attach_disk(&ov->c128->drive, path) != 0) {
         fprintf(stderr, "1986: could not attach disk '%s'\n", path);
-        notify_post("COULD NOT INSERT D64 DISK IMAGE");
+        notify_post("COULD NOT INSERT DISK IMAGE");
         save_config(ov);
         return false;
     }
 
     if (path && path[0]) {
         snprintf(ov->cfg->disk_path, sizeof(ov->cfg->disk_path), "%s", path);
-        notify_post("D64 DISK IMAGE INSERTED");
+        char message[64];
+        snprintf(message, sizeof(message), "%s DISK IMAGE INSERTED",
+                 disk_image_format_name(&ov->c128->drive.image));
+        notify_post(message);
     } else {
-        notify_post("D64 DISK IMAGE EJECTED");
+        notify_post("DISK IMAGE EJECTED");
     }
     save_config(ov);
     return true;
@@ -140,7 +143,7 @@ static const char *media_label(int row) {
 
 static const char *media_extension(int row) {
     static const char *const exts[MEDIA_ITEM_COUNT] = {
-        ".d64", ".d64", ".tap", ".crt"
+        ".d64/.d71/.d81", ".d64/.d71/.d81", ".tap", ".crt"
     };
     return exts[row];
 }
@@ -180,7 +183,7 @@ static void rom_path_display(const Overlay *ov, char *out, size_t sz) {
 
 static void open_media_dialog(Overlay *ov, int row) {
     static const SDL_DialogFileFilter disk_filters[] = {
-        { "D64 disk images", "d64;D64" },
+        { "D64/D71/D81 disk images", "d64;D64;d71;D71;d81;D81" },
         { "All files",       "*"       },
     };
     static const SDL_DialogFileFilter tape_filters[] = {

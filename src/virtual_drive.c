@@ -26,6 +26,17 @@ static void discard_channels(VirtualDrive *v) {
         free(v->channel_data[i]);
         v->channel_data[i] = NULL;
     }
+    free(v->response);
+    v->response = NULL;
+}
+
+static bool reserve_response(VirtualDrive *v, size_t cap) {
+    if (cap <= v->response_cap) return true;
+    u8 *buffer = realloc(v->response, cap);
+    if (!buffer) return false;
+    v->response = buffer;
+    v->response_cap = cap;
+    return true;
 }
 
 static void close_channel(VirtualDrive *v, unsigned channel) {
@@ -37,16 +48,20 @@ static void close_channel(VirtualDrive *v, unsigned channel) {
     v->channel_name[channel][0] = '\0';
 }
 
-static void save_error(VirtualDrive *v, D64SaveResult result) {
+static void save_error(VirtualDrive *v, DiskSaveResult result) {
     switch (result) {
-        case D64_SAVE_OK: set_status(v, "00, OK,00,00\r"); return;
-        case D64_SAVE_EXISTS: set_status(v, "63,FILE EXISTS,00,00\r"); break;
-        case D64_SAVE_DISK_FULL: set_status(v, "72,DISK FULL,00,00\r"); break;
-        case D64_SAVE_DIR_ERROR: set_status(v, "71,DIR ERROR,00,00\r"); break;
-        case D64_SAVE_WRITE_PROTECT:
+        case DISK_SAVE_OK: set_status(v, "00, OK,00,00\r"); return;
+        case DISK_SAVE_EXISTS: set_status(v, "63,FILE EXISTS,00,00\r"); break;
+        case DISK_SAVE_TYPE_MISMATCH:
+            set_status(v, "64,FILE TYPE MISMATCH,00,00\r"); break;
+        case DISK_SAVE_DOS_MISMATCH:
+            set_status(v, "73,DOS MISMATCH,00,00\r"); break;
+        case DISK_SAVE_DISK_FULL: set_status(v, "72,DISK FULL,00,00\r"); break;
+        case DISK_SAVE_DIR_ERROR: set_status(v, "71,DIR ERROR,00,00\r"); break;
+        case DISK_SAVE_WRITE_PROTECT:
             set_status(v, "26,WRITE PROTECT ON,00,00\r"); break;
-        case D64_SAVE_BAD_NAME: set_status(v, "33,SYNTAX ERROR,00,00\r"); break;
-        case D64_SAVE_IO_ERROR: set_status(v, "25,WRITE ERROR,00,00\r"); break;
+        case DISK_SAVE_BAD_NAME: set_status(v, "33,SYNTAX ERROR,00,00\r"); break;
+        case DISK_SAVE_IO_ERROR: set_status(v, "25,WRITE ERROR,00,00\r"); break;
     }
     v->bus_status |= 0x02;
 }
@@ -76,7 +91,7 @@ void virtual_drive_init(VirtualDrive *v, int unit) {
 
 void virtual_drive_reset(VirtualDrive *v) {
     int unit = v->unit;
-    D64 *disk = v->disk;
+    DiskImage *disk = v->disk;
     discard_channels(v);
     virtual_drive_init(v, unit);
     v->disk = disk;
@@ -86,7 +101,7 @@ void virtual_drive_set_unit(VirtualDrive *v, int unit) {
     v->unit = unit;
 }
 
-void virtual_drive_attach(VirtualDrive *v, D64 *disk) {
+void virtual_drive_attach(VirtualDrive *v, DiskImage *disk) {
     int unit = v->unit;
     discard_channels(v);
     virtual_drive_init(v, unit);
@@ -107,7 +122,7 @@ static void prepare_channel(VirtualDrive *v, unsigned channel) {
             set_status(v, "74,DRIVE NOT READY,00,00\r");
             v->bus_status |= 0x02;
         }
-        else if (!v->disk->writable) save_error(v, D64_SAVE_WRITE_PROTECT);
+        else if (!v->disk->writable) save_error(v, DISK_SAVE_WRITE_PROTECT);
         else set_status(v, "00, OK,00,00\r");
         return;
     }
@@ -121,8 +136,9 @@ static void prepare_channel(VirtualDrive *v, unsigned channel) {
     }
     if (name[0] == '$') {
         if (v->disk) {
-            v->response_len = d64_build_directory_program(
-                v->disk, v->response, sizeof(v->response));
+            if (reserve_response(v, VDRIVE_DIRECTORY_MAX))
+                v->response_len = disk_image_build_directory_program(
+                    v->disk, v->response, v->response_cap);
             if (v->response_len) {
                 set_status(v, "00, OK,00,00\r");
             } else {
@@ -145,15 +161,18 @@ static void prepare_channel(VirtualDrive *v, unsigned channel) {
         return;
     }
 
-    D64DirEntry entry;
-    if (d64_find_file(v->disk, name, &entry) != 0) {
+    DiskDirEntry entry;
+    if (disk_image_find_file(v->disk, name, &entry) != 0) {
         set_status(v, "62,FILE NOT FOUND,00,00\r");
         v->response_error = true;
         v->bus_status |= 0x02;
         return;
     }
-    int length = d64_read_file(v->disk, &entry, v->response,
-                               sizeof(v->response));
+    size_t max_bytes = (size_t)disk_image_track_offset(
+        v->disk, v->disk->tracks + 1) / DISK_SECTOR_BYTES * 254u;
+    int length = reserve_response(v, max_bytes)
+        ? disk_image_read_file(v->disk, &entry, v->response, v->response_cap)
+        : -1;
     if (length < 0) {
         set_status(v, "27,READ ERROR,00,00\r");
         v->response_error = true;
@@ -194,14 +213,14 @@ static void commit_save(VirtualDrive *v, unsigned channel) {
     char name[17];
     bool replace;
     if (v->channel_overflow[channel]) {
-        save_error(v, D64_SAVE_DISK_FULL);
+        save_error(v, DISK_SAVE_DISK_FULL);
     } else if (!save_name(v->channel_name[channel], name, &replace)) {
-        save_error(v, D64_SAVE_BAD_NAME);
+        save_error(v, DISK_SAVE_BAD_NAME);
     } else if (!v->disk) {
         set_status(v, "74,DRIVE NOT READY,00,00\r");
         v->bus_status |= 0x02;
     } else {
-        D64SaveResult result = d64_save_prg(v->disk, name,
+        DiskSaveResult result = disk_image_save_prg(v->disk, name,
             v->channel_data[channel], v->channel_len[channel], replace);
         if (trace_enabled())
             fprintf(stderr, "[IEC:SAVE] raw='%s' name='%s' replace=%d bytes=%zu result=%d\n",
@@ -218,8 +237,11 @@ static void prepare_talk(VirtualDrive *v) {
         v->response_len = v->response_pos = 0;
         v->response_channel = 15;
         v->response_error = false;
-        v->response_len = strlen(v->status);
-        memcpy(v->response, v->status, v->response_len);
+        size_t length = strlen(v->status);
+        if (reserve_response(v, length)) {
+            v->response_len = length;
+            memcpy(v->response, v->status, length);
+        }
         return;
     }
     if (v->response_channel != (int)channel) prepare_channel(v, channel);
