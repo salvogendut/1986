@@ -49,6 +49,11 @@ int main(void) {
     snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s", "keep-me.d64");
     snprintf(cfg.disk2_path, sizeof(cfg.disk2_path), "%s", "second.d81");
     snprintf(cfg.u36_path, sizeof(cfg.u36_path), "%s", "utility.rom");
+    snprintf(cfg.last_disk_dir, sizeof(cfg.last_disk_dir), "%s", "/media/drive1");
+    snprintf(cfg.last_disk2_dir, sizeof(cfg.last_disk2_dir), "%s", "/media/drive2");
+    snprintf(cfg.last_tape_dir, sizeof(cfg.last_tape_dir), "%s", "/media/tapes");
+    snprintf(cfg.last_cart_dir, sizeof(cfg.last_cart_dir), "%s", "/media/carts");
+    snprintf(cfg.last_u36_dir, sizeof(cfg.last_u36_dir), "%s", "/media/roms");
     CHECK(config_save(&cfg, path), "config_save");
 
     Config back;
@@ -71,6 +76,12 @@ int main(void) {
     CHECK(!config_save_input_port(path, 3), "invalid host port is rejected");
     CHECK(strcmp(back.u36_path, "utility.rom") == 0,
           "U36 ROM path roundtrip");
+    CHECK(strcmp(back.last_disk_dir, "/media/drive1") == 0 &&
+          strcmp(back.last_disk2_dir, "/media/drive2") == 0 &&
+          strcmp(back.last_tape_dir, "/media/tapes") == 0 &&
+          strcmp(back.last_cart_dir, "/media/carts") == 0 &&
+          strcmp(back.last_u36_dir, "/media/roms") == 0,
+          "each file dialog's recent directory roundtrips independently");
 
     CHECK(config_save_column_mode(path, true), "save 80-column mode only");
     CHECK(config_load(&back, path), "reload 80-column mode");

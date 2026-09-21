@@ -61,6 +61,14 @@ a D64, D71, or D81 image. Choosing another image immediately ejects the current
 disk and inserts the new one, so the next `DIRECTORY` reads the new disk
 without an application restart. Press Del on a populated image row to eject
 that drive's disk. Press F9 or Esc to close the overlay.
+Each Media file picker reopens in its own last-used directory, including after
+ejecting its media or restarting the app. Drive 1, Drive 2, tape, cartridge,
+and U36 have separate remembered directories. Existing configurations use the
+directory of the selected file until a new choice is made. If a remembered
+directory no longer exists, the picker falls back to a valid selected-file
+directory or the system default. The General machine-ROM folder picker
+reopens at the configured ROM directory when it exists. Cancelling a picker
+does not change its remembered location.
 
 Enable **Advanced > Second Drive** to show **Drive 2** and **Drive 2 image** in
 Media. The two drives have independent images and IEC device numbers #8-#11;

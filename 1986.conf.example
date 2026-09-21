@@ -47,3 +47,11 @@ gif_ffmpeg = 0
 
 # Directory holding the machine ROM images (kernal.rom, basic.rom, chargen.rom)
 rom_dir =
+
+# Last directories visited in the Overlay pickers. These are independent of
+# inserted media, so ejecting an image does not reset its picker location.
+last_disk_dir =
+last_disk2_dir =
+last_tape_dir =
+last_cart_dir =
+last_u36_dir =

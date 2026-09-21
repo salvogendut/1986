@@ -41,6 +41,12 @@ typedef struct {
     char       tape_path[CONFIG_PATH_MAX];  /* Tape .tap image */
     char       cart_path[CONFIG_PATH_MAX];  /* native C128 CRT/raw function ROM */
     char       u36_path[CONFIG_PATH_MAX];   /* internal function ROM socket */
+    /* Per-picker directories survive ejection; empty uses selected media. */
+    char       last_disk_dir[CONFIG_PATH_MAX];
+    char       last_disk2_dir[CONFIG_PATH_MAX];
+    char       last_tape_dir[CONFIG_PATH_MAX];
+    char       last_cart_dir[CONFIG_PATH_MAX];
+    char       last_u36_dir[CONFIG_PATH_MAX];
 
     /* Disk drive (Commodore 1571). */
     int        drive_unit;        /* IEC device number (8-11) */
