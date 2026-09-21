@@ -19,11 +19,18 @@ void mem_set_processor_port(Mem *m, u8 dir, u8 data) {
 }
 
 static u32 bank_off(const Mem *m, u16 addr) {
-    /* CR bits 6-7 select the RAM bank (00/01 = bank 0/1 for the 128K C128).
-     * The 1K common area ($0000-$03FF, incl. zero page and page 1) is always
-     * bank 0 (RCR default = 1K lower common). */
+    /* CR bit 6 selects the CPU RAM bank on a 128K C128 (bit 7 mirrors it).
+     * RCR bits 2-3 enable common RAM in bank 0 at the bottom and/or top;
+     * bits 0-1 choose 1K, 4K, 8K, or 16K. Pages 0 and 1 are separately
+     * relocated by the MMU and default to bank 0 (relocation is not yet
+     * implemented here). */
+    static const unsigned common_size[] = { 0x400, 0x1000, 0x2000, 0x4000 };
+    unsigned size = common_size[m->mmu.rcr & 0x03];
     u8 bank = (m->mmu.mcr >> 6) & 0x01;
-    if (addr < 0x400) bank = 0;
+    if (addr < 0x200 ||
+        ((m->mmu.rcr & 0x04) && addr < size) ||
+        ((m->mmu.rcr & 0x08) && addr >= 0x10000 - size))
+        bank = 0;
     return ((u32)bank << 16) | addr;
 }
 
