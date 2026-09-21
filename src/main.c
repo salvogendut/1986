@@ -343,33 +343,11 @@ int main(int argc, char **argv) {
     SDL_Gamepad *gamepad = open_first_gamepad();
     bool pc_shift_held = false;
     uint64_t next_frame = 0;
-    const bool f9_trace = getenv("C128_F9_TRACE") != NULL;
-    bool last_presented_overlay = false;
-    if (f9_trace)
-        fprintf(stderr, "[f9] SDL video driver=%s\n", SDL_GetCurrentVideoDriver());
 
     while (running) {
         /* --- Event processing --- */
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
-            if (f9_trace &&
-                (ev.type == SDL_EVENT_WINDOW_SHOWN ||
-                 ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED ||
-                 ev.type == SDL_EVENT_WINDOW_FOCUS_LOST)) {
-                SDL_Window *focused = SDL_GetKeyboardFocus();
-                fprintf(stderr, "[f9] window %s id=%u keyboard-focus=%u\n",
-                        ev.type == SDL_EVENT_WINDOW_SHOWN ? "shown" :
-                        ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED ? "focus-gained" :
-                        "focus-lost",
-                        ev.window.windowID, focused ? SDL_GetWindowID(focused) : 0);
-            }
-            if (f9_trace &&
-                (ev.type == SDL_EVENT_KEY_DOWN || ev.type == SDL_EVENT_KEY_UP))
-                fprintf(stderr, "[f9] %s window=%u scancode=%d key=%d mod=%04x repeat=%d visible-before=%d\n",
-                        ev.type == SDL_EVENT_KEY_DOWN ? "down" : "up",
-                        ev.key.windowID, ev.key.scancode, ev.key.key,
-                        (unsigned)ev.key.mod, ev.key.repeat,
-                        overlay_is_visible(&overlay));
             if (ev.type == SDL_EVENT_GAMEPAD_ADDED && !gamepad) {
                 gamepad = SDL_OpenGamepad(ev.gdevice.which);
                 continue;
@@ -432,12 +410,7 @@ int main(int argc, char **argv) {
                 if (ev.key.scancode == SDL_SCANCODE_RETURN) continue;
             }
 
-            bool overlay_handled = overlay_handle_event(&overlay, &ev);
-            if (f9_trace && ev.type == SDL_EVENT_KEY_DOWN &&
-                ev.key.scancode == SDL_SCANCODE_F9)
-                fprintf(stderr, "[f9] handled=%d visible-after=%d\n",
-                        overlay_handled, overlay_is_visible(&overlay));
-            if (overlay_handled) {
+            if (overlay_handle_event(&overlay, &ev)) {
                 if (mouse_captured && (overlay_is_visible(&overlay) ||
                     cfg.joy_port_mode[cfg.main_input_port - 1] != JOYPORT_MOUSE))
                     release_mouse(&mouse_captured, &c.joyports);
@@ -475,8 +448,6 @@ int main(int argc, char **argv) {
                  * Shift must NOT also apply as a C128 Shift, or F1 would read
                  * as F2; override it with the function key's own Shift. */
                 if (fkey && shift) {
-                    if (f9_trace && ev.key.scancode == SDL_SCANCODE_F5)
-                        fprintf(stderr, "[f9] Shift+F5 routed to C128 keyboard\n");
                     int row, col;
                     bool need_shift;
                     if (kbd_map_scancode(ev.key.scancode, &row, &col, &need_shift)) {
@@ -522,9 +493,6 @@ int main(int argc, char **argv) {
                                                (int)sfx_buf_len);
                     }
                 } else if (ev.key.scancode == SDL_SCANCODE_F5) {
-                    if (f9_trace)
-                        fprintf(stderr, "[f9] F5 resetting C128 at frame=%d\n",
-                                c128_frame_count);
                     c128_reset(&c);
                     if (audio_stream) SDL_ClearAudioStream(audio_stream);
                 } else if (ev.key.scancode == SDL_SCANCODE_F6) {
@@ -669,11 +637,6 @@ int main(int argc, char **argv) {
         if (!c.display.one_display && c.display.vdc_renderer)
             notify_render(c.display.vdc_renderer);
         display_flip(&c.display);
-        if (f9_trace && last_presented_overlay != overlay_is_visible(&overlay)) {
-            last_presented_overlay = overlay_is_visible(&overlay);
-            fprintf(stderr, "[f9] submitted visible=%d frame=%d\n",
-                    last_presented_overlay, c128_frame_count);
-        }
         if (monitor_is_open(monitor)) monitor_render(monitor);
     }
 
