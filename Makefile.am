@@ -60,6 +60,7 @@ noinst_HEADERS = \
 	src/disk_image.h \
 	src/drive.h \
 	src/virtual_drive.h \
+	src/shutter_wav.h \
 	src/vice/vice.h \
 	src/vice/types.h \
 	src/vice/log.h \
@@ -87,9 +88,8 @@ noinst_HEADERS = \
 icons/1986-rc.o: $(srcdir)/icons/1986.rc $(srcdir)/icons/1986.ico
 	$(WINDRES) -I$(srcdir)/icons -i $< -O coff -o $@
 
-# Bundled ROM images installed to $(datadir)/1986/roms/
-# (C128/KERNAL ROMs are free for emulator use; user-provided images can be
-# dropped into the same directory and are picked up by name.)
+# Machine ROMs are not distributed. Install only the guidance file; users
+# supply their own ROM images in this directory or configure a ROM path.
 romsdir       = $(pkgdatadir)/roms
 dist_roms_DATA = roms/README
 

@@ -53,7 +53,7 @@ jobs:
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             gcc make autoconf automake pkg-config libsdl3-dev dpkg-dev \
-            desktop-file-utils appstream-util git
+            desktop-file-utils appstream-util git ca-certificates
       - uses: actions/checkout@v4
       - name: Mark workspace as safe
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"

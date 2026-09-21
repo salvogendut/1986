@@ -16,6 +16,7 @@
 #include "leds.h"
 #include "compat_win.h"
 #include "startup_debug.h"
+#include "shutter_wav.h"
 
 /* notify.c forward-declares this debug master switch (defined in the
  * machine file in the reference tree); provide it here so the module links. */
@@ -224,6 +225,24 @@ int main(int argc, char **argv) {
             fprintf(stderr, "1986: SID audio unavailable: %s\n", SDL_GetError());
             if (audio_stream) SDL_DestroyAudioStream(audio_stream);
             audio_stream = NULL;
+        }
+    }
+
+    /* Replay the same camera-shutter sample used by 1983 and 1984 on F4.
+     * Keep it on a separate SDL stream so it mixes with the SID. */
+    SDL_AudioStream *sfx_stream = NULL;
+    Uint8 *sfx_buf = NULL;
+    Uint32 sfx_buf_len = 0;
+    {
+        SDL_AudioSpec sfx_spec;
+        SDL_IOStream *io = SDL_IOFromConstMem(shutter_wav, shutter_wav_len);
+        if (io && SDL_LoadWAV_IO(io, true, &sfx_spec, &sfx_buf, &sfx_buf_len)) {
+            sfx_stream = SDL_OpenAudioDeviceStream(
+                SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &sfx_spec, NULL, NULL);
+            if (sfx_stream && !SDL_ResumeAudioStreamDevice(sfx_stream)) {
+                SDL_DestroyAudioStream(sfx_stream);
+                sfx_stream = NULL;
+            }
         }
     }
 
@@ -466,6 +485,11 @@ int main(int argc, char **argv) {
                     snprintf(path, sizeof(path), "%s_%ld.ppm",
                              basename(tmp), (long)time(NULL));
                     display_save_ppm_active(&c.display, path);
+                    if (sfx_stream && sfx_buf) {
+                        SDL_ClearAudioStream(sfx_stream);
+                        SDL_PutAudioStreamData(sfx_stream, sfx_buf,
+                                               (int)sfx_buf_len);
+                    }
                 } else if (ev.key.scancode == SDL_SCANCODE_F5) {
                     c128_reset(&c);
                     if (audio_stream) SDL_ClearAudioStream(audio_stream);
@@ -617,6 +641,8 @@ int main(int argc, char **argv) {
     release_mouse(&mouse_captured, &c.joyports);
     if (gamepad) SDL_CloseGamepad(gamepad);
     if (videocap_active()) videocap_stop();
+    if (sfx_stream) SDL_DestroyAudioStream(sfx_stream);
+    if (sfx_buf) SDL_free(sfx_buf);
     if (audio_stream) SDL_DestroyAudioStream(audio_stream);
     if (!config_save_column_mode(cfg_path, c.col_mode_80))
         fprintf(stderr, "1986: could not save display mode to '%s'\n", cfg_path);
