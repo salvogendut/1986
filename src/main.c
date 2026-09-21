@@ -342,6 +342,7 @@ int main(int argc, char **argv) {
     SDL_Window *mouse_captured = NULL;
     SDL_Gamepad *gamepad = open_first_gamepad();
     bool pc_shift_held = false;
+    bool startup_focus_placed = false;
     uint64_t next_frame = 0;
 
     while (running) {
@@ -400,6 +401,38 @@ int main(int argc, char **argv) {
             }
 
             if (monitor_handle_event(monitor, &ev)) continue;
+
+            if (ev.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
+                (ev.window.windowID == SDL_GetWindowID(c.display.window) ||
+                 (c.display.vdc_window &&
+                  ev.window.windowID == SDL_GetWindowID(c.display.vdc_window)))) {
+                running = false;
+                continue;
+            }
+
+            /* In two-window mode, clicking or Alt-Tabbing to either display
+             * makes that display the selected 40/80 output. Ignore the focus
+             * events generated while the initial windows are being shown. */
+            if (ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED &&
+                startup_focus_placed && !c.display.one_display &&
+                SDL_GetKeyboardFocus() &&
+                ev.window.windowID == SDL_GetWindowID(SDL_GetKeyboardFocus())) {
+                bool col80;
+                if (ev.window.windowID == SDL_GetWindowID(c.display.window))
+                    col80 = false;
+                else if (c.display.vdc_window &&
+                         ev.window.windowID == SDL_GetWindowID(c.display.vdc_window))
+                    col80 = true;
+                else
+                    continue;
+                if (col80 != c.col_mode_80) {
+                    c128_set_4080(&c, col80);
+                    cfg.col_mode_80 = col80;
+                    if (!config_save_column_mode(cfg_path, col80))
+                        fprintf(stderr, "1986: could not save display mode to '%s'\n",
+                                cfg_path);
+                }
+            }
 
             /* F9 opens overlay — release mouse capture first. */
             if (mouse_captured && ev.type == SDL_EVENT_KEY_DOWN &&
@@ -515,11 +548,14 @@ int main(int argc, char **argv) {
                     if (mouse_captured) release_mouse(&mouse_captured, &c.joyports);
                     c128_switch_4080(&c);   /* toggle 40-col VIC <-> 80-col VDC */
                     cfg.col_mode_80 = c.col_mode_80;
-                    display_focus_active(&c.display);
                     if (cfg.display_change_reset) {
                         c128_reset(&c);
                         if (audio_stream) SDL_ClearAudioStream(audio_stream);
                     }
+                    display_focus_active(&c.display);
+                    if (!config_save_column_mode(cfg_path, c.col_mode_80))
+                        fprintf(stderr, "1986: could not save display mode to '%s'\n",
+                                cfg_path);
                 } else if (ev.key.scancode == SDL_SCANCODE_V &&
                            (SDL_GetModState() & SDL_KMOD_CTRL)) {
                     char *text = SDL_GetClipboardText();
@@ -636,6 +672,10 @@ int main(int argc, char **argv) {
             notify_render(c.display.vdc_renderer);
         display_flip(&c.display);
         if (monitor_is_open(monitor)) monitor_render(monitor);
+        if (!startup_focus_placed) {
+            display_focus_active(&c.display);
+            startup_focus_placed = true;
+        }
     }
 
     release_mouse(&mouse_captured, &c.joyports);
