@@ -131,6 +131,38 @@ static bool replace_disk_image(Overlay *ov, int which, const char *path) {
     return true;
 }
 
+bool overlay_set_cartridge(Overlay *ov, const char *path) {
+    char selected[CONFIG_PATH_MAX];
+    if (path && strlen(path) >= sizeof(selected)) {
+        notify_post("CARTRIDGE PATH TOO LONG");
+        return false;
+    }
+    snprintf(selected, sizeof(selected), "%s", path ? path : "");
+    Cartridge *cart = &ov->c128->mem.cart;
+    bool had_cart = cart->attached;
+    cartridge_detach(cart);
+    ov->cfg->cart_path[0] = '\0';
+    if (selected[0]) {
+        CartridgeResult result = cartridge_attach(cart, selected);
+        if (result != CART_OK) {
+            fprintf(stderr, "1986: cartridge '%s': %s\n", selected,
+                    cartridge_result_name(result));
+            notify_post("%s", cartridge_result_name(result));
+            if (had_cart) c128_reset(ov->c128);
+            save_config(ov);
+            return false;
+        }
+        snprintf(ov->cfg->cart_path, sizeof(ov->cfg->cart_path), "%s", selected);
+        c128_reset(ov->c128); /* a cartridge is sampled at machine startup */
+        notify_post("CARTRIDGE INSERTED - F10 SWITCHES DISPLAY");
+    } else if (had_cart) {
+        c128_reset(ov->c128);
+        notify_post("CARTRIDGE EJECTED - MACHINE RESET");
+    }
+    save_config(ov);
+    return true;
+}
+
 static int media_item(const Overlay *ov, int row) {
     return !ov->cfg->second_drive && row >= 2 ? row + 2 : row;
 }
@@ -139,6 +171,11 @@ static void clear_media_entry(Overlay *ov) {
     if (ov->section != OV_MEDIA) return;
 
     int item = media_item(ov, ov->row);
+    if (item == MEDIA_CART) {
+        if (ov->cfg->cart_path[0] || ov->c128->mem.cart.attached)
+            overlay_set_cartridge(ov, NULL);
+        return;
+    }
     if (item == MEDIA_DISK1 || item == MEDIA_DISK2) {
         int which = item == MEDIA_DISK2 ? 2 : 1;
         Drive *drive = which == 2 ? &ov->c128->drive2 : &ov->c128->drive;
@@ -180,7 +217,7 @@ static const char *media_label(int row) {
 
 static const char *media_extension(int row) {
     static const char *const exts[MEDIA_ITEM_COUNT] = {
-        "", ".d64/.d71/.d81", "", ".d64/.d71/.d81", ".tap", ".crt"
+        "", ".d64/.d71/.d81", "", ".d64/.d71/.d81", ".tap", ".crt/.bin/.rom"
     };
     return exts[row];
 }
@@ -229,7 +266,7 @@ static void open_media_dialog(Overlay *ov, int row) {
         { "All files", "*"       },
     };
     static const SDL_DialogFileFilter cart_filters[] = {
-        { "CRT cartridges", "crt;CRT" },
+        { "C128 CRT or function ROM", "crt;CRT;bin;BIN;rom;ROM" },
         { "All files",      "*"       },
     };
     const SDL_DialogFileFilter *filters = disk_filters;
@@ -279,7 +316,7 @@ static bool section_available(const Overlay *ov, OvSection s) {
 /* Number of selectable rows in each section. */
 static int section_rows(const Overlay *ov, OvSection s) {
     switch (s) {
-        case OV_GENERAL:  return 3;   /* Tinker, ROMS PATH, About */
+        case OV_GENERAL:  return 4;   /* 40/80 key, Tinker, ROMS PATH, About */
         case OV_MEDIA:    return ov->cfg->second_drive ? 6 : 4;
         case OV_ADVANCED: return ADV_ROWS;
         default:          return 0;
@@ -307,11 +344,18 @@ static void overlay_activate(Overlay *ov) {
     switch (ov->section) {
         case OV_GENERAL:
             if (ov->row == 0) {
+                ov->cfg->col_mode_80 = !ov->cfg->col_mode_80;
+                c128_set_4080(ov->c128, ov->cfg->col_mode_80);
+                display_focus_active(&ov->c128->display);
+                if (ov->cfg->display_change_reset)
+                    c128_reset(ov->c128);
+                save_config(ov);
+            } else if (ov->row == 1) {
                 ov->cfg->tinker = !ov->cfg->tinker;
                 /* Leaving Tinker off hides Advanced; fall back to General. */
                 if (!ov->cfg->tinker && ov->section == OV_ADVANCED)
                     ov->section = OV_GENERAL;
-            } else if (ov->row == 1) {
+            } else if (ov->row == 2) {
                 open_rom_dialog(ov);
             } else {
                 ov->about_visible = true;
@@ -497,10 +541,13 @@ void overlay_tick(Overlay *ov) {
                            ov->dialog_path);
         return;
     }
+    if (kind == OV_DIALOG_CART) {
+        overlay_set_cartridge(ov, ov->dialog_path);
+        return;
+    }
 
     char *dest = NULL;
     if (kind == OV_DIALOG_TAPE)      dest = ov->cfg->tape_path;
-    else if (kind == OV_DIALOG_CART) dest = ov->cfg->cart_path;
     else if (kind == OV_DIALOG_ROM)  dest = ov->cfg->rom_dir;
     if (dest) {
         snprintf(dest, CONFIG_PATH_MAX, "%s", ov->dialog_path);
@@ -567,7 +614,7 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
     int lw = (int)(rw / scale);
     int panel_w = lw - 20 < 820 ? lw - 20 : 820;
     int rows = ov->section == OV_ADVANCED ? ADV_ROWS :
-               ov->section == OV_MEDIA ? section_rows(ov, OV_MEDIA) : 10;
+               ov->section == OV_MEDIA ? section_rows(ov, OV_MEDIA) : 11;
     int panel_h = 48 + rows * OV_LINE_H + 42;
 
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
@@ -615,13 +662,16 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, panel_w, y, "Emulator", PACKAGE_VERSION, false); y += OV_LINE_H;
 #endif
         y += OV_LINE_H;
-        draw_row(r, panel_w, y, "Tinker", ov->cfg->tinker ? "On" : "Off",
+        draw_row(r, panel_w, y, "40/80 key",
+                 ov->cfg->col_mode_80 ? "80 columns (VDC)" : "40 columns (VIC)",
                  ov->row == 0); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Tinker", ov->cfg->tinker ? "On" : "Off",
+                 ov->row == 1); y += OV_LINE_H;
         char rd[CONFIG_PATH_MAX];
         rom_path_display(ov, rd, sizeof(rd));
-        draw_row(r, panel_w, y, "ROMS PATH", rd, ov->row == 1);
+        draw_row(r, panel_w, y, "ROMS PATH", rd, ov->row == 2);
         y += OV_LINE_H;
-        draw_row(r, panel_w, y, "About", "Program details", ov->row == 2);
+        draw_row(r, panel_w, y, "About", "Program details", ov->row == 3);
     } else if (ov->section == OV_MEDIA) {
         for (int i = 0; i < section_rows(ov, OV_MEDIA); i++) {
             int item = media_item(ov, i);

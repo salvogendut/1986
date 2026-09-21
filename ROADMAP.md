@@ -223,6 +223,8 @@ ROM through emulated hardware.
 - [x] Persistent configuration overlay, screen/console notifications, and
   live media selection.
 - [x] Persistent active display selection in unified and dual-window modes.
+- [x] Generic native-C128 CRT and raw external function-ROM cartridge loading,
+  including live Media attach/eject; bank-switched cartridges remain future work.
 - [ ] Snapshots (VICE `.vsf` or a simple own format) for save/load of machine
   state.
 - [ ] Full native C128 keyboard coverage, host layouts, and auto-repeat.

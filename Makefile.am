@@ -12,6 +12,7 @@ dist_man1_MANS = 1986.1
 	src/c128.c \
 	src/cpu.c \
 	src/mem.c \
+	src/cartridge.c \
 	src/mmu.c \
 	src/vic.c \
 	src/vdc.c \
@@ -41,6 +42,7 @@ noinst_HEADERS = \
 	src/c128.h \
 	src/cpu.h \
 	src/mem.h \
+	src/cartridge.h \
 	src/mmu.h \
 	src/vic.h \
 	src/vdc.h \

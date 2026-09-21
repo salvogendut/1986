@@ -22,6 +22,7 @@ CP/M is a separate C128 operating mode and remains planned.
 | `--fast` | Run the 8502 at 2 MHz (C128 fast mode). |
 | `--rom DIR` | Directory holding the machine ROM images. |
 | `--disk PATH` | Attach a D64, D71, or D81 image to Drive 1 at launch. |
+| `--cart PATH` | Attach a generic C128 `.crt` or raw external function-ROM `.bin`/`.rom` at launch. |
 | `--gif-out PATH` | Start recording a GIF at launch. |
 | `--paste TEXT` | Inject text through the emulated keyboard. |
 | `--paste-at N` | Delay `--paste` until emulated frame N. |
@@ -34,13 +35,16 @@ CP/M is a separate C128 operating mode and remains planned.
 Settings are read from `~/.config/1986/1986.conf` (or from `1986.conf` when
 `HOME` is unset) and written by the options overlay. See
 [`1986.conf.example`](1986.conf.example).
+For an isolated run, `C128_CONFIG_PATH` can point to a specific config file.
 
-The last display selected with F10 is stored as `display_columns = 40` or
-`display_columns = 80` when the application closes normally and restored on
-the next launch. Existing configurations without this key default to the
-80-column VDC display. With Unified Display enabled, the shared window shows
-that output. With Unified Display disabled, both output windows open and the
-last selected output receives window focus.
+**General > 40/80 key** selects the emulated keyboard's 40- or 80-column
+default, equivalent to setting the C128's physical 40/80 key. It takes effect
+immediately and is saved as `display_columns = 40` or `display_columns = 80`.
+F10 switches between the outputs too; its last choice is saved when the
+application closes normally. Existing configurations without this key default
+to the 80-column VDC display. With Unified Display enabled, the shared window
+shows the selected output. With Unified Display disabled, both output windows
+open and the selected output receives window focus.
 
 ## Media overlay
 
@@ -56,6 +60,20 @@ Enter on a Drive row cycles its number while skipping the other drive's number.
 Drive 1 defaults to #8, Drive 2 to #9. Turning Second Drive off disconnects
 Drive 2 from IEC but remembers its image and unit for the next time it is on.
 The toggle defaults to Off and requires Tinker to expose Advanced.
+
+**Media > Cartridge** accepts generic native-C128 `.crt` images (type 0)
+and raw external function-ROM `.bin`/`.rom` dumps of 8, 16, or 32 KiB.
+A 64 KiB EPROM dump is accepted only when its two 32 KiB halves are identical;
+larger or bank-switched images need a cartridge-specific mapper. Smaller raw
+ROMs are mirrored through the 32 KiB function-ROM space. Inserting, replacing,
+or ejecting a cartridge resets the machine, and Del ejects it. A failed
+replacement leaves the slot empty and clears the saved path. C64-only CRTs
+cannot be used because the C64 personality is intentionally unsupported.
+Some cartridges draw on the VIC 40-column output even when the saved default
+is VDC 80-column; select **General > 40/80 key > 40 columns (VIC)** to make
+the VIC output the persistent default, or press F10 to switch while running.
+Selection is restored at launch from `cart` in the config; `--cart PATH`
+overrides it for that run. Tape selection remains a placeholder for now.
 
 `SAVE "NAME",8` and BASIC 7.0 `DSAVE "NAME"` write PRG files to the attached
 D64, D71, or D81 image; `DIRECTORY` and `LOAD` see them immediately, and they

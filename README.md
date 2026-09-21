@@ -57,17 +57,22 @@ Current working pieces include:
   pause, F8 monitor, F9 options overlay, F10 40/80 switch, F11 fullscreen,
   F12 quit.
 - An in-window function-key reminder in both display windows and an About
-  dialog in General showing the emulator version and build commit.
+  dialog in General showing the emulator version and build commit. General
+  also has a persistent 40/80 key setting for the default VIC/VDC output.
 - Compact options overlay that reads and writes `1986.conf`, with an optional
   second virtual IEC drive and separately selected disk image/unit.
 - VICE's 8502/6510 core and a reused Z80 core wired to the C128 bus.
 - A fast virtual IEC drive that reads and writes D64, D71, and D81 images,
   supporting `DIRECTORY`, `LOAD`/`DLOAD`, `SAVE`/`DSAVE`, and DOS `SCRATCH`/
   `RENAME` commands with status errors.
+- Native C128 generic `.crt` cartridges and raw 8/16/32 KiB external
+  function-ROM `.bin` images (also repeated 64 KiB EPROM dumps), with live
+  Media-overlay insertion/ejection and `--cart` startup loading. C64-only and
+  bank-switched cartridges are not yet supported.
 - Tests for the CPU, MMU, CIA/SID, VIC graphics and sprites, configuration,
   GIF encoder, disk formats, KERNAL IEC traps, and virtual-drive channels.
 
-Further write-side DOS commands, true cycle-level 1571 emulation,
+Tape playback, further write-side DOS commands, true cycle-level 1571 emulation,
 high-fidelity SID filter/combined-waveform emulation, CP/M mode, and several
 accuracy features remain unfinished. The virtual drive does not emulate 1571
 or 1581 hardware; it and the future true 1571 will share only the media/image
