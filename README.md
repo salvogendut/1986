@@ -116,6 +116,14 @@ backend; while it is pending, the fast virtual drive stays active.
 See [DEVELOPMENT.md](Development.md) for technical notes and
 [ROADMAP.md](ROADMAP.md) for the forward plan.
 
+## ROMs
+
+1986 does not include Commodore machine or drive ROM images in the repository
+or release packages, to avoid redistributing third-party copyrighted material.
+Users must obtain compatible ROMs themselves from a source they are authorized
+to use. Place them in `roms/` or select a ROM directory with `--rom`; see
+[roms/README](roms/README) for the expected filenames and layout.
+
 ## Build from source
 
 On Fedora:
