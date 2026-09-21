@@ -51,7 +51,8 @@ Current working pieces include:
 - VIC-IIe 40-column text/bitmap display with eight hardware sprites, and the
   VDC 80-column text and standard 640x200 bitmap display. VDC interlace modes
   remain unfinished.
-- Host keyboard input, paste, cursor, CIA timers/TOD/serial/FLAG interrupts,
+- Host keyboard input, paste, selectable joystick ports and 1351 mouse input,
+  CIA timers/TOD/serial/FLAG interrupts,
   and VIC raster IRQ handling.
 - Audible three-voice 8580 SID synthesis through SDL3, including the standard
   waveforms, envelopes, voice routing, and a basic filter approximation.

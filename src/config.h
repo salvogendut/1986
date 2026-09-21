@@ -14,6 +14,8 @@ typedef enum {
     C128_MODEL_C128D = 2  /* the C128D (DCR's plastic sibling) */
 } C128Model;
 
+typedef enum { JOYPORT_JOYSTICK = 0, JOYPORT_MOUSE = 1 } JoyPortMode;
+
 typedef struct {
     int        scale;              /* window scale factor (1..4) */
     bool       fullscreen;
@@ -55,7 +57,9 @@ typedef struct {
     bool       tape_audio_monitor;  /* stub */
     bool       tape_video_monitor;  /* stub */
     bool       debug_overlay;       /* stub */
-    bool       joystick_hidapi;     /* stub */
+    bool       joystick_hidapi;     /* SDL HIDAPI backend (restart to apply) */
+    int        main_input_port;     /* host gamepad/mouse targets port 1 or 2 */
+    JoyPortMode joy_port_mode[2];   /* per-port joystick or 1351 mouse */
 } Config;
 
 void config_set_defaults(Config *cfg);

@@ -12,7 +12,19 @@ int c128_frame_count = 0;
 static u8 io_read(C128 *c, u16 addr) {
     u8 v;
     if (addr >= 0xD000 && addr < 0xD400) v = vic_read(&c->vic, addr);
-    else if (addr >= 0xD400 && addr < 0xD500) v = sid_read(&c->sid, addr);
+    else if (addr >= 0xD400 && addr < 0xD500) {
+        unsigned reg = addr & 0x1f;
+        if (reg == 0x19 || reg == 0x1a) {
+            /* CIA1 PA6/PA7 select the paddle/mouse POT lines. */
+            u8 select = (u8)((c->cia1.pra | ~c->cia1.ddra) >> 6) & 3;
+            bool y = reg == 0x1a;
+            u8 p1 = joyports_pot(&c->joyports, 0,
+                                c->cfg->joy_port_mode[0] == JOYPORT_MOUSE, y);
+            u8 p2 = joyports_pot(&c->joyports, 1,
+                                c->cfg->joy_port_mode[1] == JOYPORT_MOUSE, y);
+            v = (select & 1 ? p1 : 0xff) & (select & 2 ? p2 : 0xff);
+        } else v = sid_read(&c->sid, addr);
+    }
     else if (addr >= 0xD800 && addr < 0xDC00) {
         unsigned bank = c->mem.pla_data & 0x01;   /* CPU colour-RAM bank */
         v = c->mem.color_ram[bank * 0x400 + (addr & 0x3FF)];
@@ -21,14 +33,29 @@ static u8 io_read(C128 *c, u16 addr) {
     else if (addr >= 0xDC00 && addr < 0xDD00) {
         /* CIA1 keyboard scan: the KERNAL drives port A as the row output and
          * reads port B for the columns. */
-        if ((addr & 0x0F) == 0x01) {              /* port B = columns */
+        if ((addr & 0x0F) == 0x01) {              /* port B = columns + port 1 */
             /* Row select is the driven port A value: PRA | ~DDRA (VICE's old_pa).
              * A row is scanned while its bit is low. */
-            u8 rowsel = c->cia1.pra | ~c->cia1.ddra;
+            u8 rowsel = (c->cia1.pra | ~c->cia1.ddra) &
+                joyports_digital(&c->joyports, 1,
+                                 c->cfg->joy_port_mode[1] == JOYPORT_MOUSE);
             u8 cols = 0xFF;
             for (int row = 0; row < KBD_ROWS; row++)
                 if ((rowsel & (1 << row)) == 0) cols &= kbd_matrix(&c->kbd, row);
-            v = cols;
+            v = cols & (c->cia1.prb | ~c->cia1.ddrb) &
+                joyports_digital(&c->joyports, 0,
+                                 c->cfg->joy_port_mode[0] == JOYPORT_MOUSE);
+        } else if ((addr & 0x0F) == 0x00) {      /* port A = rows + port 2 */
+            u8 colsel = (c->cia1.prb | ~c->cia1.ddrb) &
+                joyports_digital(&c->joyports, 0,
+                                 c->cfg->joy_port_mode[0] == JOYPORT_MOUSE);
+            u8 rows = 0xff;
+            for (int row = 0; row < KBD_ROWS; ++row)
+                if ((kbd_matrix(&c->kbd, row) & colsel) != colsel)
+                    rows &= (u8)~(1u << row);
+            v = rows & (c->cia1.pra | ~c->cia1.ddra) &
+                joyports_digital(&c->joyports, 1,
+                                 c->cfg->joy_port_mode[1] == JOYPORT_MOUSE);
         } else {
             v = cia_read(&c->cia1, addr);
         }
@@ -129,6 +156,7 @@ void c128_init(C128 *c, Config *cfg) {
     cia_init(&c->cia2);
     sid_init(&c->sid);
     kbd_init(&c->kbd);
+    joyports_reset(&c->joyports);
     config_normalize_drive_units(cfg);
     drive_init(&c->drive, cfg);
     drive_init(&c->drive2, cfg);
@@ -158,6 +186,7 @@ void c128_reset(C128 *c) {
     c->audio_count = 0;
     c->sid_fast_remainder = 0;
     kbd_reset(&c->kbd);
+    joyports_reset(&c->joyports);
     drive_reset(&c->drive);
     drive_reset(&c->drive2);
     drive_set_unit(&c->drive2, c->cfg->drive2_unit);

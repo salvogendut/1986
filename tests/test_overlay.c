@@ -79,6 +79,13 @@ int main(void) {
     config_set_defaults(&saved);
     CHECK(config_load(&saved, config_file) && saved.col_mode_80,
           "80-column key selection is persisted");
+    key(&ov, SDL_SCANCODE_DOWN);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.main_input_port == 1, "General selects host input port 1");
+    key(&ov, SDL_SCANCODE_DOWN);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.joy_port_mode[0] == JOYPORT_MOUSE,
+          "General changes port 1 from joystick to 1351 mouse");
     key(&ov, SDL_SCANCODE_RIGHT);
     key(&ov, SDL_SCANCODE_RIGHT);
     CHECK(ov.visible && ov.section == OV_ADVANCED,
@@ -113,9 +120,7 @@ int main(void) {
     key(&ov, SDL_SCANCODE_LEFT);
     CHECK(ov.section == OV_GENERAL && ov.row == 0,
           "General opens with first selectable row");
-    key(&ov, SDL_SCANCODE_DOWN);
-    key(&ov, SDL_SCANCODE_DOWN);
-    key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 6; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.about_visible, "General About opens program details");
     key(&ov, SDL_SCANCODE_RIGHT);

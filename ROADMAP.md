@@ -156,6 +156,7 @@ and more accurate VDC behavior.
   reverse video, and C128DCR 16-byte character slots.
 - [ ] 640x400 VDC interlace and extended bitmap modes.
 - [ ] VDC timing, ready/busy status, and scan timing accuracy.
+- [ ] Investigate BASIC 8 selecting 16K VRAM despite the 64K C128DCR model.
 
 **Done when.** Native VDC text, bitmap, and interlace software renders with
 accurate register/status timing.
