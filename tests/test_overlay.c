@@ -134,6 +134,27 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!ov.about_visible && ov.visible, "Enter dismisses About");
 
+    key(&ov, SDL_SCANCODE_RIGHT);
+    key(&ov, SDL_SCANCODE_RIGHT);
+    CHECK(ov.section == OV_ADVANCED && ov.row == 0,
+          "Advanced opens at its first row for keyboard map");
+    for (int i = 0; i < 15; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.keyboard_map_visible, "Advanced opens the keyboard map");
+    key(&ov, SDL_SCANCODE_LEFT);
+    CHECK(ov.keyboard_map_visible && ov.section == OV_ADVANCED,
+          "keyboard map consumes navigation keys");
+    key(&ov, SDL_SCANCODE_ESCAPE);
+    CHECK(!ov.keyboard_map_visible && ov.visible,
+          "Escape closes keyboard map without closing options");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.keyboard_map_visible, "Enter reopens keyboard map");
+    key(&ov, SDL_SCANCODE_F9);
+    CHECK(!ov.keyboard_map_visible && !ov.visible,
+          "F9 closes options and clears keyboard map state");
+    key(&ov, SDL_SCANCODE_F9);
+    CHECK(ov.visible, "reopen options for subsequent media checks");
+
     /* Cartridge selection is a live hardware change, not just a saved path. */
     char cart_file[CONFIG_PATH_MAX];
     snprintf(cart_file, sizeof(cart_file), "%s/test-cart.bin", temp_home);
@@ -218,7 +239,11 @@ int main(void) {
               "create overlay preview renderer");
         if (renderer) {
             c->display.window = window;
-            if (getenv("C128_OVERLAY_PREVIEW_ABOUT")) {
+            if (getenv("C128_OVERLAY_PREVIEW_KEYBOARD")) {
+                ov.section = OV_ADVANCED;
+                ov.row = 15;
+                ov.keyboard_map_visible = true;
+            } else if (getenv("C128_OVERLAY_PREVIEW_ABOUT")) {
                 ov.section = OV_GENERAL;
                 ov.row = 3;
                 ov.about_visible = true;

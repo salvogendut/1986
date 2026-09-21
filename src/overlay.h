@@ -25,6 +25,7 @@ typedef enum {
 typedef struct {
     bool         visible;
     bool         about_visible;
+    bool         keyboard_map_visible;
     OvSection    section;
     int          row;
     Config      *cfg;

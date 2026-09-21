@@ -68,6 +68,9 @@ at `READY.` without the former stack overflow.
 - [x] Matrix positions verified sufficiently for interactive BASIC programs.
 - [x] Cursor keys and emulator function-key conventions.
 - [x] Clipboard paste and deterministic `--paste`/`--paste-at` input.
+- [x] Shift+C= upper/graphics versus upper/lowercase switching on VIC and VDC,
+  with a Caps Lock host shortcut, RUN/STOP and RESTORE mappings, and an
+  Advanced keyboard-map dialog.
 - [ ] Add the C128-specific keys (40/80 column toggle, `HELP`, `CAPS`, `ALT`,
   `ESC`, `TAB`, `-`, `=`, `@`, `£`, etc.).
 - [ ] Complete host-layout translation and keyboard auto-repeat behavior.
@@ -151,7 +154,8 @@ and more accurate VDC behavior.
 - [x] Alternative VIC/VDC output in unified and dual-window display modes.
 - [x] F10 display switching with the last active 40/80 mode persisted across
   application restarts and focused correctly in dual-window mode.
-- [ ] Remaining attribute effects: flash, underline, and alternate charset.
+- [x] Alternate-charset text attribute for upper/lowercase switching.
+- [ ] Remaining attribute effects: flash and underline.
 - [x] Standard 640x200 VDC bitmap mode with register and attribute colours,
   reverse video, and C128DCR 16-byte character slots.
 - [ ] 640x400 VDC interlace and extended bitmap modes.

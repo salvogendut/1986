@@ -54,6 +54,9 @@ Current working pieces include:
 - Host keyboard input, paste, selectable joystick ports and 1351 mouse input,
   CIA timers/TOD/serial/FLAG interrupts,
   and VIC raster IRQ handling.
+- Shift+C= character-set switching in both 40- and 80-column modes; an
+  Advanced keyboard-map dialog shows host mappings for RUN/STOP, RESTORE,
+  and other keys.
 - Audible three-voice 8580 SID synthesis through SDL3, including the standard
   waveforms, envelopes, voice routing, and a basic filter approximation.
 - Function-key conventions: F1 host input-port swap, F4 screenshot, F5 reset, F6 GIF capture, F7

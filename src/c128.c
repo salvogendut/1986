@@ -1,5 +1,6 @@
 #include "c128.h"
 #include "notify.h"
+#include <SDL3/SDL.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -186,6 +187,7 @@ void c128_reset(C128 *c) {
     c->audio_count = 0;
     c->sid_fast_remainder = 0;
     kbd_reset(&c->kbd);
+    c->restore_down = false;
     joyports_reset(&c->joyports);
     drive_reset(&c->drive);
     drive_reset(&c->drive2);
@@ -223,7 +225,7 @@ int c128_frame(C128 *c) {
             C128_AUDIO_FRAME_CAPACITY - c->audio_count);
         bool vic_irq = vic_tick(&c->vic);
         cpu_irq(&c->cpu, cia_irq_line(&c->cia1) || vic_irq);
-        cpu_nmi(&c->cpu, cia_irq_line(&c->cia2));
+        cpu_nmi(&c->cpu, cia_irq_line(&c->cia2) || c->restore_down);
     }
     /* The 6526 TOD input follows the PAL 50 Hz mains signal, not the 8502
      * clock (which may run at 2 MHz). One completed PAL frame is one pulse. */
@@ -263,6 +265,10 @@ u64 c128_cycles_to_ns(const C128 *c, int cycles) {
 }
 
 void c128_key_event(C128 *c, int scancode, bool down) {
+    if (scancode == SDL_SCANCODE_PAGEUP) {
+        c->restore_down = down;
+        return;
+    }
     int row, col;
     bool shift;
     if (!kbd_map_scancode(scancode, &row, &col, &shift)) return;

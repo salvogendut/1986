@@ -46,6 +46,14 @@ to the 80-column VDC display. With Unified Display enabled, the shared window
 shows the selected output. With Unified Display disabled, both output windows
 open and the selected output receives window focus.
 
+To switch between the C128 upper/graphics and upper/lowercase character sets,
+press host Shift+Alt (the C128 Shift+C= chord). If the desktop intercepts that
+combination, press Caps Lock once as a shortcut for the same C128 chord. This
+works on both the VIC 40-column and VDC 80-column displays. Escape is C128
+RUN/STOP; Page Up is RESTORE, and Escape+Page Up sends RUN/STOP+RESTORE. To
+see the rest of the host-key mappings, enable **General > Tinker**, then open
+**Advanced > Keyboard map** with Enter. Enter or Esc closes the map.
+
 ## Media overlay
 
 Open the options overlay with F9 and select **Media > Drive 1 image** to insert
