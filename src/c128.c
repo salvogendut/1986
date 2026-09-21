@@ -165,6 +165,7 @@ void c128_init(C128 *c, Config *cfg) {
     config_normalize_drive_units(cfg);
     drive_init(&c->drive, cfg);
     drive_init(&c->drive2, cfg);
+    drive_set_slot(&c->drive2, 1);
     drive_set_unit(&c->drive2, cfg->drive2_unit);
     drive1571cr_init(&c->integrated_drive);
 

@@ -16,6 +16,7 @@ static int failures;
 } while (0)
 
 void leds_ping(LedId id) { (void)id; }
+void leds_set_drive_unit(LedId id, int unit) { (void)id; (void)unit; }
 
 static bool contains_bytes(const u8 *bytes, size_t size, const char *text) {
     size_t length = strlen(text);

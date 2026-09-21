@@ -219,6 +219,8 @@ cycle-level 1571 implementation without conflating their interfaces.
   clock the core with the machine and switch Advanced > Real Disk Drive to it.
 - [x] Media persists a per-drive hardware type when real-drive mode is selected;
   1581 is shown as future hardware rather than confused with D81 image support.
+- [x] Separate, live Drive 1/Drive 2 activity LEDs in both display windows;
+  connect the physical drive's LED latch when its backend takes over (#92).
 - [x] Persisted Advanced > Real Disk Drive preference, default Off; On is
   marked pending and retains the virtual backend until true-drive support (#57).
 - [x] Optional second fast virtual drive with independent image and a distinct

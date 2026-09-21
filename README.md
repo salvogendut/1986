@@ -127,6 +127,10 @@ Advanced > Real Disk Drive is still a saved preference: while the
 hardware backend is pending, the fast virtual drive stays active. With that
 preference On, Media exposes a hardware type per drive (1571CR or future 1581);
 selecting 1581 does not imply that its hardware is emulated.
+The bottom bar shows a separately labeled activity LED for each enabled drive,
+in both the 40-column and 80-column windows. For now these follow the active
+virtual drive's disk and IEC transfers; true-drive hardware LED state will be
+connected when the physical backend becomes operational.
 
 See [DEVELOPMENT.md](Development.md) for technical notes and
 [ROADMAP.md](ROADMAP.md) for the forward plan.

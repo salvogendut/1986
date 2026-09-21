@@ -14,6 +14,11 @@ static int failures;
 
 /* Only the keyboard-driven overlay state is exercised here. */
 void leds_ping(LedId id) { (void)id; }
+void leds_set_drive_unit(LedId id, int unit) { (void)id; (void)unit; }
+static bool second_led_enabled;
+void leds_set_enabled(LedId id, bool enabled) {
+    if (id == LED_FDC_B) second_led_enabled = enabled;
+}
 void notify_set_mode(NotifyMode mode) { (void)mode; }
 void notify_post(const char *fmt, ...) { (void)fmt; }
 void display_set_smoothing(Display *d, bool smooth) { (void)d; (void)smooth; }
@@ -110,6 +115,7 @@ int main(void) {
     c->cfg = &cfg;
     drive_init(&c->drive, &cfg);
     drive_init(&c->drive2, &cfg);
+    drive_set_slot(&c->drive2, 1);
     drive_set_unit(&c->drive2, cfg.drive2_unit);
     Overlay ov;
     overlay_init(&ov, &cfg, c);
@@ -170,7 +176,8 @@ int main(void) {
           "Advanced VDC RAM switches back to 64K");
     for (int i = 0; i < 2; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
-    CHECK(cfg.second_drive, "Second Drive toggle enables the extra device");
+    CHECK(cfg.second_drive && second_led_enabled,
+          "Second Drive toggle enables its device and LED");
 
     key(&ov, SDL_SCANCODE_LEFT);
     CHECK(ov.section == OV_MEDIA && ov.row == 0,
@@ -190,7 +197,8 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RIGHT);
     for (int i = 0; i < 7; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
-    CHECK(!cfg.second_drive, "Second Drive toggle disables the extra device");
+    CHECK(!cfg.second_drive && !second_led_enabled,
+          "Second Drive toggle disables its device and LED");
     key(&ov, SDL_SCANCODE_LEFT);
     for (int i = 0; i < 8; ++i) key(&ov, SDL_SCANCODE_DOWN);
     CHECK(ov.row == 4, "disabled Media section hides Drive 2 but retains U36");

@@ -16,6 +16,7 @@
 typedef struct Drive {
     Config *cfg;
     int     unit;       /* IEC device number (8-11) */
+    unsigned slot;      /* visible bottom-bar lamp: 0 = drive 1, 1 = drive 2 */
     VirtualDrive virtual_drive;
 
     DiskImage image;          /* attached disk image or standalone PRG */
@@ -30,6 +31,7 @@ int  drive_attach_disk(Drive *d, const char *path);
 
 /* Select the IEC device number. */
 void drive_set_unit(Drive *d, int unit);
+void drive_set_slot(Drive *d, unsigned slot);
 
 /* Logical IEC callbacks used by the KERNAL trap frontend. */
 void drive_attention(Drive *d, u8 byte);

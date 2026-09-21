@@ -248,8 +248,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* Disk-drive activity LED at the bottom of the window. */
+    /* Per-drive activity LEDs in the bottom bar of either display window. */
     leds_set_enabled(LED_FDC_A, true);
+    leds_set_enabled(LED_FDC_B, cfg.second_drive);
 
     /* Load ROMs into the machine (optional at this stage). Default to the
      * executable's directory's "roms" subdirectory when no ROM dir is

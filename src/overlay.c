@@ -1,4 +1,5 @@
 #include "overlay.h"
+#include "leds.h"
 #include "notify.h"
 #include <string.h>
 #include <stdio.h>
@@ -588,6 +589,7 @@ static void overlay_activate(Overlay *ov) {
                     break;
                 case ADV_SECOND_DRIVE:
                     ov->cfg->second_drive = !ov->cfg->second_drive;
+                    leds_set_enabled(LED_FDC_B, ov->cfg->second_drive);
                     drive_reset(&ov->c128->drive2);
                     drive_set_unit(&ov->c128->drive2, ov->cfg->drive2_unit);
                     notify_post(ov->cfg->second_drive

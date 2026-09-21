@@ -2,7 +2,7 @@
 #include <SDL3/SDL.h>
 #include <stdbool.h>
 
-/* Drive-activity LED bar rendered below the CPC screen.
+/* Activity LED bar rendered below both C128 display windows.
  *
  * Categories (color coded):
  *   FDC drives (A, B)      - dark red / bright red
@@ -32,6 +32,8 @@ typedef enum {
 
 /* Configure which LEDs to display in the bar. Call after reading config. */
 void leds_set_enabled(LedId id, bool enabled);
+/* Keep each drive lamp's visible IEC device number in sync with Media. */
+void leds_set_drive_unit(LedId id, int unit);
 
 /* Signal one frame of activity for the given LED. */
 void leds_ping(LedId id);
@@ -51,7 +53,7 @@ void leds_ping_m4_net(void);
 void leds_set_mouse_position(int x, int y, bool inside);
 
 /* Render the LED bar across (x,y,w,h). The caller has already cleared the
- * renderer and drawn the CPC screen above this rect. */
+ * renderer and drawn the C128 screen above this rect. */
 void leds_render(SDL_Renderer *r, int x, int y, int w, int h);
 
 /* Render the active hover label, if any. Call after other bottom UI strips so
