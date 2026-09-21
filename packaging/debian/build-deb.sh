@@ -24,7 +24,15 @@ install -d "$stage/DEBIAN" "$stage/usr/share/doc/1986"
 install -m 0644 LICENSE "$stage/usr/share/doc/1986/copyright"
 install -m 0644 README.md INSTALL.md USAGE.md "$stage/usr/share/doc/1986/"
 
-depends=$(dpkg-shlibdeps -O -e"$stage/usr/bin/1986" | sed -n 's/^shlibs:Depends=//p')
+# dpkg-shlibdeps expects source-package metadata in debian/control, even
+# with -O. Keep that temporary metadata out of the finished binary package.
+install -d "$stage/debian"
+printf 'Source: 1986\nSection: games\nPriority: optional\nMaintainer: Salvatore Bognanni <salvogendut@gmail.com>\nStandards-Version: 4.7.0\n\nPackage: 1986\nArchitecture: any\nDepends: ${shlibs:Depends}\nDescription: Commodore C128DCR emulator\n' \
+    > "$stage/debian/control"
+depends=$(cd "$stage" && dpkg-shlibdeps -O -eusr/bin/1986 |
+    sed -n 's/^shlibs:Depends=//p')
+rm "$stage/debian/control"
+rmdir "$stage/debian"
 if [ -z "$depends" ]; then
     echo "dpkg-shlibdeps returned no runtime dependencies" >&2
     exit 1

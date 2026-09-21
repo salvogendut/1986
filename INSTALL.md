@@ -35,7 +35,9 @@ packaging/io.github.salvogendut.Emulator1986.yml`.
 GitHub Actions builds Fedora x86_64 RPM, Debian amd64 DEB, Windows x86_64
 portable ZIP, macOS arm64 and x86_64 app ZIPs, and a Linux x86_64 Flatpak
 bundle on pull requests and main. Pushing a `v*` tag publishes those artifacts
-in a GitHub Release. The Linux packages install a desktop entry and icons;
+in a GitHub Release; the tag must match the versions in `configure.ac` and
+`1986.spec` (for example, `v0.1.0`). The Linux packages install a desktop entry
+and icons;
 the Windows executable embeds the icon, and the macOS app includes an `.icns`.
 
 The packages contain no copyrighted Commodore machine ROMs. Supply your own

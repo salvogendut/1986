@@ -82,7 +82,7 @@ noinst_HEADERS = \
 1986_CFLAGS = $(AM_CFLAGS) $(SDL3_CFLAGS) -Wall -Wextra \
 	-DROM_INSTALL_DIR=\"$(pkgdatadir)/roms\" \
 	-DPROG_GIT_COMMIT=\"$(PROG_GIT_COMMIT)\"
-1986_LDADD  = $(SDL3_LIBS) -lm $(WIN_RC_OBJ)
+1986_LDADD  = $(SDL3_LIBS) -lm $(WIN_LIBS) $(WIN_RC_OBJ)
 1986_DEPENDENCIES = $(WIN_RC_OBJ)
 
 icons/1986-rc.o: $(srcdir)/icons/1986.rc $(srcdir)/icons/1986.ico

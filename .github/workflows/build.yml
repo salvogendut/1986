@@ -180,6 +180,15 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - name: Verify release version
+        run: |
+          set -eu
+          source_version=$(sed -n 's/^AC_INIT(\[1986\], \[\([^]]*\)\].*/\1/p' configure.ac)
+          rpm_version=$(sed -n 's/^Version:[[:space:]]*//p' 1986.spec)
+          test -n "$source_version"
+          test "$source_version" = "$rpm_version"
+          test "$GITHUB_REF_NAME" = "v$source_version"
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
