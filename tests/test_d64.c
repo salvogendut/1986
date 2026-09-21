@@ -13,6 +13,7 @@ static u8 image[174848];
 /* Build a single-sided 35-track D64 with a BAM header and one directory entry. */
 static void build_d64(D64 *d) {
     memset(image, 0, sizeof(image));
+    memset(d, 0, sizeof(*d));
     d->data = image;
     d->size = sizeof(image);
     d->tracks = 35;

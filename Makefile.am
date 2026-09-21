@@ -96,4 +96,5 @@ dist_metainfo_DATA = io.github.salvogendut.Emulator1986.metainfo.xml
 EXTRA_DIST = Makefile LICENSE Development.md USAGE.md CONTROLS.md INSTALL.md \
 	ROADMAP.md 1986.conf.example packaging/io.github.salvogendut.Emulator1986.yml \
 	roms/README tests/Makefile tests/test_cpu.c tests/test_mmu.c \
-	tests/test_config.c tests/test_gifcap.c tests/test_d64.c tests/test_sid.c
+	tests/test_config.c tests/test_gifcap.c tests/test_d64.c \
+	tests/test_d64_save.c tests/test_sid.c

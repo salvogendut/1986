@@ -1,8 +1,28 @@
+#define _POSIX_C_SOURCE 200809L
 #include "d64.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/stat.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
+static bool path_writable_regular(const char *path) {
+#ifdef _WIN32
+    DWORD attrs = GetFileAttributesA(path);
+    return attrs != INVALID_FILE_ATTRIBUTES &&
+        !(attrs & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT |
+                   FILE_ATTRIBUTE_READONLY));
+#else
+    struct stat st;
+    return lstat(path, &st) == 0 && S_ISREG(st.st_mode) &&
+        (st.st_mode & 0222) != 0;
+#endif
+}
 
 int d64_track_sectors(int track) {
     if (track < 1 || track > D64_MAX_TRACKS) return 0;
@@ -49,11 +69,20 @@ int d64_open(D64 *d, const char *path) {
         d64_close(d);
         return -1;
     }
+    size_t path_len = strlen(path);
+    d->path = malloc(path_len + 1);
+    if (!d->path) { d64_close(d); return -1; }
+    memcpy(d->path, path, path_len + 1);
+    if (path_writable_regular(path)) {
+        FILE *write_probe = fopen(path, "rb+");
+        if (write_probe) { d->writable = true; fclose(write_probe); }
+    }
     return 0;
 }
 
 void d64_close(D64 *d) {
     free(d->data);
+    free(d->path);
     memset(d, 0, sizeof(*d));
 }
 
@@ -285,4 +314,257 @@ int d64_read_file(const D64 *d, const D64DirEntry *entry, u8 *out, size_t cap) {
         sector = next_sector;
     }
     return (int)length;
+}
+
+static u8 *sector_in(u8 *image, int track, int sector) {
+    if (track < 1 || track > D64_MAX_TRACKS ||
+        sector < 0 || sector >= d64_track_sectors(track)) return NULL;
+    return image + d64_track_offset(track) + sector * D64_SECTOR_BYTES;
+}
+
+static bool bam_free(const u8 *bam, int track, int sector) {
+    const u8 *entry = bam + 4 + (track - 1) * 4;
+    return (entry[1 + sector / 8] & (1u << (sector & 7))) != 0;
+}
+
+static void bam_mark(u8 *bam, int track, int sector, bool free_sector) {
+    u8 *entry = bam + 4 + (track - 1) * 4;
+    u8 bit = (u8)(1u << (sector & 7));
+    if (free_sector) entry[1 + sector / 8] |= bit;
+    else entry[1 + sector / 8] &= (u8)~bit;
+    int free_count = 0;
+    for (int s = 0; s < d64_track_sectors(track); ++s)
+        if (bam_free(bam, track, s)) ++free_count;
+    entry[0] = (u8)free_count;
+}
+
+static void sector_error_ok(const D64 *d, u8 *image, int track, int sector) {
+    if (!d->has_errors) return;
+    size_t error_index = (size_t)d64_track_offset(36) +
+        (size_t)d64_track_offset(track) / D64_SECTOR_BYTES + (size_t)sector;
+    if (error_index < d->size) image[error_index] = 1;
+}
+
+static bool name_equals(const u8 *slot, const char *name) {
+    size_t n = strlen(name);
+    for (size_t i = 0; i < 16; ++i) {
+        u8 ch = slot[5 + i];
+        if (i >= n) return ch == 0xA0;
+        if (toupper((unsigned char)ch) != toupper((unsigned char)name[i]))
+            return false;
+    }
+    return true;
+}
+
+static D64SaveResult find_save_slot(u8 *image, const char *name, bool replace,
+                                    u8 **slot_out, u8 **tail_out) {
+    bool seen[19] = { false };
+    u8 *free_slot = NULL;
+    int sector = 1;
+    for (int chain = 0; chain < 19; ++chain) {
+        if (sector < 1 || sector >= 19 || seen[sector]) return D64_SAVE_DIR_ERROR;
+        seen[sector] = true;
+        u8 *dir = sector_in(image, 18, sector);
+        for (int i = 0; i < 8; ++i) {
+            u8 *slot = dir + i * 32;
+            if (slot[2] == 0 || slot[2] == 0xFF) {
+                if (!free_slot) free_slot = slot;
+            } else if (name_equals(slot, name)) {
+                if (!replace) return D64_SAVE_EXISTS;
+                if (slot[2] & 0x40) return D64_SAVE_WRITE_PROTECT;
+                *slot_out = slot;
+                *tail_out = dir;
+                return D64_SAVE_OK;
+            }
+        }
+        if (dir[0] == 0) {
+            *slot_out = free_slot;
+            *tail_out = dir;
+            return D64_SAVE_OK;
+        }
+        if (dir[0] != 18) return D64_SAVE_DIR_ERROR;
+        sector = dir[1];
+    }
+    return D64_SAVE_DIR_ERROR;
+}
+
+static bool free_file_chain(u8 *image, u8 *bam, int track, int sector) {
+    bool seen[D64_MAX_TRACKS + 1][21] = { { false } };
+    for (int count = 0; track != 0 && count < 683; ++count) {
+        if (track == 18 || !sector_in(image, track, sector) ||
+            seen[track][sector]) return false;
+        if (bam_free(bam, track, sector)) return false;
+        seen[track][sector] = true;
+        u8 *block = sector_in(image, track, sector);
+        int next_track = block[0], next_sector = block[1];
+        bam_mark(bam, track, sector, true);
+        track = next_track;
+        sector = next_sector;
+    }
+    return track == 0;
+}
+
+static int persist_image(const D64 *d, const u8 *image) {
+    struct stat st;
+    if (!d->path || !path_writable_regular(d->path) ||
+        stat(d->path, &st) != 0 || (size_t)st.st_size != d->size)
+        return -1;
+    /* Refuse to replace a disk changed by another program since attach. */
+    FILE *current = fopen(d->path, "rb");
+    if (!current) return -1;
+    u8 check[4096];
+    size_t offset = 0;
+    int matches = 1;
+    while (offset < d->size) {
+        size_t n = d->size - offset;
+        if (n > sizeof(check)) n = sizeof(check);
+        if (fread(check, 1, n, current) != n ||
+            memcmp(check, d->data + offset, n) != 0) { matches = 0; break; }
+        offset += n;
+    }
+    if (fclose(current) != 0 || !matches) return -1;
+    size_t path_len = strlen(d->path);
+#ifdef _WIN32
+    char *temp = malloc(path_len + 32);
+    if (!temp) return -1;
+    HANDLE out = INVALID_HANDLE_VALUE;
+    for (unsigned attempt = 0; attempt < 100; ++attempt) {
+        snprintf(temp, path_len + 32, "%s.tmp%lu.%u", d->path,
+                 (unsigned long)GetCurrentProcessId(), attempt);
+        out = CreateFileA(temp, GENERIC_WRITE, 0, NULL, CREATE_NEW,
+                          FILE_ATTRIBUTE_NORMAL, NULL);
+        if (out != INVALID_HANDLE_VALUE || GetLastError() != ERROR_FILE_EXISTS)
+            break;
+    }
+    if (out == INVALID_HANDLE_VALUE) { free(temp); return -1; }
+    size_t written = 0;
+    int ok = 1;
+    while (written < d->size && ok) {
+        DWORD chunk = (DWORD)(d->size - written);
+        DWORD count = 0;
+        ok = WriteFile(out, image + written, chunk, &count, NULL) && count == chunk;
+        written += count;
+    }
+    if (ok) ok = FlushFileBuffers(out) != 0;
+    if (!CloseHandle(out)) ok = 0;
+    if (ok) ok = MoveFileExA(temp, d->path,
+                            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+    if (!ok) DeleteFileA(temp);
+    free(temp);
+    return ok ? 0 : -1;
+#else
+    char *temp = malloc(path_len + sizeof(".tmpXXXXXX"));
+    if (!temp) return -1;
+    memcpy(temp, d->path, path_len);
+    memcpy(temp + path_len, ".tmpXXXXXX", sizeof(".tmpXXXXXX"));
+    int fd = mkstemp(temp);
+    if (fd < 0) { free(temp); return -1; }
+    int ok = fchmod(fd, st.st_mode & 0777) == 0;
+    FILE *out = fdopen(fd, "wb");
+    if (!out) { close(fd); unlink(temp); free(temp); return -1; }
+    if (ok) ok = fwrite(image, 1, d->size, out) == d->size;
+    if (ok) ok = fflush(out) == 0;
+    if (ok) ok = fsync(fd) == 0;
+    if (fclose(out) != 0) ok = 0;
+    if (ok) ok = rename(temp, d->path) == 0;
+    if (!ok) unlink(temp);
+    free(temp);
+    return ok ? 0 : -1;
+#endif
+}
+
+D64SaveResult d64_save_prg(D64 *d, const char *name, const u8 *data,
+                          size_t length, bool replace) {
+    if (!d || !d->data || !d->writable)
+        return D64_SAVE_WRITE_PROTECT;
+    if (!data || !name) return D64_SAVE_BAD_NAME;
+    size_t name_len = strlen(name);
+    if (!name_len || name_len > 16 || length < 2 ||
+        strchr(name, '*') || strchr(name, '?') || strchr(name, '/') ||
+        strchr(name, ':') || strchr(name, ',')) return D64_SAVE_BAD_NAME;
+    if (length > 683u * 254u) return D64_SAVE_DISK_FULL;
+
+    u8 *image = malloc(d->size);
+    if (!image) return D64_SAVE_IO_ERROR;
+    memcpy(image, d->data, d->size);
+    u8 *bam = sector_in(image, 18, 0);
+    if (bam_free(bam, 18, 0) || bam_free(bam, 18, 1)) {
+        free(image);
+        return D64_SAVE_DIR_ERROR;
+    }
+    u8 *slot = NULL, *tail = NULL;
+    D64SaveResult result = find_save_slot(image, name, replace, &slot, &tail);
+    if (result != D64_SAVE_OK) goto done;
+
+    if (slot && slot[2] != 0 && slot[2] != 0xFF) {
+        if (!free_file_chain(image, bam, slot[3], slot[4])) {
+            result = D64_SAVE_DIR_ERROR;
+            goto done;
+        }
+    }
+    if (!slot) {
+        for (int s = 2; s < d64_track_sectors(18); ++s) {
+            if (bam_free(bam, 18, s)) {
+                bam_mark(bam, 18, s, false);
+                sector_error_ok(d, image, 18, s);
+                slot = sector_in(image, 18, s);
+                memset(slot, 0, D64_SECTOR_BYTES);
+                slot[0] = 0; slot[1] = 0xFF;
+                tail[0] = 18; tail[1] = (u8)s;
+                break;
+            }
+        }
+        if (!slot) { result = D64_SAVE_DIR_ERROR; goto done; }
+    }
+
+    size_t blocks = (length + 253u) / 254u;
+    if (blocks > 683) { result = D64_SAVE_DISK_FULL; goto done; }
+    int tracks[683], sectors[683];
+    size_t allocated = 0;
+    for (int t = 1; t <= d->tracks && allocated < blocks; ++t) {
+        if (t == 18) continue;
+        for (int s = 0; s < d64_track_sectors(t) && allocated < blocks; ++s) {
+            if (!bam_free(bam, t, s)) continue;
+            tracks[allocated] = t;
+            sectors[allocated++] = s;
+            bam_mark(bam, t, s, false);
+            sector_error_ok(d, image, t, s);
+        }
+    }
+    if (allocated != blocks) { result = D64_SAVE_DISK_FULL; goto done; }
+
+    for (size_t i = 0; i < blocks; ++i) {
+        u8 *block = sector_in(image, tracks[i], sectors[i]);
+        memset(block, 0, D64_SECTOR_BYTES);
+        size_t offset = i * 254u;
+        size_t bytes = length - offset;
+        if (bytes > 254) bytes = 254;
+        block[0] = i + 1 < blocks ? (u8)tracks[i + 1] : 0;
+        block[1] = i + 1 < blocks ? (u8)sectors[i + 1] : (u8)(bytes + 1);
+        memcpy(block + 2, data + offset, bytes);
+    }
+
+    /* Slot zero overlaps the directory-sector link in bytes 0-1. */
+    slot[2] = 0x82; /* closed PRG */
+    slot[3] = (u8)tracks[0];
+    slot[4] = (u8)sectors[0];
+    memset(slot + 5, 0xA0, 16);
+    for (size_t i = 0; i < name_len; ++i)
+        slot[5 + i] = (u8)toupper((unsigned char)name[i]);
+    memset(slot + 21, 0, 9);
+    slot[30] = (u8)blocks;
+    slot[31] = (u8)(blocks >> 8);
+    sector_error_ok(d, image, 18, 0);
+    sector_error_ok(d, image, 18,
+                    (int)((slot - sector_in(image, 18, 0)) / D64_SECTOR_BYTES));
+    sector_error_ok(d, image, 18,
+                    (int)((tail - sector_in(image, 18, 0)) / D64_SECTOR_BYTES));
+
+    if (persist_image(d, image) != 0) { result = D64_SAVE_IO_ERROR; goto done; }
+    free(d->data);
+    d->data = image;
+    return D64_SAVE_OK;
+done:
+    free(image);
+    return result;
 }
