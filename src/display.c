@@ -46,7 +46,7 @@ int display_init(Display *d, const char *title, int scale) {
     if (scale < 1) scale = 1;
     if (scale > 4) scale = 4;
     int win_w = WINDOW_W * scale;
-    int win_h = WINDOW_H * scale + LED_BAR_HEIGHT;
+    int win_h = WINDOW_H * scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT;
 
     d->window = SDL_CreateWindow(title, win_w, win_h, SDL_WINDOW_RESIZABLE);
     if (!d->window) {
@@ -118,7 +118,7 @@ void display_set_one_display(Display *d, bool one) {
     }
     if (d->vdc_window) return;   /* already open */
     d->vdc_window = SDL_CreateWindow("1986 — VDC 8563 (80-column)",
-                                     VDC_SCREEN_W, VDC_SCREEN_H,
+                                     VDC_SCREEN_W, VDC_SCREEN_H + FUNCTION_KEY_BAR_HEIGHT,
                                      SDL_WINDOW_RESIZABLE);
     if (!d->vdc_window) {
         fprintf(stderr, "SDL_CreateWindow (VDC): %s\n", SDL_GetError());
@@ -229,7 +229,9 @@ void display_upload(Display *d) {
 
     int bar_h = LED_BAR_HEIGHT;
     if (bar_h > wh / 4) bar_h = wh / 4;
-    int area_h = wh - bar_h;
+    int footer_h = FUNCTION_KEY_BAR_HEIGHT;
+    if (footer_h > (wh - bar_h) / 4) footer_h = (wh - bar_h) / 4;
+    int area_h = wh - bar_h - footer_h;
     if (area_h < 1) area_h = 1;
 
     SDL_UpdateTexture(d->texture, NULL, display_crt_pixels(d),
@@ -272,8 +274,46 @@ void display_upload(Display *d) {
         int vmod2 = d->vdc_active ? 255 : 80;   /* VDC sleeps while VIC is active */
         SDL_SetTextureColorMod(d->vdc_window_texture, vmod2, vmod2, vmod2);
         blit_fit(d->vdc_renderer, d->vdc_window_texture,
-                 VDC_SCREEN_W, VDC_SCREEN_H, vw, vh);
+                 VDC_SCREEN_W, VDC_SCREEN_H, vw,
+                 vh > FUNCTION_KEY_BAR_HEIGHT ? vh - FUNCTION_KEY_BAR_HEIGHT : 1);
     }
+}
+
+/* The host controls are always visible, even while the options overlay is
+ * open. Shrink only the text if a user resizes a window below its default
+ * width; the emulated picture keeps its own reserved space above this bar. */
+static void render_function_keys(SDL_Renderer *r, int bottom_reserved) {
+    int rw, rh;
+    if (!SDL_GetRenderOutputSize(r, &rw, &rh)) return;
+    int y = rh - bottom_reserved - FUNCTION_KEY_BAR_HEIGHT;
+    if (rw <= 0 || y < 0) return;
+
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(r, 0x10, 0x10, 0x14, 255);
+    SDL_FRect band = { 0, (float)y, (float)rw, FUNCTION_KEY_BAR_HEIGHT };
+    SDL_RenderFillRect(r, &band);
+
+    const char *model = "C128DCR";
+    const char *keys = rw >= 1050
+        ? "  F4=screenshot  F5=reset  F6=GIF  F7=pause  F8=monitor  F9=options  F10=40/80  F11=fullscreen  F12=quit"
+        : "  F4 Shot F5 Reset F6 GIF F7 Pause F8 Mon F9 Opt F10 40/80 F11 Full F12 Quit";
+    float text_w = (float)(strlen(model) + strlen(keys)) * 8.0f;
+    float scale = text_w > (float)rw - 12.0f ? ((float)rw - 12.0f) / text_w : 1.0f;
+    if (scale <= 0.0f) return;
+    float x = ((float)rw / scale - text_w) * 0.5f;
+    float text_y = ((float)y + ((float)FUNCTION_KEY_BAR_HEIGHT - 8.0f * scale) * 0.5f) / scale;
+    SDL_SetRenderScale(r, scale, scale);
+    SDL_SetRenderDrawColor(r, 0xFF, 0x40, 0x40, 255);
+    SDL_RenderDebugText(r, x, text_y, model);
+    SDL_RenderDebugText(r, x + 1.0f, text_y, model);
+    SDL_SetRenderDrawColor(r, 0xE0, 0xE0, 0xE0, 255);
+    SDL_RenderDebugText(r, x + (float)strlen(model) * 8.0f, text_y, keys);
+    SDL_SetRenderScale(r, 1.0f, 1.0f);
+}
+
+void display_render_function_keys(Display *d) {
+    render_function_keys(d->renderer, LED_BAR_HEIGHT);
+    if (d->vdc_renderer) render_function_keys(d->vdc_renderer, 0);
 }
 
 void display_flip(Display *d) {

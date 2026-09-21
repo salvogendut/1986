@@ -194,6 +194,8 @@ cycle-level 1571 implementation without conflating their interfaces.
   mechanism timing, line-level IEC, and fast serial (#30).
 - [x] Persisted Advanced > Real Disk Drive preference, default Off; On is
   marked pending and retains the virtual backend until true-drive support (#57).
+- [x] Optional second fast virtual drive with independent image and a distinct
+  IEC unit; compact, legible F9 overlay (#59).
 
 **Done when.** Virtual mode is broadly useful and true-drive mode runs the DOS
 ROM through emulated hardware.

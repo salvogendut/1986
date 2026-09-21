@@ -37,6 +37,7 @@ typedef struct {
     int     sid_fast_remainder;
     Kbd     kbd;
     Drive   drive;
+    Drive   drive2;
     Config *cfg;
     bool    paused;
     bool    fast;        /* 8502 at 2 MHz (C128 fast mode) */

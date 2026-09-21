@@ -35,13 +35,16 @@ typedef struct {
 
     /* Media files chosen in the overlay (not yet connected to a device). */
     char       disk_path[CONFIG_PATH_MAX];  /* D64/D71/D81 disk image */
+    char       disk2_path[CONFIG_PATH_MAX]; /* second drive disk image */
     char       tape_path[CONFIG_PATH_MAX];  /* Tape .tap image */
     char       cart_path[CONFIG_PATH_MAX];  /* Cartridge .crt image */
 
     /* Disk drive (Commodore 1571). */
     int        drive_unit;        /* IEC device number (8-11) */
+    int        drive2_unit;       /* distinct IEC device number (8-11) */
     int        drive_type;        /* DRIVE_TYPE_* (1571) */
     bool       real_disk_drive;   /* future hardware backend preference */
+    bool       second_drive;      /* expose the second virtual IEC drive */
 
     /* Tinker-gated Advanced overlay section. */
     bool       tinker;              /* enable the Advanced section */
@@ -55,6 +58,7 @@ typedef struct {
 } Config;
 
 void config_set_defaults(Config *cfg);
+void config_normalize_drive_units(Config *cfg);
 bool config_load(Config *cfg, const char *path);   /* returns false if missing */
 bool config_save(const Config *cfg, const char *path);
 /* Reload the on-disk config and update only the persistent display mode. */

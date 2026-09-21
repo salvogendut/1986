@@ -53,10 +53,13 @@ Current working pieces include:
 - Host keyboard input, paste, cursor, CIA timer and raster IRQ handling.
 - Audible three-voice 8580 SID synthesis through SDL3, including the standard
   waveforms, envelopes, voice routing, and a basic filter approximation.
-- Function-key conventions: F4 screenshot, F5 reset, F6 GIF capture, F8
-  monitor, F9 options overlay, F10 40/80 switch, F11 fullscreen, F12 quit.
-- Options overlay that reads and writes
-  `1986.conf`.
+- Function-key conventions: F4 screenshot, F5 reset, F6 GIF capture, F7
+  pause, F8 monitor, F9 options overlay, F10 40/80 switch, F11 fullscreen,
+  F12 quit.
+- An in-window function-key reminder in both display windows and an About
+  dialog in General showing the emulator version and build commit.
+- Compact options overlay that reads and writes `1986.conf`, with an optional
+  second virtual IEC drive and separately selected disk image/unit.
 - VICE's 8502/6510 core and a reused Z80 core wired to the C128 bus.
 - A fast virtual IEC drive that reads and writes D64, D71, and D81 images,
   supporting `DIRECTORY`, `LOAD`/`DLOAD`, `SAVE`/`DSAVE`, and DOS `SCRATCH`/

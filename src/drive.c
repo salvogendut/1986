@@ -53,3 +53,25 @@ int drive_receive(Drive *d, u8 *byte) {
 u8 drive_take_bus_status(Drive *d) {
     return virtual_drive_take_bus_status(&d->virtual_drive);
 }
+
+void drive_pair_attention(Drive *first, Drive *second, bool second_enabled, u8 byte) {
+    drive_attention(first, byte);
+    if (second_enabled) drive_attention(second, byte);
+}
+
+void drive_pair_send(Drive *first, Drive *second, bool second_enabled, u8 byte) {
+    drive_send(first, byte);
+    if (second_enabled) drive_send(second, byte);
+}
+
+int drive_pair_receive(Drive *first, Drive *second, bool second_enabled, u8 *byte) {
+    int status = drive_receive(first, byte);
+    if (!status && second_enabled) status = drive_receive(second, byte);
+    return status;
+}
+
+u8 drive_pair_take_bus_status(Drive *first, Drive *second, bool second_enabled) {
+    u8 status = drive_take_bus_status(first);
+    if (second_enabled) status |= drive_take_bus_status(second);
+    return status;
+}

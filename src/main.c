@@ -212,6 +212,9 @@ int main(int argc, char **argv) {
          * not load a 1571 ROM. A future true-drive module will own that ROM. */
         if (cfg.disk_path[0] && drive_attach_disk(&c.drive, cfg.disk_path) != 0)
             fprintf(stderr, "1986: could not attach disk '%s'\n", cfg.disk_path);
+        if (cfg.disk2_path[0] && drive_attach_disk(&c.drive2, cfg.disk2_path) != 0)
+            fprintf(stderr, "1986: could not attach second disk '%s'\n",
+                    cfg.disk2_path);
     }
 
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */
@@ -301,7 +304,7 @@ int main(int argc, char **argv) {
                     if (cfg.scale > 4) cfg.scale = 4;
                     SDL_SetWindowSize(c.display.window,
                                       WINDOW_W * cfg.scale,
-                                      WINDOW_H * cfg.scale + LED_BAR_HEIGHT);
+                                      WINDOW_H * cfg.scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT);
                     continue;
                 }
                 /* Shift+PrintScreen toggles the 40/80 column key. */
@@ -475,6 +478,7 @@ int main(int argc, char **argv) {
         /* --- Frame present --- */
         display_upload(&c.display);
         overlay_render(&overlay, c.display.renderer);
+        display_render_function_keys(&c.display);
         if (paused) display_draw_paused_label(&c.display);
         notify_render(c.display.renderer);
         if (!c.display.one_display && c.display.vdc_renderer)
@@ -490,6 +494,8 @@ int main(int argc, char **argv) {
     paste_free(&paste);
     monitor_destroy(monitor);
     overlay_quit(&overlay);
+    drive_attach_disk(&c.drive, NULL);
+    drive_attach_disk(&c.drive2, NULL);
     display_destroy(&c.display);
     return 0;
 }

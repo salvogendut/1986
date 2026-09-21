@@ -96,6 +96,29 @@ static bool directory_contains(VirtualDrive *drive, const char *name) {
     return false;
 }
 
+static bool pair_directory_contains(Drive *first, Drive *second,
+                                    bool enabled, int unit, const char *name) {
+    drive_pair_attention(first, second, enabled, (u8)(0x20 | unit));
+    drive_pair_attention(first, second, enabled, 0xF0);
+    drive_pair_send(first, second, enabled, '$');
+    drive_pair_attention(first, second, enabled, 0x3F);
+    drive_pair_attention(first, second, enabled, (u8)(0x40 | unit));
+    drive_pair_attention(first, second, enabled, 0x60);
+    u8 bytes[1024], byte;
+    size_t length = 0;
+    int status;
+    while ((status = drive_pair_receive(first, second, enabled, &byte)) > 0 &&
+           length < sizeof(bytes)) {
+        bytes[length++] = byte;
+        if (status == 2) break;
+    }
+    drive_pair_attention(first, second, enabled, 0x5F);
+    size_t name_len = strlen(name);
+    for (size_t i = 0; i + name_len <= length; ++i)
+        if (memcmp(bytes + i, name, name_len) == 0) return true;
+    return false;
+}
+
 int main(void) {
     char first[] = "/tmp/1986-drive-first-XXXXXX";
     char second[] = "/tmp/1986-drive-second-XXXXXX";
@@ -154,6 +177,31 @@ int main(void) {
           "live swap to D81 updates DIRECTORY");
     CHECK(!directory_contains(&drive.virtual_drive, "SEVENTYONE"),
           "D81 swap discards prior D71 directory");
+
+    Drive pair_first, pair_second;
+    drive_init(&pair_first, &cfg);
+    drive_init(&pair_second, &cfg);
+    drive_set_unit(&pair_second, 9);
+    CHECK(drive_attach_disk(&pair_first, first) == 0 &&
+          drive_attach_disk(&pair_second, second) == 0,
+          "attach independent images to both drives");
+    CHECK(pair_directory_contains(&pair_first, &pair_second, true, 8, "FIRSTFILE") &&
+          !pair_directory_contains(&pair_first, &pair_second, true, 8, "SECONDFILE") &&
+          pair_directory_contains(&pair_first, &pair_second, true, 9, "SECONDFILE"),
+          "distinct IEC units route directory requests to the right image");
+    CHECK(!pair_directory_contains(&pair_first, &pair_second, false, 9, "SECONDFILE") &&
+          pair_directory_contains(&pair_first, &pair_second, false, 8, "FIRSTFILE"),
+          "disabling the second drive removes only its IEC response");
+    drive_set_unit(&pair_second, 10);
+    CHECK(!pair_directory_contains(&pair_first, &pair_second, true, 9, "SECONDFILE") &&
+          pair_directory_contains(&pair_first, &pair_second, true, 10, "SECONDFILE"),
+          "changing Drive 2 unit takes effect immediately");
+    CHECK(drive_attach_disk(&pair_second, d71) == 0 &&
+          pair_directory_contains(&pair_first, &pair_second, true, 10, "SEVENTYONE") &&
+          pair_directory_contains(&pair_first, &pair_second, true, 8, "FIRSTFILE"),
+          "Drive 2 media replacement does not disturb Drive 1");
+    drive_attach_disk(&pair_first, NULL);
+    drive_attach_disk(&pair_second, NULL);
 
     CHECK(drive_attach_disk(&drive, NULL) == 0, "eject DiskImage");
     CHECK(!drive.disk_attached, "eject clears attached state");

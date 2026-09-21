@@ -15,6 +15,7 @@ typedef enum {
 typedef enum {
     OV_DIALOG_NONE = 0,
     OV_DIALOG_DISK,   /* .d64, .d71, or .d81 */
+    OV_DIALOG_DISK2,  /* second IEC drive image */
     OV_DIALOG_TAPE,   /* .tap */
     OV_DIALOG_CART,   /* .crt */
     OV_DIALOG_ROM,    /* ROM directory (folder picker) */
@@ -22,6 +23,7 @@ typedef enum {
 
 typedef struct {
     bool         visible;
+    bool         about_visible;
     OvSection    section;
     int          row;
     Config      *cfg;

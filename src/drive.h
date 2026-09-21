@@ -36,3 +36,10 @@ void drive_attention(Drive *d, u8 byte);
 void drive_send(Drive *d, u8 byte);
 int  drive_receive(Drive *d, u8 *byte);
 u8   drive_take_bus_status(Drive *d);
+
+/* Dispatch trapped logical IEC bytes to two independent virtual devices.
+ * Only one can be addressed at a time because their units are distinct. */
+void drive_pair_attention(Drive *first, Drive *second, bool second_enabled, u8 byte);
+void drive_pair_send(Drive *first, Drive *second, bool second_enabled, u8 byte);
+int  drive_pair_receive(Drive *first, Drive *second, bool second_enabled, u8 *byte);
+u8   drive_pair_take_bus_status(Drive *first, Drive *second, bool second_enabled);
