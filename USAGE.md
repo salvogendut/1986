@@ -126,6 +126,13 @@ the hardware drive emulator is not yet implemented, so the fast virtual drive
 remains active. It does not emulate 1571/1581 hardware or D81 partition and
 REL-file operations.
 
+GEOS 128 from `GEOS128.D64` is not yet a mouse test for 1986. Its loader
+successfully reads `GEOS128` and `GEOBOOT128`, then sends `M-W`/`M-E` commands
+to upload and execute code in the drive. The fast virtual drive has no drive
+CPU or RAM and cannot execute those commands; turning Real Disk Drive On does
+not change that until the true-drive backend is implemented. Use a BASIC 8
+mouse program to test the 1351 input in the meantime.
+
 The F9 overlay uses a compact top panel with smaller text; the running screen
 remains visible below it.
 

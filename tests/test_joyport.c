@@ -22,8 +22,11 @@ int main(void) {
     CHECK(joyports_digital(&ports, 0, true) == (u8)~(JOY_UP | JOY_FIRE),
           "1351 left/right buttons use fire/up pins");
     CHECK(joyports_pot(&ports, 0, true, false) == 0x45 &&
-          joyports_pot(&ports, 0, true, true) == 0xbd,
-          "1351 motion appears on SID POTX/POTY counters");
+          joyports_pot(&ports, 0, true, true) == 0x43,
+          "1351 SDL up motion increases the SID POTY counter");
+    joyports_mouse_motion(&ports, 0, 0, 4);
+    CHECK(joyports_pot(&ports, 0, true, true) == 0xbf,
+          "1351 SDL down motion decreases POTY and wraps at seven bits");
     CHECK(joyports_pot(&ports, 1, false, false) == 0xff,
           "joystick mode leaves POT lines disconnected");
     joyports_mouse_button(&ports, 0, false, false);

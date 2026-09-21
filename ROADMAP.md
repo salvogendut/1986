@@ -196,7 +196,9 @@ cycle-level 1571 implementation without conflating their interfaces.
   read/write support (#55).
 - [ ] D81 partition navigation and REL-file operations.
 - [ ] True integrated 1571: drive CPU, 2K RAM, DOS ROM, CIA/VIA/FDC,
-  mechanism timing, line-level IEC, and fast serial (#30).
+  mechanism timing, line-level IEC, and fast serial (#30). GEOS 128 is a
+  compatibility target: its loader uses drive-RAM `M-W`/`M-E` commands that
+  the virtual drive cannot execute (#74).
 - [x] Persisted Advanced > Real Disk Drive preference, default Off; On is
   marked pending and retains the virtual backend until true-drive support (#57).
 - [x] Optional second fast virtual drive with independent image and a distinct
