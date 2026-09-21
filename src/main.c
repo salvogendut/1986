@@ -365,10 +365,11 @@ int main(int argc, char **argv) {
             }
             if (f9_trace &&
                 (ev.type == SDL_EVENT_KEY_DOWN || ev.type == SDL_EVENT_KEY_UP))
-                fprintf(stderr, "[f9] %s window=%u scancode=%d key=%d repeat=%d visible-before=%d\n",
+                fprintf(stderr, "[f9] %s window=%u scancode=%d key=%d mod=%04x repeat=%d visible-before=%d\n",
                         ev.type == SDL_EVENT_KEY_DOWN ? "down" : "up",
                         ev.key.windowID, ev.key.scancode, ev.key.key,
-                        ev.key.repeat, overlay_is_visible(&overlay));
+                        (unsigned)ev.key.mod, ev.key.repeat,
+                        overlay_is_visible(&overlay));
             if (ev.type == SDL_EVENT_GAMEPAD_ADDED && !gamepad) {
                 gamepad = SDL_OpenGamepad(ev.gdevice.which);
                 continue;
@@ -474,6 +475,8 @@ int main(int argc, char **argv) {
                  * Shift must NOT also apply as a C128 Shift, or F1 would read
                  * as F2; override it with the function key's own Shift. */
                 if (fkey && shift) {
+                    if (f9_trace && ev.key.scancode == SDL_SCANCODE_F5)
+                        fprintf(stderr, "[f9] Shift+F5 routed to C128 keyboard\n");
                     int row, col;
                     bool need_shift;
                     if (kbd_map_scancode(ev.key.scancode, &row, &col, &need_shift)) {
@@ -519,6 +522,9 @@ int main(int argc, char **argv) {
                                                (int)sfx_buf_len);
                     }
                 } else if (ev.key.scancode == SDL_SCANCODE_F5) {
+                    if (f9_trace)
+                        fprintf(stderr, "[f9] F5 resetting C128 at frame=%d\n",
+                                c128_frame_count);
                     c128_reset(&c);
                     if (audio_stream) SDL_ClearAudioStream(audio_stream);
                 } else if (ev.key.scancode == SDL_SCANCODE_F6) {
