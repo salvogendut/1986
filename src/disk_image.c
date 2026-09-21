@@ -11,6 +11,41 @@
 #include <unistd.h>
 #endif
 
+/* One virtual drive file can span at most 3200 data sectors. This also
+ * accommodates native C128 BASIC PRGs that are larger than 64 KiB. */
+#define PRG_MAX_BYTES (3200u * 254u)
+
+static const char *host_basename(const char *path) {
+    const char *name = path;
+    for (const char *p = path; *p; ++p)
+        if (*p == '/' || *p == '\\') name = p + 1;
+    return name;
+}
+
+static bool is_prg_path(const char *path) {
+    const char *name = host_basename(path);
+    size_t length = strlen(name);
+    return length >= 4 && name[length - 4] == '.' &&
+        tolower((unsigned char)name[length - 3]) == 'p' &&
+        tolower((unsigned char)name[length - 2]) == 'r' &&
+        tolower((unsigned char)name[length - 1]) == 'g';
+}
+
+static void prg_directory_name(const char *path, char out[17]) {
+    const char *name = host_basename(path);
+    size_t length = strlen(name) - 4; /* strip the .prg extension */
+    if (length > 16) length = 16;
+    for (size_t i = 0; i < length; ++i) {
+        unsigned char c = (unsigned char)name[i];
+        out[i] = (c < 0x20 || c >= 0x7f || c == '"' || c == '*' ||
+                  c == '?' || c == ':' || c == ',' || c == '/' || c == '\\')
+            ? '_' : (char)toupper(c);
+    }
+    while (length && out[length - 1] == ' ') --length;
+    out[length] = '\0';
+    if (!length) snprintf(out, 17, "PROGRAM");
+}
+
 static bool path_writable_regular(const char *path) {
 #ifdef _WIN32
     DWORD attrs = GetFileAttributesA(path);
@@ -41,13 +76,15 @@ int disk_image_d64_track_offset(int track) {
 }
 
 int disk_image_track_sectors(const DiskImage *d, int track) {
-    if (!d || track < 1 || track > d->tracks) return 0;
+    if (!d || d->format == DISK_FORMAT_PRG ||
+        track < 1 || track > d->tracks) return 0;
     if (d->format == DISK_FORMAT_D81) return 40;
     return disk_image_d64_track_sectors(track > 35 ? track - 35 : track);
 }
 
 int disk_image_track_offset(const DiskImage *d, int track) {
-    if (!d || track < 1 || track > d->tracks + 1) return -1;
+    if (!d || d->format == DISK_FORMAT_PRG ||
+        track < 1 || track > d->tracks + 1) return -1;
     if (d->format == DISK_FORMAT_D81)
         return (track - 1) * 40 * DISK_SECTOR_BYTES;
     if (track <= 36) return disk_image_d64_track_offset(track);
@@ -61,6 +98,7 @@ const char *disk_image_format_name(const DiskImage *d) {
         case DISK_FORMAT_D64: return "D64";
         case DISK_FORMAT_D71: return "D71";
         case DISK_FORMAT_D81: return "D81";
+        case DISK_FORMAT_PRG: return "PRG";
     }
     return "DISK";
 }
@@ -78,9 +116,18 @@ int disk_image_open(DiskImage *d, const char *path) {
     }
     d->size = (size_t)sz;
 
-    /* Exact sizes distinguish these formats even without a file extension. */
+    /* Standalone PRGs are identified by extension; disk images retain their
+     * exact-size detection even when their extension is absent. */
     const size_t base35 = (size_t)disk_image_d64_track_offset(36);
-    if (d->size == base35 || d->size == base35 + 683u) {
+    if (is_prg_path(path)) {
+        if (d->size < 3 || d->size > PRG_MAX_BYTES) {
+            fclose(f);
+            memset(d, 0, sizeof(*d));
+            return -1;
+        }
+        d->format = DISK_FORMAT_PRG;
+        prg_directory_name(path, d->prg_name);
+    } else if (d->size == base35 || d->size == base35 + 683u) {
         d->format = DISK_FORMAT_D64;
         d->tracks = 35;
         d->has_errors = d->size != base35;
@@ -109,7 +156,7 @@ int disk_image_open(DiskImage *d, const char *path) {
     d->path = malloc(path_len + 1);
     if (!d->path) { disk_image_close(d); return -1; }
     memcpy(d->path, path, path_len + 1);
-    if (path_writable_regular(path)) {
+    if (d->format != DISK_FORMAT_PRG && path_writable_regular(path)) {
         FILE *write_probe = fopen(path, "rb+");
         if (write_probe) { d->writable = true; fclose(write_probe); }
     }
@@ -186,14 +233,34 @@ static int disk_image_scan_directory(const DiskImage *d, DiskDirEntry *ents, int
 }
 
 int disk_image_read_directory_entries(const DiskImage *d, DiskDirEntry *ents, int cap) {
+    if (d && d->format == DISK_FORMAT_PRG) {
+        if (!d->data || !ents || cap < 1) return 0;
+        DiskDirEntry *entry = &ents[0];
+        memset(entry, 0, sizeof(*entry));
+        entry->blocks = (int)((d->size + 253u) / 254u);
+        entry->type = 2;
+        entry->closed = true;
+        entry->locked = true;
+        snprintf(entry->name, sizeof(entry->name), "%s", d->prg_name);
+        return 1;
+    }
     return disk_image_scan_directory(d, ents, cap);
 }
 
 static bool bam_free(const DiskImage *d, const u8 *image, int track, int sector);
 
-/* D64/D71 headers live at 18/0; D81 has a separate header at 40/0. */
+/* D64/D71 headers live at 18/0; D81 has a separate header at 40/0.
+ * Standalone PRGs get a synthetic read-only directory header. */
 int disk_image_read_bam(const DiskImage *d, char *name, size_t name_cap,
                  char id[2], u8 *dos_type, int *free_blocks) {
+    if (d && d->format == DISK_FORMAT_PRG) {
+        if (!d->data || !name || name_cap == 0 || !id) return -1;
+        snprintf(name, name_cap, "SINGLE PRG");
+        id[0] = id[1] = '0';
+        if (dos_type) *dos_type = '2';
+        if (free_blocks) *free_blocks = 0;
+        return 0;
+    }
     u8 sec[256];
     if (!d || !name || name_cap == 0 || !id ||
         disk_image_read_sector(d, directory_track(d), 0, sec) != 0) return -1;
@@ -234,7 +301,14 @@ size_t disk_image_build_directory_program(const DiskImage *d, u8 *out, size_t ca
     if (!d || !d->data || !out) return 0;
 
     u8 header[256];
-    if (disk_image_read_sector(d, directory_track(d), 0, header) != 0) return 0;
+    if (d->format == DISK_FORMAT_PRG) {
+        memset(header, 0xA0, sizeof(header));
+        memcpy(header + 0x90, "SINGLE PRG", 10);
+        header[0xA2] = header[0xA3] = '0';
+        header[0xA5] = '2'; header[0xA6] = 'A';
+    } else if (disk_image_read_sector(d, directory_track(d), 0, header) != 0) {
+        return 0;
+    }
     int name_offset = d->format == DISK_FORMAT_D81 ? 0x04 : 0x90;
     int id_offset = d->format == DISK_FORMAT_D81 ? 0x16 : 0xA2;
 
@@ -327,7 +401,11 @@ int disk_image_find_file(const DiskImage *d, const char *name, DiskDirEntry *ent
         pattern[n++] = *name++;
     while (n > 0 && pattern[n - 1] == ' ') n--;
     pattern[n] = '\0';
-    if (n == 0) return -1;
+    if (n == 0) {
+        if (d->format != DISK_FORMAT_PRG) return -1;
+        pattern[0] = '*';
+        pattern[1] = '\0';
+    }
 
     DiskDirEntry entries[512];
     int count = disk_image_read_directory_entries(d, entries, 512);
@@ -342,6 +420,13 @@ int disk_image_find_file(const DiskImage *d, const char *name, DiskDirEntry *ent
 
 int disk_image_read_file(const DiskImage *d, const DiskDirEntry *entry, u8 *out, size_t cap) {
     if (!d || !entry || !out) return -1;
+    if (d->format == DISK_FORMAT_PRG) {
+        if (!d->data || entry->type != 2 ||
+            strcmp(entry->name, d->prg_name) != 0 ||
+            cap < d->size) return -1;
+        memcpy(out, d->data, d->size);
+        return (int)d->size;
+    }
     int track = entry->start_track;
     int sector = entry->start_sector;
     bool visited[DISK_MAX_TRACKS + 1][DISK_MAX_SECTORS];

@@ -36,8 +36,8 @@ typedef struct {
     char       rom_dir[CONFIG_PATH_MAX];  /* directory holding machine ROMs */
 
     /* Media files chosen in the overlay. Tape remains a placeholder. */
-    char       disk_path[CONFIG_PATH_MAX];  /* D64/D71/D81 disk image */
-    char       disk2_path[CONFIG_PATH_MAX]; /* second drive disk image */
+    char       disk_path[CONFIG_PATH_MAX];  /* D64/D71/D81 image or PRG */
+    char       disk2_path[CONFIG_PATH_MAX]; /* second drive image or PRG */
     char       tape_path[CONFIG_PATH_MAX];  /* Tape .tap image */
     char       cart_path[CONFIG_PATH_MAX];  /* native C128 CRT/raw function ROM */
     char       u36_path[CONFIG_PATH_MAX];   /* internal function ROM socket */

@@ -18,14 +18,14 @@ typedef struct Drive {
     int     unit;       /* IEC device number (8-11) */
     VirtualDrive virtual_drive;
 
-    DiskImage image;          /* attached D64, D71, or D81 image */
+    DiskImage image;          /* attached disk image or standalone PRG */
     bool    disk_attached;
 } Drive;
 
 void drive_init(Drive *d, Config *cfg);
 void drive_reset(Drive *d);
 
-/* Attach (or detach with path=NULL) a D64, D71, or D81 image. */
+/* Attach (or detach with path=NULL) a D64/D71/D81 image or read-only PRG. */
 int  drive_attach_disk(Drive *d, const char *path);
 
 /* Select the IEC device number. */

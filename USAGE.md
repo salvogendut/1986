@@ -21,7 +21,7 @@ CP/M is a separate C128 operating mode and remains planned.
 | `--fullscreen` | Start fullscreen. |
 | `--fast` | Run the 8502 at 2 MHz (C128 fast mode). |
 | `--rom DIR` | Directory holding the machine ROM images. |
-| `--disk PATH` | Attach a D64, D71, or D81 image to Drive 1 at launch. |
+| `--disk PATH` | Attach a D64, D71, D81, or standalone PRG to Drive 1 at launch. |
 | `--cart PATH` | Attach a generic C128 `.crt` or raw external function-ROM `.bin`/`.rom` at launch. |
 | `--gif-out PATH` | Start recording a GIF at launch. |
 | `--paste TEXT` | Inject text through the emulated keyboard. |
@@ -57,10 +57,18 @@ see the rest of the host-key mappings, enable **General > Tinker**, then open
 ## Media overlay
 
 Open the options overlay with F9 and select **Media > Drive 1 image** to insert
-a D64, D71, or D81 image. Choosing another image immediately ejects the current
-disk and inserts the new one, so the next `DIRECTORY` reads the new disk
-without an application restart. Press Del on a populated image row to eject
-that drive's disk. Press F9 or Esc to close the overlay.
+a D64, D71, D81, or standalone `.prg` file. Choosing another file immediately
+ejects the current medium and inserts the new one, so the next `DIRECTORY`
+reads the new content without an application restart. Press Del on a populated
+image row to eject that drive's medium. Press F9 or Esc to close the overlay.
+For a standalone PRG, the drive presents a single read-only directory entry
+named after the host file (without `.prg`, uppercased and limited to 16
+characters). For BASIC PRGs, use `DIRECTORY`, then `DLOAD "NAME"` or
+`LOAD "NAME",8`, followed by `RUN`;
+`LOAD "*",8` selects that single entry too. The PRG's two-byte load address is
+preserved. `SAVE`, `SCRATCH`, and `RENAME` report write protection, leaving the
+host file untouched. The same behavior applies to Drive 2 and `--disk`.
+
 Each Media file picker reopens in its own last-used directory, including after
 ejecting its media or restarting the app. Drive 1, Drive 2, tape, cartridge,
 and U36 have separate remembered directories. Existing configurations use the
