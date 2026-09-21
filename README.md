@@ -14,11 +14,20 @@ It is the latest in a series of sibling projects that share an architecture:
 
 From those it reuses the SDL3 display layer, the function-key conventions,
 the options overlay, and the cycle-stepped Z80 core (for CP/M mode). The
-6502-like 8502 core is being ported from the reference VICE SDL port.
+6502-like 8502 core is adapted from VICE.
 
 The name "1986" was chosen not only because of the sibling projects and the
 year of the C128DCR's introduction, but also because it was the year I got
 my first computer, at the tender age of 13: a Commodore C128.
+
+## Acknowledgments
+
+1986 owes a great deal to [VICE, the Versatile Commodore Emulator](https://vice-emu.sourceforge.io/)
+and its contributors. Our code broadly borrows from VICE: the 8502/6510 CPU
+core is adapted from it, and its C128 hardware emulation has been an important
+reference for the rest of the machine. Ported VICE source files retain their
+original copyright and license notices in `src/vice/`. Thank you to the VICE
+team for making this work available.
 
 ## Native C128 scope
 
@@ -49,7 +58,7 @@ Current working pieces include:
 - VICE's 8502/6510 core and a reused Z80 core wired to the C128 bus.
 - A fast virtual IEC drive that reads D64 images and supports `DIRECTORY`,
   `LOAD`, and BASIC 7.0 `DLOAD`, including DOS status errors.
-- Tests for the CPU, MMU, VIC graphics and sprites, configuration, GIF encoder,
+- Tests for the CPU, MMU, CIA timers, VIC graphics and sprites, configuration, GIF encoder,
   D64 format, KERNAL IEC trap contract, and virtual-drive channel lifecycle.
 
 Saving to the virtual drive, true cycle-level 1571 emulation, SID audio, CP/M

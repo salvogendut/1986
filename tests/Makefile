@@ -5,7 +5,7 @@ CPPFLAGS ?=
 SDL3_CFLAGS ?= $(shell pkg-config --cflags sdl3)
 SDL3_LIBS ?= $(shell pkg-config --libs sdl3)
 
-TESTS = test-cpu test-mmu test-mem test-config test-gifcap test-d64 test-drive test-vic
+TESTS = test-cpu test-mmu test-mem test-cia test-config test-gifcap test-d64 test-drive test-vic
 
 .PHONY: all check clean
 
@@ -22,6 +22,10 @@ test-mmu: test_mmu.c ../src/mmu.c ../src/mmu.h
 test-mem: test_mem.c ../src/mem.c ../src/mem.h ../src/mmu.c ../src/mmu.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_mem.c ../src/mem.c ../src/mmu.c -o $@
+
+test-cia: test_cia.c ../src/cia.c ../src/cia.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
+		test_cia.c ../src/cia.c -o $@
 
 test-config: test_config.c ../src/config.c ../src/config.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
@@ -47,6 +51,7 @@ check: $(TESTS)
 	./test-cpu
 	./test-mmu
 	./test-mem
+	./test-cia
 	./test-config
 	./test-gifcap
 	./test-d64

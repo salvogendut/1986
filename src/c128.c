@@ -170,8 +170,10 @@ int c128_frame(C128 *c) {
         total += cpu_step_budget(&c->cpu, chunk);
         remaining -= chunk;
         cia_tick(&c->cia1, chunk);
+        cia_tick(&c->cia2, chunk);
         bool vic_irq = vic_tick(&c->vic);
         cpu_irq(&c->cpu, cia_irq_line(&c->cia1) || vic_irq);
+        cpu_nmi(&c->cpu, cia_irq_line(&c->cia2));
     }
     c->total_cycles += (u64)total;
     c128_frame_count++;

@@ -124,14 +124,16 @@ partial MMU state on unsupported mode requests.
 
 - [x] Timer A (latch, underflow → ICR bit 0 → IRQ line).
 - [x] ICR/IMR semantics (`$DC0D` read = flags, write = mask).
-- [ ] Timer B (latch, cascade from timer A, `$DC0F`/`$DD0F`).
+- [x] Timer B Phi2/cascade counting, reload/one-shot, and ICR bit 1 on both
+  CIAs; CIA2 delivers its masked interrupt as NMI (#49).
+- [ ] External CNT input and CNT-gated timer modes.
 - [ ] Time-of-day (TOD) alarm.
 - [ ] Serial shift register (SDR) and the FLAG line.
 - [x] CIA2 port A VIC-bank bits.
 - [ ] CIA2 RS-232 behavior.
 
-**Done when.** Timer B, TOD, serial/FLAG, and CIA2 I/O behave while preserving
-the already-working timer-A-driven KERNAL loop.
+**Done when.** CNT-driven timer modes, TOD, serial/FLAG, and CIA2 I/O behave
+while preserving the already-working timer-A-driven KERNAL loop.
 
 ---
 
@@ -224,8 +226,8 @@ ROM through emulated hardware.
 
 The main unfinished areas, grouped by likely development scale, are:
 
-1. **Core accuracy:** native PLA chargen selection, VIC-IIe bad-lines/raster
-   effects, and CIA timer-B/TOD/serial completion.
+1. **Core accuracy:** remaining native PLA tests, VIC-IIe bad-lines/raster
+   effects, and CIA TOD/serial/CNT completion.
 2. **Audio:** SID voices, envelopes, filter, and SDL3 output.
 3. **Storage formats and writes:** virtual-drive `SAVE`, DOS write commands,
    D71, and D81.

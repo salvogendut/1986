@@ -7,8 +7,9 @@
  *
  * Two CIAs live in the C128 at $DC00 (CIA1: keyboard, joystick, timer A/B,
  * serial) and $DD00 (CIA2: VIC bank, RS-232, timer A/B). This models the
- * interrupt control register (ICR) / interrupt mask register (IMR) and the
- * timer A used for the 50 Hz jiffy clock the KERNAL main loop runs on.
+ * interrupt control register (ICR) / interrupt mask register (IMR), timer A
+ * used by the KERNAL main loop, and timer B's Phi2/cascade modes. CNT-driven
+ * timer modes require an external input and remain inactive for now.
  *
  * Interrupt flags (ICR bits): 0 = timer A, 1 = timer B, 2 = TOD alarm,
  * 3 = serial (SDR), 4 = FLAG, 7 = IRQ line.
@@ -25,16 +26,20 @@ typedef struct {
     u8  crb;         /* timer B control register */
     u16 ta_latch;    /* timer A reload value */
     u16 ta_counter;  /* timer A down counter */
+    u16 tb_latch;    /* timer B reload value */
+    u16 tb_counter;  /* timer B down counter */
     bool ta_running; /* timer A started */
+    bool tb_running; /* timer B started */
     bool ta_underflow; /* timer A reached zero this step */
+    bool tb_underflow; /* timer B reached zero this step */
 } Cia;
 
 void cia_init(Cia *c);
 void cia_reset(Cia *c);
 void cia_write(Cia *c, u16 addr, u8 val);
 u8   cia_read(Cia *c, u16 addr);
-/* Advance timer A by `cycles`; returns true if it underflowed and the IRQ is
- * now asserted (icr & imr). */
+/* Advance both timers by Phi2 cycles; Timer B may instead count Timer A
+ * underflows. Returns the current masked interrupt-line state. */
 bool cia_tick(Cia *c, int cycles);
 /* True while the CIA IRQ line is asserted (a masked flag is pending). */
 bool cia_irq_line(const Cia *c);
