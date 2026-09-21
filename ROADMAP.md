@@ -152,7 +152,9 @@ and more accurate VDC behavior.
 - [x] F10 display switching with the last active 40/80 mode persisted across
   application restarts and focused correctly in dual-window mode.
 - [ ] Remaining attribute effects: flash, underline, and alternate charset.
-- [ ] 640x200/400 bitmap and interlace modes.
+- [x] Standard 640x200 VDC bitmap mode with register and attribute colours,
+  reverse video, and C128DCR 16-byte character slots.
+- [ ] 640x400 VDC interlace and extended bitmap modes.
 - [ ] VDC timing, ready/busy status, and scan timing accuracy.
 
 **Done when.** Native VDC text, bitmap, and interlace software renders with

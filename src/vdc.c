@@ -41,7 +41,7 @@ void vdc_reset(Vdc *v) {
     v->cursor_adr = 0;
     v->screen_text_cols = 80;
     v->screen_textlines = 25;
-    v->bytes_per_char = 8;
+    v->bytes_per_char = 16;
     v->dirty = true;
 }
 
@@ -63,7 +63,7 @@ void vdc_write_data(Vdc *v, u8 val) {
             v->dirty = true;
             break;
         case 9:   /* R09 rasters per char: chargen is one byte per raster */
-            v->bytes_per_char = 8;
+            v->bytes_per_char = (val & 0x1F) < 16 ? 16 : 32;
             v->dirty = true;
             break;
         case 12: v->screen_adr = (u16)((v->screen_adr & 0x00FF) | (val << 8)); v->dirty = true; break;
@@ -74,7 +74,7 @@ void vdc_write_data(Vdc *v, u8 val) {
         case 19: v->update_adr = (u16)((v->regs[18] << 8) | v->regs[19]); break;
         case 20: v->attribute_adr = (u16)((v->attribute_adr & 0x00FF) | (val << 8)); v->dirty = true; break;
         case 21: v->attribute_adr = (u16)((v->attribute_adr & 0xFF00) | val);        v->dirty = true; break;
-        case 28: v->chargen_adr = (u16)(val << 8); v->dirty = true; break;
+        case 28: v->chargen_adr = (u16)((val << 8) & 0xE000); v->dirty = true; break;
         case 30: { /* R30 word count -> fill or copy block */
             u16 ptr = (u16)((v->regs[18] << 8) | v->regs[19]);
             int blklen = val ? val : 256;
@@ -82,6 +82,10 @@ void vdc_write_data(Vdc *v, u8 val) {
                 u16 src = (u16)((v->regs[32] << 8) | v->regs[33]);
                 for (int i = 0; i < blklen; i++)
                     v->ram[(ptr + i) & 0xFFFF] = v->ram[(src + i) & 0xFFFF];
+                src = (u16)(src + blklen);
+                v->regs[31] = v->ram[(src - 1) & 0xFFFF];
+                v->regs[32] = (u8)(src >> 8);
+                v->regs[33] = (u8)src;
             } else { /* fill */
                 for (int i = 0; i < blklen; i++)
                     v->ram[(ptr + i) & 0xFFFF] = v->regs[31];
@@ -118,6 +122,9 @@ u8 vdc_read_data(Vdc *v) {
         v->update_adr = ptr;
         return val;
     }
+    /* R28 bit 4 reports fitted 64 KiB RAM on the C128DCR. The lower bits
+     * read high on the 8568, as they do in VICE's 64 KiB VDC model. */
+    if (v->reg == 28) return v->regs[28] | 0x1F;
     if (v->reg < 38) return v->regs[v->reg] | regmask[v->reg];
     return 0xFF;
 }
@@ -156,6 +163,41 @@ static void put_glyph(Vdc *v, u32 *pixels, int fbw, int fbh, int cx, int cy,
     }
 }
 
+/* In bitmap mode, each displayed raster line consumes one byte per eight
+ * pixels. The bitmap address advances by R1 + R27 on every raster, while the
+ * colour-attribute address advances only after a character row (R9 + 1
+ * rasters). This is distinct from text mode's screen-code/chargen lookup. */
+static void render_bitmap(const Vdc *v, u32 *pixels, int fbw, int fbh,
+                          int cols, int rows, bool attr_mode,
+                          bool reverse_screen, u32 fg, u32 bg) {
+    int rasters_per_row = (v->regs[9] & 0x1F) + 1;
+    int lines = rows * rasters_per_row;
+    int stride = cols + v->regs[27];
+    int pixel_width = (v->regs[25] & 0x10) ? 2 : 1;
+    int logical_width = cols * 8 * pixel_width;
+
+    for (int y = 0; y < fbh; y++) {
+        int raster = y * lines / fbh;
+        int attr_row = (raster / rasters_per_row) * stride;
+        int bitmap_row = raster * stride;
+        for (int x = 0; x < fbw; x++) {
+            int source_x = x * logical_width / fbw / pixel_width;
+            int byte_col = source_x >> 3;
+            int bit = 7 - (source_x & 7);
+            u8 bits = v->ram[(v->screen_adr + bitmap_row + byte_col) & 0xFFFF];
+            if (reverse_screen) bits = (u8)~bits;
+            u32 dot_fg = fg;
+            u32 dot_bg = bg;
+            if (attr_mode) {
+                u8 attr = v->ram[(v->attribute_adr + attr_row + byte_col) & 0xFFFF];
+                dot_fg = VDC_COLORS[attr >> 4];
+                dot_bg = VDC_COLORS[attr & 0x0F];
+            }
+            pixels[y * fbw + x] = (bits & (1u << bit)) ? dot_fg : dot_bg;
+        }
+    }
+}
+
 void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
     if (!pixels || !v->fb) return;
 
@@ -180,6 +222,14 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
 
     bool attr_mode = (v->regs[25] & 0x40) != 0;
     bool reverse_screen = (v->regs[24] & 0x40) != 0;
+
+    if (v->regs[25] & 0x80) {
+        render_bitmap(v, pixels, fbw, fbh, cols, rows, attr_mode,
+                      reverse_screen, fg, bg);
+        v->cursor_on = false;
+        v->dirty = false;
+        return;
+    }
 
     /* Cursor: R14/R15 is the cursor position; R10 bits 5-7 select the blink
      * rate. It is visible while the blink phase matches (VICE crsrblink). */
