@@ -29,6 +29,45 @@ static bool g_sid_trace = false;
 static char *g_save_ppm = NULL;
 static int   g_save_ppm_frame = 60;
 
+static SDL_Gamepad *open_first_gamepad(void) {
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetGamepads(&count);
+    SDL_Gamepad *pad = ids && count > 0 ? SDL_OpenGamepad(ids[0]) : NULL;
+    SDL_free(ids);
+    return pad;
+}
+
+static u8 poll_gamepad(SDL_Gamepad *pad) {
+    if (!pad) return 0;
+    u8 pressed = 0;
+    Sint16 x = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX);
+    Sint16 y = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY);
+    bool up = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_UP) || y < -16000;
+    bool down = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_DOWN) || y > 16000;
+    bool left = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_LEFT) || x < -16000;
+    bool right = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT) || x > 16000;
+    if (up != down) pressed |= up ? JOY_UP : JOY_DOWN;
+    if (left != right) pressed |= left ? JOY_LEFT : JOY_RIGHT;
+    if (SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_SOUTH) ||
+        SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_EAST)) pressed |= JOY_FIRE;
+    return pressed;
+}
+
+static void release_mouse(SDL_Window **captured, JoyPorts *ports) {
+    if (*captured) SDL_SetWindowRelativeMouseMode(*captured, false);
+    *captured = NULL;
+    for (unsigned port = 0; port < 2; ++port) {
+        joyports_mouse_button(ports, port, false, false);
+        joyports_mouse_button(ports, port, true, false);
+    }
+}
+
+static SDL_Window *active_input_window(const Display *display) {
+    if (!display->one_display && display->vdc_active && display->vdc_window)
+        return display->vdc_window;
+    return display->window;
+}
+
 /* --- Video capture state (F6). --- */
 static GifCap  *g_videocap_gif = NULL;
 static uint64_t g_videocap_gif_interval_ns = 0;
@@ -88,6 +127,7 @@ static void usage(const char *argv0) {
         "  --no-throttle    run without real-time frame pacing\n"
         "  --help           this message\n"
         "\n"
+        "  F1     Swap host joystick port (1/2)\n"
         "  F4     Screenshot (PPM)\n"
         "  F5     Reset\n"
         "  F6     Toggle GIF capture\n"
@@ -149,7 +189,8 @@ int main(int argc, char **argv) {
         g_save_ppm_frame = atoi(getenv("C128_SAVE_FRAME"));
 
     net_compat_init();  /* WSAStartup on Windows; no-op elsewhere */
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+    SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI, cfg.joystick_hidapi ? "1" : "0");
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
@@ -275,7 +316,8 @@ int main(int argc, char **argv) {
     bool running = true;
     bool fullscreen = cfg.fullscreen;
     bool paused = false;
-    int  mouse_captured = 0;
+    SDL_Window *mouse_captured = NULL;
+    SDL_Gamepad *gamepad = open_first_gamepad();
     bool pc_shift_held = false;
     uint64_t next_frame = 0;
 
@@ -283,31 +325,74 @@ int main(int argc, char **argv) {
         /* --- Event processing --- */
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
+            if (ev.type == SDL_EVENT_GAMEPAD_ADDED && !gamepad) {
+                gamepad = SDL_OpenGamepad(ev.gdevice.which);
+                continue;
+            }
+            if (ev.type == SDL_EVENT_GAMEPAD_REMOVED && gamepad &&
+                SDL_GetGamepadID(gamepad) == ev.gdevice.which) {
+                SDL_CloseGamepad(gamepad);
+                gamepad = open_first_gamepad();
+                joyports_set_joystick(&c.joyports, 0, 0);
+                joyports_set_joystick(&c.joyports, 1, 0);
+                continue;
+            }
+            unsigned input_port = (unsigned)(cfg.main_input_port - 1);
+            bool mouse_mode = cfg.joy_port_mode[input_port] == JOYPORT_MOUSE;
+            if (mouse_captured && (overlay_is_visible(&overlay) || !mouse_mode ||
+                (ev.type == SDL_EVENT_WINDOW_FOCUS_LOST &&
+                 ev.window.windowID == SDL_GetWindowID(mouse_captured))))
+                release_mouse(&mouse_captured, &c.joyports);
             if (ev.type == SDL_EVENT_QUIT) {
                 running = false;
             } else if (ev.type == SDL_EVENT_WINDOW_RESIZED ||
                        ev.type == SDL_EVENT_WINDOW_SHOWN) {
                 /* Nothing special — renderer resizes automatically. */
             } else if (ev.type == SDL_EVENT_MOUSE_MOTION) {
-                leds_set_mouse_position(ev.motion.x, ev.motion.y, true);
+                if (mouse_captured && ev.motion.windowID == SDL_GetWindowID(mouse_captured))
+                    joyports_mouse_motion(&c.joyports, input_port,
+                                          (int)ev.motion.xrel, (int)ev.motion.yrel);
+                else leds_set_mouse_position(ev.motion.x, ev.motion.y, true);
             } else if (ev.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
                 leds_set_mouse_position(0, 0, false);
             } else if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-                if (!paused && !overlay_is_visible(&overlay) && mouse_captured) {
-                    /* placeholder: joystick/mouse later */
+                SDL_Window *target = active_input_window(&c.display);
+                if (!paused && !overlay_is_visible(&overlay) && mouse_mode && target &&
+                    ev.button.windowID == SDL_GetWindowID(target)) {
+                    if (!mouse_captured && SDL_SetWindowRelativeMouseMode(target, true))
+                        mouse_captured = target;
+                    if (mouse_captured && (ev.button.button == SDL_BUTTON_LEFT ||
+                                           ev.button.button == SDL_BUTTON_RIGHT))
+                        joyports_mouse_button(&c.joyports, input_port,
+                            ev.button.button == SDL_BUTTON_RIGHT, true);
+                    continue;
                 }
             } else if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-                /* placeholder */
+                if (mouse_captured && ev.button.windowID == SDL_GetWindowID(mouse_captured)) {
+                    if (ev.button.button == SDL_BUTTON_LEFT || ev.button.button == SDL_BUTTON_RIGHT)
+                        joyports_mouse_button(&c.joyports, input_port,
+                            ev.button.button == SDL_BUTTON_RIGHT, false);
+                    continue;
+                }
             }
 
             if (monitor_handle_event(monitor, &ev)) continue;
 
             /* F9 opens overlay — release mouse capture first. */
             if (mouse_captured && ev.type == SDL_EVENT_KEY_DOWN &&
-                ev.key.scancode == SDL_SCANCODE_F9)
-                mouse_captured = 0;
+                (ev.key.scancode == SDL_SCANCODE_F9 ||
+                 (ev.key.scancode == SDL_SCANCODE_RETURN &&
+                  (ev.key.mod & SDL_KMOD_CTRL)))) {
+                release_mouse(&mouse_captured, &c.joyports);
+                if (ev.key.scancode == SDL_SCANCODE_RETURN) continue;
+            }
 
-            if (overlay_handle_event(&overlay, &ev)) continue;
+            if (overlay_handle_event(&overlay, &ev)) {
+                if (mouse_captured && (overlay_is_visible(&overlay) ||
+                    cfg.joy_port_mode[cfg.main_input_port - 1] != JOYPORT_MOUSE))
+                    release_mouse(&mouse_captured, &c.joyports);
+                continue;
+            }
 
             if (ev.type == SDL_EVENT_KEY_DOWN) {
                 bool ctrl  = (ev.key.mod & SDL_KMOD_CTRL) != 0;
@@ -353,6 +438,14 @@ int main(int argc, char **argv) {
                 }
                 if (ev.key.scancode == SDL_SCANCODE_F12) {
                     running = false;
+                } else if (ev.key.scancode == SDL_SCANCODE_F1) {
+                    if (mouse_captured) release_mouse(&mouse_captured, &c.joyports);
+                    cfg.main_input_port = cfg.main_input_port == 1 ? 2 : 1;
+                    joyports_set_joystick(&c.joyports, 0, 0);
+                    joyports_set_joystick(&c.joyports, 1, 0);
+                    if (!config_save_input_port(cfg_path, cfg.main_input_port))
+                        fprintf(stderr, "1986: could not save host input port to '%s'\n", cfg_path);
+                    notify_post("HOST INPUT: JOY PORT %d", cfg.main_input_port);
                 } else if (ev.key.scancode == SDL_SCANCODE_F8) {
                     if (monitor_is_open(monitor))
                         monitor_handle_event(monitor,
@@ -389,8 +482,11 @@ int main(int argc, char **argv) {
                 } else if (ev.key.scancode == SDL_SCANCODE_F7) {
                     paused = !paused;
                     c.paused = paused;
+                    if (paused && mouse_captured)
+                        release_mouse(&mouse_captured, &c.joyports);
                     if (paused && audio_stream) SDL_ClearAudioStream(audio_stream);
                 } else if (ev.key.scancode == SDL_SCANCODE_F10) {
+                    if (mouse_captured) release_mouse(&mouse_captured, &c.joyports);
                     c128_switch_4080(&c);   /* toggle 40-col VIC <-> 80-col VDC */
                     cfg.col_mode_80 = c.col_mode_80;
                     display_focus_active(&c.display);
@@ -441,6 +537,12 @@ int main(int argc, char **argv) {
 
         /* --- Overlay (process async file-dialog results) --- */
         overlay_tick(&overlay);
+
+        for (unsigned port = 0; port < 2; ++port) joyports_set_joystick(&c.joyports, port, 0);
+        if (!paused && !overlay_is_visible(&overlay) &&
+            cfg.joy_port_mode[cfg.main_input_port - 1] == JOYPORT_JOYSTICK)
+            joyports_set_joystick(&c.joyports, (unsigned)(cfg.main_input_port - 1),
+                                  poll_gamepad(gamepad));
 
         /* --- Machine step --- */
         if (!paused) {
@@ -510,6 +612,8 @@ int main(int argc, char **argv) {
         if (monitor_is_open(monitor)) monitor_render(monitor);
     }
 
+    release_mouse(&mouse_captured, &c.joyports);
+    if (gamepad) SDL_CloseGamepad(gamepad);
     if (videocap_active()) videocap_stop();
     if (audio_stream) SDL_DestroyAudioStream(audio_stream);
     if (!config_save_column_mode(cfg_path, c.col_mode_80))

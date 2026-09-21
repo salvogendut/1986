@@ -9,6 +9,7 @@
 #include "cia.h"
 #include "sid.h"
 #include "kbd.h"
+#include "joyport.h"
 #include "drive.h"
 #include "config.h"
 #include <stdbool.h>
@@ -36,6 +37,7 @@ typedef struct {
     int     audio_count;
     int     sid_fast_remainder;
     Kbd     kbd;
+    JoyPorts joyports;
     Drive   drive;
     Drive   drive2;
     Config *cfg;

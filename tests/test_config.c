@@ -16,6 +16,9 @@ int main(void) {
     CHECK(!cfg.real_disk_drive, "real drive defaults off");
     CHECK(!cfg.second_drive && cfg.drive_unit == 8 && cfg.drive2_unit == 9,
           "second drive defaults off with a distinct unit");
+    CHECK(cfg.main_input_port == 2 && cfg.joy_port_mode[0] == JOYPORT_JOYSTICK &&
+          cfg.joy_port_mode[1] == JOYPORT_JOYSTICK,
+          "default gamepad target is joystick port 2");
 
     const char *path = "/tmp/1986-test.conf";
     FILE *legacy = fopen(path, "w");
@@ -41,6 +44,8 @@ int main(void) {
     cfg.second_drive = true;
     cfg.drive_unit = 9;
     cfg.drive2_unit = 10;
+    cfg.main_input_port = 1;
+    cfg.joy_port_mode[0] = JOYPORT_MOUSE;
     snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s", "keep-me.d64");
     snprintf(cfg.disk2_path, sizeof(cfg.disk2_path), "%s", "second.d81");
     snprintf(cfg.u36_path, sizeof(cfg.u36_path), "%s", "utility.rom");
@@ -56,6 +61,14 @@ int main(void) {
     CHECK(back.second_drive && back.drive_unit == 9 && back.drive2_unit == 10 &&
           strcmp(back.disk2_path, "second.d81") == 0,
           "second-drive toggle, unit, and image roundtrip");
+    CHECK(back.main_input_port == 1 && back.joy_port_mode[0] == JOYPORT_MOUSE,
+          "input port and 1351 mode roundtrip");
+
+    CHECK(config_save_input_port(path, 2), "F1 host-port setting saved");
+    CHECK(config_load(&back, path) && back.main_input_port == 2 &&
+          back.joy_port_mode[0] == JOYPORT_MOUSE && back.second_drive,
+          "F1 host-port save preserves modes and other settings");
+    CHECK(!config_save_input_port(path, 3), "invalid host port is rejected");
     CHECK(strcmp(back.u36_path, "utility.rom") == 0,
           "U36 ROM path roundtrip");
 
@@ -69,6 +82,8 @@ int main(void) {
           "mode-only save preserves U36 setting");
     CHECK(back.real_disk_drive,
           "mode-only save preserves real-drive preference");
+    CHECK(back.main_input_port == 2 && back.joy_port_mode[0] == JOYPORT_MOUSE,
+          "mode-only save preserves F1 input port and mouse mode");
     CHECK(back.second_drive && back.drive2_unit == 10 &&
           strcmp(back.disk2_path, "second.d81") == 0,
           "mode-only save preserves second-drive media settings");

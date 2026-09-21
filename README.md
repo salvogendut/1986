@@ -51,11 +51,12 @@ Current working pieces include:
 - VIC-IIe 40-column text/bitmap display with eight hardware sprites, and the
   VDC 80-column text and standard 640x200 bitmap display. VDC interlace modes
   remain unfinished.
-- Host keyboard input, paste, cursor, CIA timers/TOD/serial/FLAG interrupts,
+- Host keyboard input, paste, selectable joystick ports and 1351 mouse input,
+  CIA timers/TOD/serial/FLAG interrupts,
   and VIC raster IRQ handling.
 - Audible three-voice 8580 SID synthesis through SDL3, including the standard
   waveforms, envelopes, voice routing, and a basic filter approximation.
-- Function-key conventions: F4 screenshot, F5 reset, F6 GIF capture, F7
+- Function-key conventions: F1 host input-port swap, F4 screenshot, F5 reset, F6 GIF capture, F7
   pause, F8 monitor, F9 options overlay, F10 40/80 switch, F11 fullscreen,
   F12 quit.
 - An in-window function-key reminder in both display windows and an About
@@ -108,7 +109,7 @@ make -C tests check
 
 ## Controls
 
-F4 screenshot, F5 reset, F6 GIF capture, F7 pause, F8 monitor, F9 options,
+F1 swap host joystick port, F4 screenshot, F5 reset, F6 GIF capture, F7 pause, F8 monitor, F9 options,
 F10 40/80-column switch, F11 fullscreen, F12 quit. See
 [CONTROLS.md](CONTROLS.md).
 

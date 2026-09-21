@@ -5,7 +5,7 @@ CPPFLAGS ?=
 SDL3_CFLAGS ?= $(shell pkg-config --cflags sdl3)
 SDL3_LIBS ?= $(shell pkg-config --libs sdl3)
 
-TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-overlay test-display-footer test-vic test-vdc
+TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-overlay test-display-footer test-vic test-vdc
 
 .PHONY: all check clean
 
@@ -39,6 +39,10 @@ test-config: test_config.c ../src/config.c ../src/config.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_config.c ../src/config.c -o $@
 
+test-joyport: test_joyport.c ../src/joyport.c ../src/joyport.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
+		test_joyport.c ../src/joyport.c -o $@
+
 test-gifcap: test_gifcap.c ../src/gifcap.c ../src/gifcap.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_gifcap.c ../src/gifcap.c -o $@
@@ -59,10 +63,10 @@ test-drive: test_drive.c ../src/drive.c ../src/drive.h ../src/disk_image.c ../sr
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_drive.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c -o $@
 
-test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c
+test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_overlay.c ../src/overlay.c ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c \
-		../src/disk_image.c ../src/virtual_drive.c $(SDL3_LIBS) -o $@
+		../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c $(SDL3_LIBS) -o $@
 
 test-display-footer: test_display_footer.c ../src/display.c ../src/display.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
@@ -84,6 +88,7 @@ check: $(TESTS)
 	./test-cia
 	./test-sid
 	./test-config
+	./test-joyport
 	./test-gifcap
 	./test-d64
 	./test-d64-save

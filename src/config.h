@@ -14,6 +14,8 @@ typedef enum {
     C128_MODEL_C128D = 2  /* the C128D (DCR's plastic sibling) */
 } C128Model;
 
+typedef enum { JOYPORT_JOYSTICK = 0, JOYPORT_MOUSE = 1 } JoyPortMode;
+
 typedef struct {
     int        scale;              /* window scale factor (1..4) */
     bool       fullscreen;
@@ -55,7 +57,9 @@ typedef struct {
     bool       tape_audio_monitor;  /* stub */
     bool       tape_video_monitor;  /* stub */
     bool       debug_overlay;       /* stub */
-    bool       joystick_hidapi;     /* stub */
+    bool       joystick_hidapi;     /* SDL HIDAPI backend (restart to apply) */
+    int        main_input_port;     /* host gamepad/mouse targets port 1 or 2 */
+    JoyPortMode joy_port_mode[2];   /* per-port joystick or 1351 mouse */
 } Config;
 
 void config_set_defaults(Config *cfg);
@@ -64,6 +68,8 @@ bool config_load(Config *cfg, const char *path);   /* returns false if missing *
 bool config_save(const Config *cfg, const char *path);
 /* Reload the on-disk config and update only the persistent display mode. */
 bool config_save_column_mode(const char *path, bool col_mode_80);
+/* Save the F1 host-port shortcut without overwriting other settings. */
+bool config_save_input_port(const char *path, int port);
 
 /* Resolve the config file location: $HOME/.config/1986/1986.conf (or a
  * relative "1986.conf" if HOME is unset). C128_CONFIG_PATH overrides this

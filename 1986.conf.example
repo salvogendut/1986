@@ -20,6 +20,12 @@ fast = 0
 # Last selected VIC-II (40) or VDC (80) display mode
 display_columns = 80
 
+# Host gamepad/mouse target and per-port device (0=joystick, 1=1351 mouse)
+main_input_port = 2
+joy_port_1_mode = 0
+joy_port_2_mode = 0
+joystick_hidapi = 0
+
 # Advanced: future hardware drive backend (currently pending; virtual remains active)
 real_disk_drive = 0
 # Optional second fast virtual drive (IEC units must differ)

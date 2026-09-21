@@ -368,7 +368,7 @@ static bool section_available(const Overlay *ov, OvSection s) {
 /* Number of selectable rows in each section. */
 static int section_rows(const Overlay *ov, OvSection s) {
     switch (s) {
-        case OV_GENERAL:  return 4;   /* 40/80 key, Tinker, ROMS PATH, About */
+        case OV_GENERAL:  return 7;   /* display, input ports, Tinker, ROMs, About */
         case OV_MEDIA:    return 4 + (ov->cfg->second_drive ? 2 : 0) +
                                  (ov->cfg->tinker ? 1 : 0);
         case OV_ADVANCED: return ADV_ROWS;
@@ -404,11 +404,21 @@ static void overlay_activate(Overlay *ov) {
                     c128_reset(ov->c128);
                 save_config(ov);
             } else if (ov->row == 1) {
+                ov->cfg->main_input_port = ov->cfg->main_input_port == 1 ? 2 : 1;
+            } else if (ov->row == 2 || ov->row == 3) {
+                unsigned port = (unsigned)(ov->row - 2);
+                ov->cfg->joy_port_mode[port] =
+                    ov->cfg->joy_port_mode[port] == JOYPORT_MOUSE
+                    ? JOYPORT_JOYSTICK : JOYPORT_MOUSE;
+                joyports_set_joystick(&ov->c128->joyports, port, 0);
+                joyports_mouse_button(&ov->c128->joyports, port, false, false);
+                joyports_mouse_button(&ov->c128->joyports, port, true, false);
+            } else if (ov->row == 4) {
                 ov->cfg->tinker = !ov->cfg->tinker;
                 /* Leaving Tinker off hides Advanced; fall back to General. */
                 if (!ov->cfg->tinker && ov->section == OV_ADVANCED)
                     ov->section = OV_GENERAL;
-            } else if (ov->row == 2) {
+            } else if (ov->row == 5) {
                 open_rom_dialog(ov);
             } else {
                 ov->about_visible = true;
@@ -488,6 +498,7 @@ static void overlay_activate(Overlay *ov) {
                     break;
                 case ADV_JOY_HIDAPI:
                     ov->cfg->joystick_hidapi = !ov->cfg->joystick_hidapi;
+                    notify_post("JOYSTICK HIDAPI CHANGE APPLIES AFTER RESTART");
                     break;
                 case ADV_RESET:
                     config_set_defaults(ov->cfg);
@@ -722,13 +733,22 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, panel_w, y, "40/80 key",
                  ov->cfg->col_mode_80 ? "80 columns (VDC)" : "40 columns (VIC)",
                  ov->row == 0); y += OV_LINE_H;
-        draw_row(r, panel_w, y, "Tinker", ov->cfg->tinker ? "On" : "Off",
+        draw_row(r, panel_w, y, "Main input",
+                 ov->cfg->main_input_port == 1 ? "Joy Port 1" : "Joy Port 2",
                  ov->row == 1); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Joy Port 1",
+                 ov->cfg->joy_port_mode[0] == JOYPORT_MOUSE ? "Mouse (1351)" : "Joystick",
+                 ov->row == 2); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Joy Port 2",
+                 ov->cfg->joy_port_mode[1] == JOYPORT_MOUSE ? "Mouse (1351)" : "Joystick",
+                 ov->row == 3); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Tinker", ov->cfg->tinker ? "On" : "Off",
+                 ov->row == 4); y += OV_LINE_H;
         char rd[CONFIG_PATH_MAX];
         rom_path_display(ov, rd, sizeof(rd));
-        draw_row(r, panel_w, y, "ROMS PATH", rd, ov->row == 2);
+        draw_row(r, panel_w, y, "ROMS PATH", rd, ov->row == 5);
         y += OV_LINE_H;
-        draw_row(r, panel_w, y, "About", "Program details", ov->row == 3);
+        draw_row(r, panel_w, y, "About", "Program details", ov->row == 6);
     } else if (ov->section == OV_MEDIA) {
         for (int i = 0; i < section_rows(ov, OV_MEDIA); i++) {
             int item = media_item(ov, i);

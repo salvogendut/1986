@@ -43,6 +43,9 @@ void config_set_defaults(Config *cfg) {
     cfg->tape_video_monitor = false;
     cfg->debug_overlay = false;
     cfg->joystick_hidapi = false;
+    cfg->main_input_port = 2;
+    cfg->joy_port_mode[0] = JOYPORT_JOYSTICK;
+    cfg->joy_port_mode[1] = JOYPORT_JOYSTICK;
 }
 
 void config_normalize_drive_units(Config *cfg) {
@@ -138,6 +141,9 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "tape_video_monitor")) cfg->tape_video_monitor = atoi(value) != 0;
     else if (!strcasecmp(key, "debug_overlay"))      cfg->debug_overlay = atoi(value) != 0;
     else if (!strcasecmp(key, "joystick_hidapi"))    cfg->joystick_hidapi = atoi(value) != 0;
+    else if (!strcasecmp(key, "main_input_port"))    cfg->main_input_port = atoi(value);
+    else if (!strcasecmp(key, "joy_port_1_mode"))    cfg->joy_port_mode[0] = (JoyPortMode)atoi(value);
+    else if (!strcasecmp(key, "joy_port_2_mode"))    cfg->joy_port_mode[1] = (JoyPortMode)atoi(value);
 }
 
 bool config_load(Config *cfg, const char *path) {
@@ -149,6 +155,11 @@ bool config_load(Config *cfg, const char *path) {
     while (fgets(line, sizeof(line), f)) parse_line(cfg, line);
     fclose(f);
     config_normalize_drive_units(cfg);
+    if (cfg->main_input_port != 1 && cfg->main_input_port != 2) cfg->main_input_port = 2;
+    for (int i = 0; i < 2; ++i)
+        if (cfg->joy_port_mode[i] != JOYPORT_JOYSTICK &&
+            cfg->joy_port_mode[i] != JOYPORT_MOUSE)
+            cfg->joy_port_mode[i] = JOYPORT_JOYSTICK;
     return true;
 }
 
@@ -193,6 +204,9 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "tape_video_monitor = %d\n", cfg->tape_video_monitor ? 1 : 0);
     fprintf(f, "debug_overlay = %d\n", cfg->debug_overlay ? 1 : 0);
     fprintf(f, "joystick_hidapi = %d\n", cfg->joystick_hidapi ? 1 : 0);
+    fprintf(f, "main_input_port = %d\n", cfg->main_input_port);
+    fprintf(f, "joy_port_1_mode = %d\n", cfg->joy_port_mode[0]);
+    fprintf(f, "joy_port_2_mode = %d\n", cfg->joy_port_mode[1]);
     fclose(f);
     return true;
 }
@@ -201,5 +215,13 @@ bool config_save_column_mode(const char *path, bool col_mode_80) {
     Config stored;
     config_load(&stored, path); /* also installs defaults when path is absent */
     stored.col_mode_80 = col_mode_80;
+    return config_save(&stored, path);
+}
+
+bool config_save_input_port(const char *path, int port) {
+    if (port != 1 && port != 2) return false;
+    Config stored;
+    config_load(&stored, path);
+    stored.main_input_port = port;
     return config_save(&stored, path);
 }

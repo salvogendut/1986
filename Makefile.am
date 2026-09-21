@@ -9,6 +9,7 @@ dist_man1_MANS = 1986.1
 	src/display.c \
 	src/overlay.c \
 	src/kbd.c \
+	src/joyport.c \
 	src/c128.c \
 	src/cpu.c \
 	src/mem.c \
@@ -39,6 +40,7 @@ noinst_HEADERS = \
 	src/display.h \
 	src/overlay.h \
 	src/kbd.h \
+	src/joyport.h \
 	src/c128.h \
 	src/cpu.h \
 	src/mem.h \

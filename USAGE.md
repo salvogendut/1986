@@ -85,8 +85,21 @@ For BASIC 8, use the 80-column VDC display and hold CTRL through the C128
 startup to activate the ROM. Standard 640x200 bitmap output is supported;
 400-line interlace and some advanced VDC effects are still unfinished.
 
+General > Main input selects which C128 control port receives the host input.
+F1 swaps that host input between Joy Port 1 and Joy Port 2 immediately and
+persists the choice; Shift+F1 still sends the C128 function key.
+General > Joy Port 1/2 independently selects Joystick or Mouse (1351). A USB
+gamepad supplies directions and fire in joystick mode (D-pad or left stick;
+South/East button for fire). In mouse mode, click the emulator window to
+capture the pointer; movement and left/right buttons reach the selected 1351
+port through SID POTX/POTY and the CIA pins. The first click captures the system
+pointer in the active VIC/VDC window. Ctrl+Enter releases it; opening the F9
+overlay, changing output with F10, or swapping input ports with F1 releases it
+too. These settings persist in `1986.conf`.
+Advanced > Joystick HIDAPI takes effect after restart.
+
 The 785260 diagnostic cartridge expects Commodore's external test harness.
-1986 does not silently connect its user-port, serial, joystick, or cassette
+1986 does not silently connect its user-port, serial, or cassette
 loopback wiring. Those tests, including the CIA-to-CIA data-line part of
 `INTERRUPT`, can report `BAD` without a harness. The two CIA chips do emulate
 TOD alarms, serial shift-register interrupts, and FLAG edges internally.
