@@ -93,6 +93,7 @@ int main(void) {
     setenv("C128_CONFIG_PATH", config_file, 1);
 
     key(&ov, SDL_SCANCODE_F9);
+    CHECK(overlay_is_visible(&ov), "one F9 keypress opens the options overlay");
     CHECK(cfg.col_mode_80, "80-column key is selected by default");
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!cfg.col_mode_80 && !c->col_mode_80 && c->mem.mmu.col4080 &&

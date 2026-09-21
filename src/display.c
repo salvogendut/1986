@@ -154,6 +154,12 @@ void display_focus_active(Display *d) {
     if (target) SDL_RaiseWindow(target);
 }
 
+SDL_Renderer *display_active_renderer(const Display *d) {
+    if (!d->one_display && d->vdc_active && d->vdc_renderer)
+        return d->vdc_renderer;
+    return d->renderer;
+}
+
 bool display_vdc_window_open(const Display *d) {
     return d->vdc_window != NULL;
 }

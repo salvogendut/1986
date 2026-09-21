@@ -630,7 +630,7 @@ int main(int argc, char **argv) {
 
         /* --- Frame present --- */
         display_upload(&c.display);
-        overlay_render(&overlay, c.display.renderer);
+        overlay_render(&overlay, display_active_renderer(&c.display));
         display_render_function_keys(&c.display);
         if (paused) display_draw_paused_label(&c.display);
         notify_render(c.display.renderer);
