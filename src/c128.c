@@ -8,6 +8,15 @@
 /* Frame counter for the z80.c debug instrumentation (ONE_K_TRACE_IM1). */
 int c128_frame_count = 0;
 
+static bool drive_probe_active(const C128 *c) {
+    return c->cfg && c->cfg->real_disk_drive && c->cfg->drive_type == 1571 &&
+           c->integrated_drive.rom_loaded;
+}
+
+static void drive_via_port_change(void *ctx, unsigned port, u8 pins) {
+    if (port == 1) iec_bus_set_drive(&((C128 *)ctx)->iec_bus, pins);
+}
+
 /* --- CPU bus: route CPU reads/writes through memory + I/O. --- */
 
 static u8 io_read(C128 *c, u16 addr) {
@@ -61,7 +70,13 @@ static u8 io_read(C128 *c, u16 addr) {
             v = cia_read(&c->cia1, addr);
         }
     }
-    else if (addr >= 0xDD00 && addr < 0xDE00) v = cia_read(&c->cia2, addr);
+    else if (addr >= 0xDD00 && addr < 0xDE00) {
+        if ((addr & 15) == 0 && drive_probe_active(c)) {
+            /* CIA2 PA6/PA7 are serial CLOCK/DATA inputs regardless of DDR. */
+            v = (u8)((cia_read(&c->cia2, addr) & 0x3f) |
+                     iec_bus_host_inputs(&c->iec_bus));
+        } else v = cia_read(&c->cia2, addr);
+    }
     else if (addr >= 0xD600 && addr < 0xD700) {
         vdc_set_bus_clock(&c->vdc, cpu_cycles(), c->fast);
         v = ((addr & 1) == 0) ? vdc_read_status(&c->vdc) : vdc_read_data(&c->vdc);
@@ -88,7 +103,12 @@ static void io_write(C128 *c, u16 addr, u8 val) {
         }
     }
     if (addr >= 0xDC00 && addr < 0xDD00) { cia_write(&c->cia1, addr, val); return; }
-    if (addr >= 0xDD00 && addr < 0xDE00) { cia_write(&c->cia2, addr, val); return; }
+    if (addr >= 0xDD00 && addr < 0xDE00) {
+        cia_write(&c->cia2, addr, val);
+        if ((addr & 15) == 0 || (addr & 15) == 2)
+            iec_bus_set_host(&c->iec_bus, c->cia2.pra, c->cia2.ddra);
+        return;
+    }
     if (addr >= 0xD600 && addr < 0xD700) {
         vdc_set_bus_clock(&c->vdc, cpu_cycles(), c->fast);
         if ((addr & 1) == 0) vdc_write_index(&c->vdc, val);   /* $D600 */
@@ -168,6 +188,9 @@ void c128_init(C128 *c, Config *cfg) {
     drive_set_slot(&c->drive2, 1);
     drive_set_unit(&c->drive2, cfg->drive2_unit);
     drive1571cr_init(&c->integrated_drive);
+    iec_bus_init(&c->iec_bus, &c->integrated_drive.via1);
+    via6522_set_port_hook(&c->integrated_drive.via1,
+                          drive_via_port_change, c);
 
     /* Reset is deferred: the host loads machine ROMs after c128_init(), and
      * the reset vector must be read from the loaded KERNAL ROM. */
@@ -189,6 +212,9 @@ void c128_reset(C128 *c) {
     drive_reset(&c->drive);
     drive_reset(&c->drive2);
     drive1571cr_reset(&c->integrated_drive);
+    iec_bus_reset(&c->iec_bus);
+    iec_bus_set_host(&c->iec_bus, c->cia2.pra, c->cia2.ddra);
+    c->drive_clock_fraction = 0;
     drive_set_unit(&c->drive2, c->cfg->drive2_unit);
     c->paused = false;
     c->frames_since_reset = 0;
@@ -213,6 +239,18 @@ int c128_frame(C128 *c) {
         remaining -= chunk;
         cia_tick(&c->cia1, chunk);
         cia_tick(&c->cia2, chunk);
+        if (drive_probe_active(c)) {
+            /* PAL frame = 1/50 s; VICE synchronizes a 1571 at 1 MHz, or
+             * 2 MHz when VIA1 PA5 selects double speed. The remainder and
+             * instruction overshoot survive raster-line boundaries. */
+            unsigned drive_hz_per_frame = c->integrated_drive.clock_2mhz
+                                        ? 40000u : 20000u;
+            unsigned scaled = c->drive_clock_fraction +
+                              (unsigned)chunk * drive_hz_per_frame;
+            int budget = (int)(scaled / (unsigned)frame_cycles);
+            c->drive_clock_fraction = scaled % (unsigned)frame_cycles;
+            drive1571cr_advance(&c->integrated_drive, budget);
+        } else c->drive_clock_fraction = 0;
         /* Fast mode doubles CPU cycles per frame, not the SID's clock. */
         int sid_cycles = chunk;
         if (c->fast) {
@@ -234,6 +272,16 @@ int c128_frame(C128 *c) {
     c->total_cycles += (u64)total;
     c128_frame_count++;
     c->frames_since_reset++;
+    if (drive_probe_active(c) && getenv("C128_1571_TRACE") &&
+        c->frames_since_reset % 50 == 0) {
+        fprintf(stderr, "[1571] frame=%d pc=$%04x cycles=%llu via1=$%02x/$%02x IEC=%d%d%d%s\n",
+                c->frames_since_reset, c->integrated_drive.cpu.pc,
+                (unsigned long long)c->integrated_drive.cpu.cycles,
+                c->integrated_drive.via1.ora, c->integrated_drive.via1.orb,
+                c->iec_bus.atn_high, c->iec_bus.clock_high,
+                c->iec_bus.data_high,
+                c->integrated_drive.cpu.jammed ? " JAMMED" : "");
+    }
 
     /* $D506 bit 6 selects the VIC's 64K RAM bank on a 128K machine; CIA2
      * port A bits 0-1 select the inverted 16K window inside it. Input pins

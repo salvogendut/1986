@@ -12,6 +12,7 @@
 #include "joyport.h"
 #include "drive.h"
 #include "drive1571cr.h"
+#include "iec_bus.h"
 #include "config.h"
 #include <stdbool.h>
 
@@ -42,6 +43,8 @@ typedef struct {
     Drive   drive;
     Drive   drive2;
     Drive1571Cr integrated_drive; /* independent ROM-backed 1571CR machine */
+    IecBus  iec_bus;     /* physical slow IEC pins, separate from VirtualDrive */
+    unsigned drive_clock_fraction;
     Config *cfg;
     bool    paused;
     bool    fast;        /* 8502 at 2 MHz (C128 fast mode) */

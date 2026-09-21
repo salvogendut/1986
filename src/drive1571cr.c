@@ -104,6 +104,9 @@ void drive1571cr_write(Drive1571Cr *d, u16 addr, u8 value) {
         if (chip == DRIVE1571CR_VIA1 || chip == DRIVE1571CR_VIA2) {
             via6522_write(chip == DRIVE1571CR_VIA1 ? &d->via1 : &d->via2,
                           addr, value);
+            if (chip == DRIVE1571CR_VIA1 &&
+                ((addr & 15) == 1 || (addr & 15) == 3 || (addr & 15) == 15))
+                d->clock_2mhz = (via6522_output_a(&d->via1) & 0x20) != 0;
             update_irq(d);
         } else if (chip == DRIVE1571CR_MOS5710) mos5710_write(d, addr, value);
         else if (d->io_write) d->io_write(d->io_ctx, chip, addr, value);
@@ -121,6 +124,8 @@ void drive1571cr_reset(Drive1571Cr *d) {
     via6522_reset(&d->via2);
     cia_reset(&d->mos5710);
     d->external_irq = false;
+    d->clock_debt = 0;
+    d->clock_2mhz = false;
     cpu->a = cpu->x = cpu->y = 0;
     cpu->sp = 0xfd;
     cpu->p = I | U;
@@ -444,5 +449,17 @@ int drive1571cr_run(Drive1571Cr *d, int cycle_budget) {
         if (!cycles) break;
         elapsed += cycles;
     }
+    return elapsed;
+}
+
+int drive1571cr_advance(Drive1571Cr *d, int cycle_budget) {
+    if (cycle_budget <= 0 || !d->rom_loaded || d->cpu.jammed) return 0;
+    int remaining = cycle_budget - d->clock_debt;
+    if (remaining <= 0) {
+        d->clock_debt = -remaining;
+        return 0;
+    }
+    int elapsed = drive1571cr_run(d, remaining);
+    d->clock_debt = elapsed ? elapsed - remaining : 0;
     return elapsed;
 }

@@ -277,8 +277,9 @@ int main(int argc, char **argv) {
         } else {
             fprintf(stderr, "1986: loaded %d ROM image(s) from '%s'\n", n, dir);
         }
-        /* The independent 1571CR core owns the optional DOS ROM. It is not
-         * connected to IEC yet, so the Advanced preference remains pending. */
+        /* The independent 1571CR core owns the optional DOS ROM. Its slow
+         * IEC pins are connected for hardware probing, but FDC and mechanism
+         * emulation are still missing; disk service remains virtual. */
         char drive_rom_path[CONFIG_PATH_MAX];
         int drive_rom_len = snprintf(drive_rom_path, sizeof(drive_rom_path),
                                      "%s/dos1571cr.bin", dir);
