@@ -37,7 +37,7 @@ second_drive = 0
 drive_unit = 8
 drive2_unit = 9
 # Hardware models selected in Media when Real Disk Drive is On.
-# The 1571CR read path works; writes and 1581 hardware are not yet implemented.
+# 1571CR supports normal GCR sector reads/writes on D64/D71; 1581 hardware is future.
 drive_type = 1571
 drive2_type = 1571
 disk =

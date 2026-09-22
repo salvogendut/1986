@@ -144,11 +144,17 @@ matching files, and `OPEN 15,8,15,"R:NEW=OLD":CLOSE 15` renames one.
 The commands write the host image atomically. Locked files, REL files, D81
 partitions, and malformed chains are not modified.
 
-With Tinker enabled in General, Advanced > Real Disk Drive stores a future
-backend preference. It defaults to Off. On currently displays `On (pending)`:
-the hardware drive emulator is not yet implemented, so the fast virtual drive
-remains active. It does not emulate 1571/1581 hardware or D81 partition and
-REL-file operations.
+Advanced > Real Disk Drive defaults to Off. With it On, Media set to 1571CR,
+and `dos1571cr.bin` installed, restart to use the ROM-backed integrated 1571
+over slow IEC. Normal D64/D71 GCR sector reads and writes work, including
+BASIC `SAVE`; writes atomically replace the host disk image. Keep a backup of
+valuable disks. Read-only media and external host edits are protected, and
+Media refuses an eject/replacement while a write remains unsaved. The real
+drive does not yet support nonstandard raw tracks, burst serial, or the 1581
+hardware backend. Advanced has independent audio and visual drive monitors,
+both Off by default; the visual scope sits above the function-key footer.
+If a write error appears, resolve it before quitting: the original image stays
+intact, but unsaved in-memory GCR data cannot survive exit.
 
 The F9 overlay uses a compact top panel with smaller text; the running screen
 remains visible below it.

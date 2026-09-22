@@ -132,8 +132,14 @@ void drive1571cr_write(Drive1571Cr *d, u16 addr, u8 value) {
                 gcr_drive_set_side(&d->gcr,
                     (via6522_output_a(&d->via1) & 0x04) != 0);
             }
-            if (chip == DRIVE1571CR_VIA2)
+            if (chip == DRIVE1571CR_VIA2) {
+                if ((addr & 15) == 1 || (addr & 15) == 15)
+                    gcr_drive_write_byte(&d->gcr, value);
+                if ((addr & 15) == 12)
+                    gcr_drive_set_write_mode(&d->gcr,
+                        (d->via2.pcr & 0x20) == 0);
                 gcr_drive_update_via(&d->gcr, &d->via2);
+            }
             update_irq(d);
         } else if (chip == DRIVE1571CR_MOS5710) mos5710_write(d, addr, value);
         else if (d->io_write) d->io_write(d->io_ctx, chip, addr, value);

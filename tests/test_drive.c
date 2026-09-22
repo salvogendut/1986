@@ -124,6 +124,12 @@ static bool pair_directory_contains(Drive *first, Drive *second,
     return false;
 }
 
+static int block_media_change(void *ctx) {
+    int *calls = ctx;
+    ++*calls;
+    return -1;
+}
+
 int main(void) {
     char first[] = "/tmp/1986-drive-first-XXXXXX";
     char second[] = "/tmp/1986-drive-second-XXXXXX";
@@ -154,6 +160,13 @@ int main(void) {
           "first DiskImage contents are live");
     CHECK(directory_contains(&drive.virtual_drive, "FIRSTFILE"),
           "DIRECTORY reads first DiskImage");
+    int blocked_calls = 0;
+    drive_set_media_change_hook(&drive, block_media_change, &blocked_calls);
+    CHECK(drive_attach_disk(&drive, second) == -2 &&
+          blocked_calls == 1 && drive.media_generation == 1 &&
+          drive.image.data && drive.image.data[0] == 0x11,
+          "failed physical write flush keeps old media and generation");
+    drive_set_media_change_hook(&drive, NULL, NULL);
     cfg.real_disk_drive = true;
     drive_reset(&drive);
     CHECK(directory_contains(&drive.virtual_drive, "FIRSTFILE"),

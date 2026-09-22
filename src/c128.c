@@ -17,6 +17,11 @@ static void drive_via_port_change(void *ctx, unsigned port, u8 pins) {
     if (port == 1) iec_bus_set_drive(&((C128 *)ctx)->iec_bus, pins);
 }
 
+static int flush_integrated_drive(void *ctx) {
+    C128 *c = ctx;
+    return gcr_drive_flush(&c->integrated_drive.gcr) == DISK_SAVE_OK ? 0 : -1;
+}
+
 /* --- CPU bus: route CPU reads/writes through memory + I/O. --- */
 
 static u8 io_read(C128 *c, u16 addr) {
@@ -184,6 +189,7 @@ void c128_init(C128 *c, Config *cfg) {
     joyports_reset(&c->joyports);
     config_normalize_drive_units(cfg);
     drive_init(&c->drive, cfg);
+    drive_set_media_change_hook(&c->drive, flush_integrated_drive, c);
     drive_init(&c->drive2, cfg);
     drive_set_slot(&c->drive2, 1);
     drive_set_unit(&c->drive2, cfg->drive2_unit);
@@ -293,8 +299,19 @@ int c128_frame(C128 *c) {
     if (c->drive_raw_iec && drive_monitor_update(&c->drive_monitor,
             c->integrated_drive.gcr.motor,
             c->integrated_drive.gcr.step_events,
-            c->integrated_drive.gcr.read_events))
+            c->integrated_drive.gcr.read_events +
+            c->integrated_drive.gcr.write_events))
         leds_ping(LED_FDC_A);
+    GcrDrive *gcr = &c->integrated_drive.gcr;
+    if (c->drive_raw_iec && gcr->write_error != DISK_SAVE_OK &&
+        !gcr->write_error_reported) {
+        notify_post(gcr->write_error == DISK_SAVE_WRITE_PROTECT
+                    ? "1571 DISK IS WRITE PROTECTED"
+                    : "1571 WRITE COULD NOT BE SAVED");
+        fprintf(stderr, "1986: 1571 GCR write not saved (error %d)\n",
+                (int)gcr->write_error);
+        gcr->write_error_reported = true;
+    }
     c128_frame_count++;
     c->frames_since_reset++;
     if (drive_probe_active(c) && getenv("C128_1571_TRACE") &&

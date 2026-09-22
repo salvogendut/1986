@@ -34,7 +34,7 @@ typedef struct {
     bool rom_loaded;
     Drive1571CrCpu cpu;
     Via6522 via1, via2;
-    GcrDrive gcr; /* read-only GCR mechanism behind VIA2 */
+    GcrDrive gcr; /* D64/D71 GCR mechanism behind VIA2 */
     Cia mos5710; /* partial CIA portion; FDC2 registers remain external */
     int clock_debt; /* instruction overshoot carried into the next bus slice */
     bool clock_2mhz; /* VIA1 PA5 selects the 1571's 2 MHz sync mode */

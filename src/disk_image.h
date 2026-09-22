@@ -72,6 +72,14 @@ void disk_image_close(DiskImage *d);
 /* Read one sector into buf[256]. Returns 0 on success, -1 if out of range. */
 int  disk_image_read_sector(const DiskImage *d, int track, int sector, u8 *buf);
 
+/* Persist selected decoded sectors of one D64/D71 GCR track in one atomic
+ * image replacement. sector_data contains all track sectors consecutively;
+ * bit N of sector_mask selects sector N. The live image stays unchanged on
+ * failure. */
+DiskSaveResult disk_image_write_gcr_track(DiskImage *d, int track,
+                                          const u8 *sector_data,
+                                          unsigned sector_mask);
+
 /* Read the directory into an array of decoded entries (up to cap). Returns
  * the number of entries read. */
 int  disk_image_read_directory_entries(const DiskImage *d, DiskDirEntry *ents, int cap);

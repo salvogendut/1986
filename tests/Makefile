@@ -11,7 +11,7 @@ else
 GC_SECTIONS_LDFLAGS = -Wl,--gc-sections
 endif
 
-TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-gcr-drive test-via6522 test-iec-bus test-prg-drive test-overlay test-display-footer test-vic test-vdc
+TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-overlay test-display-footer test-vic test-vdc
 
 .PHONY: all check clean
 
@@ -86,6 +86,10 @@ test-gcr-drive: test_gcr_drive.c ../src/gcr_drive.c ../src/gcr_drive.h ../src/di
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_gcr_drive.c ../src/gcr_drive.c ../src/disk_image.c ../src/via6522.c -o $@
 
+test-gcr-write: test_gcr_write.c ../src/gcr_drive.c ../src/gcr_drive.h ../src/disk_image.c ../src/via6522.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
+		test_gcr_write.c ../src/gcr_drive.c ../src/disk_image.c ../src/via6522.c -o $@
+
 test-via6522: test_via6522.c ../src/via6522.c ../src/via6522.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_via6522.c ../src/via6522.c -o $@
@@ -133,6 +137,7 @@ check: $(TESTS)
 	./test-drive1571cr
 	./test-drive-monitor
 	./test-gcr-drive
+	./test-gcr-write
 	./test-via6522
 	./test-iec-bus
 	./test-prg-drive

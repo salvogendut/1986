@@ -22,13 +22,18 @@ typedef struct Drive {
     DiskImage image;          /* attached disk image or standalone PRG */
     bool    disk_attached;
     unsigned media_generation; /* changes on insert/eject, including replacement */
+    int (*before_media_change)(void *ctx); /* flush physical write cache */
+    void *media_change_ctx;
 } Drive;
 
 void drive_init(Drive *d, Config *cfg);
 void drive_reset(Drive *d);
 
-/* Attach (or detach with path=NULL) a D64/D71/D81 image or read-only PRG. */
+/* Attach (or detach with path=NULL) a D64/D71/D81 image or read-only PRG.
+ * Returns -2 if a pending physical write cannot be flushed; old media stays
+ * attached in that case. */
 int  drive_attach_disk(Drive *d, const char *path);
+void drive_set_media_change_hook(Drive *d, int (*hook)(void *ctx), void *ctx);
 
 /* Select the IEC device number. */
 void drive_set_unit(Drive *d, int unit);

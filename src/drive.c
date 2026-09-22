@@ -26,6 +26,9 @@ void drive_reset(Drive *d) {
 }
 
 int drive_attach_disk(Drive *d, const char *path) {
+    if (d->disk_attached && d->before_media_change &&
+        d->before_media_change(d->media_change_ctx) != 0)
+        return -2;
     d->media_generation++;
     bool had_disk = d->disk_attached;
     virtual_drive_attach(&d->virtual_drive, NULL);
@@ -45,6 +48,11 @@ int drive_attach_disk(Drive *d, const char *path) {
     virtual_drive_attach(&d->virtual_drive, &d->image);
     drive_activity(d);
     return 0;
+}
+
+void drive_set_media_change_hook(Drive *d, int (*hook)(void *ctx), void *ctx) {
+    d->before_media_change = hook;
+    d->media_change_ctx = ctx;
 }
 
 void drive_set_unit(Drive *d, int unit) {
