@@ -145,6 +145,8 @@ int main(void) {
     Drive drive;
     drive_init(&drive, &cfg);
     CHECK(drive_attach_disk(&drive, first) == 0, "insert first DiskImage");
+    CHECK(drive.media_generation == 1,
+          "initial insert advances hardware media generation");
     CHECK(drive.disk_attached, "first DiskImage is attached");
     CHECK(drive.virtual_drive.disk == &drive.image,
           "virtual drive sees first DiskImage");
@@ -158,6 +160,8 @@ int main(void) {
           "pending real-drive preference keeps virtual backend available");
 
     CHECK(drive_attach_disk(&drive, second) == 0, "replace DiskImage");
+    CHECK(drive.media_generation == 2,
+          "replacement advances hardware media generation");
     CHECK(drive.disk_attached, "replacement DiskImage is attached");
     CHECK(drive.virtual_drive.disk == &drive.image,
           "virtual drive sees replacement DiskImage");
@@ -220,7 +224,10 @@ int main(void) {
     drive_attach_disk(&pair_first, NULL);
     drive_attach_disk(&pair_second, NULL);
 
+    unsigned before_eject = drive.media_generation;
     CHECK(drive_attach_disk(&drive, NULL) == 0, "eject DiskImage");
+    CHECK(drive.media_generation == before_eject + 1,
+          "eject advances hardware media generation");
     CHECK(!drive.disk_attached, "eject clears attached state");
     CHECK(drive.virtual_drive.disk == NULL, "eject clears virtual media");
 

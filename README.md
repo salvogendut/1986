@@ -122,10 +122,13 @@ layer. The independent 1571CR core has a 2K RAM/32K ROM bus map,
 reset/interrupt vectors, a standalone NMOS 6502 instruction core, two
 6522 VIAs with port, timer, and IRQ handling, and the MOS5710's limited CIA
 serial/interrupt registers. With Real Disk Drive selected and a 1571CR ROM
-present, its CPU now clocks alongside the C128 and its slow IEC pins connect
-to CIA2. This is a hardware probe, not yet a usable disk backend: WD1770/FDC2,
-mechanism timing, and burst serial are still missing. Only the integrated
-Drive 1 is probed; an enabled second drive remains virtual.
+present, its CPU clocks alongside the C128 and its slow IEC pins connect
+to CIA2. A read-only GCR mechanism now presents D64/D71 sector tracks to the
+drive ROM through VIA2, including motor, head step, side, speed, sync, and
+write-protect sensing. This is still a hardware probe, not yet a usable disk
+backend: write-side GCR, WD1770/FDC2, accurate mechanism timing, and burst
+serial are missing. Only the integrated Drive 1 is probed; an enabled second
+drive remains virtual.
 Advanced > Real Disk Drive is still a saved preference: while the
 hardware backend is pending, the fast virtual drive still services disk
 commands through KERNAL traps. With that
@@ -136,7 +139,7 @@ in both the 40-column and 80-column windows. For now these follow the active
 virtual drive's disk and IEC transfers; true-drive hardware LED state will be
 connected when the physical backend becomes operational.
 For drive-ROM diagnostics, `C128_1571_TRACE=1` logs its PC, cycle count, VIA
-ports, and slow IEC line levels every 50 frames.
+ports, slow IEC line levels, and GCR head/motor state every 50 frames.
 
 See [DEVELOPMENT.md](Development.md) for technical notes and
 [ROADMAP.md](ROADMAP.md) for the forward plan.
