@@ -859,30 +859,30 @@ void overlay_render_drive_scope(const Overlay *ov, SDL_Renderer *r) {
     SDL_SetRenderDrawColor(r, 105, 145, 155, 130);
     SDL_RenderLine(r, plot_x, center_y, plot_x + plot_w, center_y);
 
-    s16 samples[DRIVE_MONITOR_WAVEFORM_SAMPLES];
-    size_t count = drive_monitor_waveform_copy(&ov->c128->drive_monitor,
-                    samples, DRIVE_MONITOR_WAVEFORM_SAMPLES);
-    int points_count = (int)plot_w;
-    if (points_count > 1024) points_count = 1024;
-    if ((size_t)points_count > count) points_count = (int)count;
-    if (points_count >= 2) {
-        SDL_FPoint points[1024];
-        for (int i = 0; i < points_count; ++i) {
-            size_t first = (size_t)i * count / (size_t)points_count;
-            size_t end = (size_t)(i + 1) * count / (size_t)points_count;
-            if (end <= first) end = first + 1;
-            long sum = 0;
-            for (size_t j = first; j < end; ++j) sum += samples[j];
-            float sample = (float)sum / (float)(end - first);
-            float y = center_y - sample * (plot_h * 0.5f) / 3500.0f;
-            if (y < plot_y) y = plot_y;
-            if (y > plot_y + plot_h) y = plot_y + plot_h;
-            points[i] = (SDL_FPoint){
-                plot_x + (float)i * plot_w / (float)(points_count - 1), y
-            };
+    DriveActivity frames[DRIVE_MONITOR_HISTORY_FRAMES];
+    size_t count = drive_monitor_history_copy(&ov->c128->drive_monitor,
+                    frames, DRIVE_MONITOR_HISTORY_FRAMES);
+    float cell_w = plot_w / DRIVE_MONITOR_HISTORY_FRAMES;
+    for (size_t i = 0; i < count; ++i) {
+        const DriveActivity *a = &frames[i];
+        float x = plot_x + (float)(DRIVE_MONITOR_HISTORY_FRAMES - count + i) *
+                            cell_w;
+        if (a->reads) {
+            unsigned capped = a->reads > 24 ? 24 : a->reads;
+            float h = 2.0f + (float)capped * 0.55f;
+            SDL_SetRenderDrawColor(r, 100, 235, 245, 230);
+            SDL_RenderLine(r, x, center_y, x, center_y - h);
         }
-        SDL_SetRenderDrawColor(r, 120, 235, 245, 235);
-        SDL_RenderLines(r, points, points_count);
+        if (a->writes) {
+            unsigned capped = a->writes > 24 ? 24 : a->writes;
+            float h = 2.0f + (float)capped * 0.55f;
+            SDL_SetRenderDrawColor(r, 250, 175, 90, 230);
+            SDL_RenderLine(r, x, center_y, x, center_y + h);
+        }
+        if (a->steps) {
+            SDL_SetRenderDrawColor(r, 245, 120, 215, 230);
+            SDL_RenderLine(r, x, plot_y, x, plot_y + plot_h);
+        }
     }
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
 }

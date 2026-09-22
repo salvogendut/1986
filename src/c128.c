@@ -298,8 +298,10 @@ int c128_frame(C128 *c) {
     c->total_cycles += (u64)total;
     if (c->drive_raw_iec && drive_monitor_update(&c->drive_monitor,
             c->integrated_drive.gcr.motor,
+            c->integrated_drive.gcr.led,
+            c->integrated_drive.gcr.half_track,
             c->integrated_drive.gcr.step_events,
-            c->integrated_drive.gcr.read_events +
+            c->integrated_drive.gcr.read_events,
             c->integrated_drive.gcr.write_events))
         leds_ping(LED_FDC_A);
     GcrDrive *gcr = &c->integrated_drive.gcr;
@@ -316,7 +318,7 @@ int c128_frame(C128 *c) {
     c->frames_since_reset++;
     if (drive_probe_active(c) && getenv("C128_1571_TRACE") &&
         c->frames_since_reset % 50 == 0) {
-        fprintf(stderr, "[1571] frame=%d pc=$%04x cycles=%llu via1=$%02x/$%02x pcr=$%02x ifr=$%02x ier=$%02x ca1=%d irq=%d CIA2=$%02x/$%02x IEC=%d%d%d host=%u drive=%u lines=%u ram79=$%02x ram7a=$%02x ram83=$%02x ram84=$%02x GCR=m%d s%u h%u z%u p%u $%02x sync%d%s\n",
+        fprintf(stderr, "[1571] frame=%d pc=$%04x cycles=%llu via1=$%02x/$%02x pcr=$%02x ifr=$%02x ier=$%02x ca1=%d irq=%d CIA2=$%02x/$%02x IEC=%d%d%d host=%u drive=%u lines=%u ram79=$%02x ram7a=$%02x ram83=$%02x ram84=$%02x GCR=m%d led%d s%u h%u z%u p%u $%02x sync%d R%u W%u%s\n",
                 c->frames_since_reset, c->integrated_drive.cpu.pc,
                 (unsigned long long)c->integrated_drive.cpu.cycles,
                 c->integrated_drive.via1.ora, c->integrated_drive.via1.orb,
@@ -335,12 +337,15 @@ int c128_frame(C128 *c) {
                 c->integrated_drive.ram[0x83],
                 c->integrated_drive.ram[0x84],
                 c->integrated_drive.gcr.motor,
+                c->integrated_drive.gcr.led,
                 c->integrated_drive.gcr.side,
                 c->integrated_drive.gcr.half_track,
                 c->integrated_drive.gcr.zone,
                 c->integrated_drive.gcr.byte_pos,
                 c->integrated_drive.gcr.read_byte,
                 c->integrated_drive.gcr.sync,
+                c->integrated_drive.gcr.read_events,
+                c->integrated_drive.gcr.write_events,
                 c->integrated_drive.cpu.jammed ? " JAMMED" : "");
     }
 

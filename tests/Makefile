@@ -78,7 +78,7 @@ test-drive1571cr: test_drive1571cr.c ../src/drive1571cr.c ../src/drive1571cr.h .
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_drive1571cr.c ../src/drive1571cr.c ../src/gcr_drive.c ../src/disk_image.c ../src/via6522.c ../src/cia.c -o $@
 
-test-drive-monitor: test_drive_monitor.c ../src/drive_monitor.c ../src/drive_monitor.h
+test-drive-monitor: test_drive_monitor.c ../src/drive_monitor.c ../src/drive_monitor.h ../src/drive_sound_samples.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_drive_monitor.c ../src/drive_monitor.c -lm -o $@
 
@@ -102,7 +102,7 @@ test-prg-drive: test_prg_drive.c ../src/drive.c ../src/drive.h ../src/disk_image
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_prg_drive.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c -o $@
 
-test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c ../src/drive_monitor.c
+test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c ../src/drive_monitor.c ../src/drive_sound_samples.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_overlay.c ../src/overlay.c ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c \
 		../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c ../src/drive_monitor.c $(SDL3_LIBS) -lm -o $@

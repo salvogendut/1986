@@ -4,7 +4,7 @@
 
 static int failures;
 #define CHECK(ok, label) do { if (!(ok)) { \
-    fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, label); \
+    fprintf(stderr, "FAIL %s:%d: %s\\n", __FILE__, __LINE__, label); \
     failures++; \
 } } while (0)
 
@@ -18,55 +18,60 @@ static long energy(const s16 *pcm, int count) {
 int main(void) {
     DriveMonitor m;
     s16 pcm[882] = {0};
+    DriveActivity history[DRIVE_MONITOR_HISTORY_FRAMES];
     drive_monitor_reset(&m);
-    CHECK(!drive_monitor_update(&m, false, 0, 0),
+    CHECK(!drive_monitor_update(&m, false, false, 2, 0, 0, 0),
           "idle mechanism leaves the activity LED dark");
-    drive_monitor_mix(&m, pcm, 882, false, false);
+    drive_monitor_mix(&m, pcm, 882, false);
     CHECK(energy(pcm, 882) == 0, "disabled audio is silent");
+    drive_monitor_mix(&m, pcm, 882, true);
+    CHECK(energy(pcm, 882) == 0, "idle drive is silent");
 
-    CHECK(drive_monitor_update(&m, true, 0, 0),
-          "motor start gives an activity pulse");
-    drive_monitor_mix(&m, pcm, 882, true, false);
-    CHECK(energy(pcm, 882) > 0, "motor produces audible PCM");
+    CHECK(drive_monitor_update(&m, true, false, 2, 0, 0, 0),
+          "motor start lights the activity LED");
+    drive_monitor_mix(&m, pcm, 882, true);
+    CHECK(energy(pcm, 882) > 0, "motor start plays mechanism recording");
 
-    int flashes = 0, dark = 0;
-    for (unsigned frame = 1; frame <= 60; ++frame) {
-        if (drive_monitor_update(&m, true, 0, frame)) flashes++;
-        else dark++;
-    }
-    CHECK(flashes >= 3 && dark >= 30,
-          "continuous disk reads pulse rather than pin the LED on");
-    CHECK(drive_monitor_update(&m, true, 2, 61),
-          "head steps flash the LED immediately");
-    CHECK(m.click_remaining > 0, "head steps queue a short click");
+    CHECK(!drive_monitor_update(&m, true, false, 2, 0, 0, 0),
+          "motor alone does not invent periodic data activity");
+    CHECK(drive_monitor_update(&m, true, false, 2, 0, 3, 0),
+          "actual read bytes light the LED");
+    CHECK(drive_monitor_update(&m, true, false, 2, 0, 3, 2),
+          "actual written bytes light the LED");
+    CHECK(!drive_monitor_update(&m, true, false, 2, 0, 3, 2),
+          "idle transfer frame does not flash");
+    CHECK(drive_monitor_update(&m, true, true, 2, 0, 3, 2),
+          "physical drive LED is honored");
+    CHECK(drive_monitor_update(&m, true, false, 38, 2, 3, 2),
+          "head steps light the LED");
     memset(pcm, 0, sizeof(pcm));
-    drive_monitor_mix(&m, pcm, 882, true, false);
-    CHECK(energy(pcm, 882) > 0 && m.click_remaining == 0,
-          "head click mixes and ends within one audio frame");
+    drive_monitor_mix(&m, pcm, 882, true);
+    CHECK(energy(pcm, 882) > 0, "head step plays mechanism recording");
 
-    CHECK(drive_monitor_update(&m, false, 2, 61),
-          "motor stop gives a final activity pulse");
-    for (int i = 0; i < 50; ++i) {
+    size_t n = drive_monitor_history_copy(&m, history,
+                                          DRIVE_MONITOR_HISTORY_FRAMES);
+    CHECK(n == 8, "one history sample is recorded per video frame");
+    CHECK(history[3].reads == 3 && history[3].writes == 0,
+          "scope records actual read delta");
+    CHECK(history[4].reads == 0 && history[4].writes == 2,
+          "scope records actual write delta");
+    CHECK(history[7].steps == 2 && history[7].reads == 0,
+          "scope records head steps, not audio waveform");
+
+    CHECK(drive_monitor_update(&m, false, false, 38, 2, 3, 2),
+          "motor stop lights the LED once");
+    for (int i = 0; i < 30; ++i) {
         memset(pcm, 0, sizeof(pcm));
-        drive_monitor_mix(&m, pcm, 882, true, false);
+        drive_monitor_mix(&m, pcm, 882, true);
     }
-    CHECK(energy(pcm, 882) == 0, "motor fade reaches silence");
-    drive_monitor_update(&m, true, 3, 62);
+    CHECK(energy(pcm, 882) == 0, "spindown ends in silence");
+    drive_monitor_update(&m, true, false, 38, 3, 4, 2);
     memset(pcm, 0, sizeof(pcm));
-    drive_monitor_mix(&m, pcm, 882, false, false);
-    CHECK(energy(pcm, 882) == 0 && m.click_remaining == 0,
-          "turning the monitor off immediately mutes queued sounds");
-    drive_monitor_update(&m, true, 3, 63);
-    drive_monitor_mix(&m, pcm, 882, false, true);
-    s16 waveform[DRIVE_MONITOR_WAVEFORM_SAMPLES];
-    size_t count = drive_monitor_waveform_copy(&m, waveform,
-                                               DRIVE_MONITOR_WAVEFORM_SAMPLES);
-    CHECK(energy(pcm, 882) == 0 && count == 882 && energy(waveform, count) > 0,
-          "visual-only monitor records a waveform without changing SID audio");
-    drive_monitor_mix(&m, pcm, 882, false, false);
-    CHECK(drive_monitor_waveform_copy(&m, waveform,
-          DRIVE_MONITOR_WAVEFORM_SAMPLES) == 0,
-          "turning the visual monitor off clears the old trace");
+    drive_monitor_mix(&m, pcm, 882, false);
+    CHECK(energy(pcm, 882) == 0, "turning audio off mutes queued sounds");
+    CHECK(drive_monitor_history_copy(&m, history,
+          DRIVE_MONITOR_HISTORY_FRAMES) > 0,
+          "visual activity history works with audio off");
 
     if (!failures) puts("test-drive-monitor: OK");
     return failures ? 1 : 0;

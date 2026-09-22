@@ -66,6 +66,7 @@ noinst_HEADERS = \
 	src/drive.h \
 	src/drive1571cr.h \
 	src/drive_monitor.h \
+	src/drive_sound_samples.h \
 	src/gcr_drive.h \
 	src/iec_bus.h \
 	src/via6522.h \

@@ -143,11 +143,14 @@ the hardware type is 1581, the fast virtual backend remains active. Selecting
 1581 hardware does not imply that its hardware is emulated.
 The bottom bar shows a separately labeled activity LED for each enabled drive,
 in both the 40-column and 80-column windows. In true-drive mode, Drive 1's LED
-flashes on motor and head changes and pulses during disk-byte reads and writes.
-Advanced > Drive Audio Monitor (default Off) adds quiet, synthesized motor hum
-and head-step clicks to the SID output while the real 1571 runs. The independent
-Drive Visual Monitor toggle (also default Off) shows a translucent waveform
-panel with motor, track, side, and activity status, like 1984's tape scope.
+follows the drive-ROM LED state and lights on motor, head, and actual byte activity;
+it no longer blinks on a timer. Advanced > Drive Audio Monitor (default Off)
+adds motor and head sounds to the SID output while the real 1571 runs. The
+recordings come from VICE 3.10's GPL-licensed 1541-family drive-sound module,
+so they are an approximation of a 1571CR rather than a 1571CR recording.
+The independent Drive Visual Monitor toggle (also default Off) shows actual
+read-byte activity above the center line, write-byte activity below it, and
+head steps as full-height marks, alongside motor, track, and side status.
 Neither monitor affects emulated drive timing or the fast virtual backend.
 For drive-ROM diagnostics, `C128_1571_TRACE=1` logs its PC, cycle count, VIA
 ports, slow IEC line levels, and GCR head/motor state every 50 frames.
