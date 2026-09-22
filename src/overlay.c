@@ -545,6 +545,8 @@ static void overlay_activate(Overlay *ov) {
                     ov->cfg->drive2_unit, ov->cfg->drive_unit);
                 drive_reset(&ov->c128->drive2);
                 drive_set_unit(&ov->c128->drive2, ov->cfg->drive2_unit);
+                if (ov->c128->drive2_raw_iec)
+                    notify_post("REAL DRIVE 2 ADDRESS CHANGED - RESTART TO APPLY");
             } else if (media_item(ov, ov->row) == MEDIA_TYPE1 ||
                        media_item(ov, ov->row) == MEDIA_TYPE2) {
                 int *type = media_item(ov, ov->row) == MEDIA_TYPE1
@@ -606,12 +608,32 @@ static void overlay_activate(Overlay *ov) {
                         : "1571 DRIVE VISUAL MONITOR OFF");
                     break;
                 case ADV_SECOND_DRIVE:
+                    if (ov->c128->drive2_raw_iec &&
+                        gcr_drive_flush(&ov->c128->second_real_drive.gcr) !=
+                            DISK_SAVE_OK) {
+                        notify_post("DRIVE 2 WRITE COULD NOT BE SAVED - DISCONNECT CANCELLED");
+                        break;
+                    }
                     ov->cfg->second_drive = !ov->cfg->second_drive;
                     leds_set_enabled(LED_FDC_B, ov->cfg->second_drive);
                     drive_reset(&ov->c128->drive2);
                     drive_set_unit(&ov->c128->drive2, ov->cfg->drive2_unit);
+                    bool was_real2 = ov->c128->drive2_raw_iec;
+                    ov->c128->drive2_raw_iec = ov->cfg->second_drive &&
+                        ov->c128->drive_raw_iec &&
+                        ov->cfg->drive2_type == 1571 &&
+                        ov->c128->second_real_drive.rom_loaded;
+                    if (ov->c128->drive2_raw_iec && !was_real2) {
+                        drive1571cr_reset(&ov->c128->second_real_drive);
+                        drive_monitor_reset(&ov->c128->drive2_monitor);
+                        ov->c128->drive2_media_generation = (unsigned)-1;
+                    }
+                    iec_bus_enable_second(&ov->c128->iec_bus,
+                                          ov->c128->drive2_raw_iec);
                     notify_post(ov->cfg->second_drive
-                        ? "SECOND DRIVE CONNECTED"
+                        ? (ov->c128->drive_raw_iec && !ov->c128->drive2_raw_iec
+                           ? "SECOND 1571 UNAVAILABLE - RESTART FOR FAST MODE"
+                           : "SECOND DRIVE CONNECTED")
                         : "SECOND DRIVE DISCONNECTED");
                     break;
                 case ADV_GIF_WIDTH:
@@ -643,11 +665,17 @@ static void overlay_activate(Overlay *ov) {
                     ov->keyboard_map_visible = true;
                     break;
                 case ADV_RESET:
-                    if (drive_attach_disk(&ov->c128->drive, NULL) == -2) {
+                    if (gcr_drive_flush(&ov->c128->integrated_drive.gcr) !=
+                            DISK_SAVE_OK ||
+                        gcr_drive_flush(&ov->c128->second_real_drive.gcr) !=
+                            DISK_SAVE_OK) {
                         notify_post("DRIVE WRITE COULD NOT BE SAVED - RESET CANCELLED");
                         break;
                     }
+                    drive_attach_disk(&ov->c128->drive, NULL);
                     drive_attach_disk(&ov->c128->drive2, NULL);
+                    ov->c128->drive2_raw_iec = false;
+                    iec_bus_enable_second(&ov->c128->iec_bus, false);
                     config_set_defaults(ov->cfg);
                     vdc_set_ram_size_kb(&ov->c128->vdc, ov->cfg->vdc_ram_kb);
                     drive_set_unit(&ov->c128->drive, ov->cfg->drive_unit);
@@ -820,47 +848,26 @@ static void draw_row(SDL_Renderer *r, int lw, float y,
     }
 }
 
-void overlay_render_drive_scope(const Overlay *ov, SDL_Renderer *r) {
-    if (!ov || !r || ov->visible || !ov->cfg->drive_visual_monitor ||
-        !ov->c128->drive_raw_iec) return;
-
-    int rw, rh;
-    if (!SDL_GetRenderOutputSize(r, &rw, &rh) || rw < 160 || rh < 160)
-        return;
-    const float margin = 10.0f;
-    const float panel_h = 64.0f;
-    const float panel_y = (float)rh - FUNCTION_KEY_BAR_HEIGHT -
-                          LED_BAR_HEIGHT - panel_h - margin;
-    const float plot_x = margin + 6.0f;
-    const float plot_y = panel_y + 23.0f;
-    const float plot_w = (float)rw - 2.0f * margin - 12.0f;
+static void draw_drive_scope_track(SDL_Renderer *r, float plot_x,
+                                   float plot_w, float track_y, int number,
+                                   int unit, const GcrDrive *g,
+                                   const DriveMonitor *monitor) {
+    const float plot_y = track_y + 23.0f;
     const float plot_h = 34.0f;
     const float center_y = plot_y + plot_h * 0.5f;
-    if (panel_y < margin || plot_w < 80.0f) return;
-
-    SDL_SetRenderScale(r, 1.0f, 1.0f);
-    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
-    SDL_FRect panel = { margin, panel_y, (float)rw - 2.0f * margin,
-                        panel_h };
-    SDL_SetRenderDrawColor(r, 0, 0, 0, 190);
-    SDL_RenderFillRect(r, &panel);
-    SDL_SetRenderDrawColor(r, 120, 225, 235, 130);
-    SDL_RenderRect(r, &panel);
-
-    const GcrDrive *g = &ov->c128->integrated_drive.gcr;
     char status[96];
     snprintf(status, sizeof(status),
-             "1571 #%d  MOTOR %s  TRACK %u.%c  SIDE %u  R %u  W %u  STEP %u",
-             ov->cfg->drive_unit, g->motor ? "ON" : "OFF",
+             "DRIVE %d #%d  MOTOR %s  TRACK %u.%c  SIDE %u  R %u  W %u  STEP %u",
+             number, unit, g->motor ? "ON" : "OFF",
              g->half_track / 2, (g->half_track & 1) ? '5' : '0',
              g->side, g->read_events, g->write_events, g->step_events);
     SDL_SetRenderDrawColor(r, 175, 240, 245, 255);
-    SDL_RenderDebugText(r, plot_x, panel_y + 6.0f, status);
+    SDL_RenderDebugText(r, plot_x, track_y + 6.0f, status);
     SDL_SetRenderDrawColor(r, 105, 145, 155, 130);
     SDL_RenderLine(r, plot_x, center_y, plot_x + plot_w, center_y);
 
     DriveActivity frames[DRIVE_MONITOR_HISTORY_FRAMES];
-    size_t count = drive_monitor_history_copy(&ov->c128->drive_monitor,
+    size_t count = drive_monitor_history_copy(monitor,
                     frames, DRIVE_MONITOR_HISTORY_FRAMES);
     float cell_w = plot_w / DRIVE_MONITOR_HISTORY_FRAMES;
     for (size_t i = 0; i < count; ++i) {
@@ -884,6 +891,48 @@ void overlay_render_drive_scope(const Overlay *ov, SDL_Renderer *r) {
             SDL_RenderLine(r, x, plot_y, x, plot_y + plot_h);
         }
     }
+}
+
+void overlay_render_drive_scope(const Overlay *ov, SDL_Renderer *r) {
+    if (!ov || !r || ov->visible || !ov->cfg->drive_visual_monitor ||
+        !ov->c128->drive_raw_iec) return;
+
+    int rw, rh;
+    if (!SDL_GetRenderOutputSize(r, &rw, &rh) || rw < 160 || rh < 160)
+        return;
+    const float margin = 10.0f;
+    const float track_h = 64.0f;
+    const float panel_h = track_h * (ov->c128->drive2_raw_iec ? 2.0f : 1.0f);
+    const float panel_y = (float)rh - FUNCTION_KEY_BAR_HEIGHT -
+                          LED_BAR_HEIGHT - panel_h - margin;
+    const float plot_x = margin + 6.0f;
+    const float plot_w = (float)rw - 2.0f * margin - 12.0f;
+    if (panel_y < margin || plot_w < 80.0f) return;
+
+    SDL_SetRenderScale(r, 1.0f, 1.0f);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_FRect panel = { margin, panel_y, (float)rw - 2.0f * margin,
+                        panel_h };
+    SDL_SetRenderDrawColor(r, 0, 0, 0, 190);
+    SDL_RenderFillRect(r, &panel);
+    SDL_SetRenderDrawColor(r, 120, 225, 235, 130);
+    SDL_RenderRect(r, &panel);
+
+    float drive1_y = panel_y;
+    if (ov->c128->drive2_raw_iec) {
+        draw_drive_scope_track(r, plot_x, plot_w, panel_y, 2,
+                               ov->cfg->drive2_unit,
+                               &ov->c128->second_real_drive.gcr,
+                               &ov->c128->drive2_monitor);
+        SDL_SetRenderDrawColor(r, 90, 130, 140, 140);
+        SDL_RenderLine(r, margin, panel_y + track_h,
+                          (float)rw - margin, panel_y + track_h);
+        drive1_y += track_h;
+    }
+    draw_drive_scope_track(r, plot_x, plot_w, drive1_y, 1,
+                           ov->cfg->drive_unit,
+                           &ov->c128->integrated_drive.gcr,
+                           &ov->c128->drive_monitor);
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
 }
 

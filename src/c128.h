@@ -44,13 +44,18 @@ typedef struct {
     Drive   drive;
     Drive   drive2;
     Drive1571Cr integrated_drive; /* independent ROM-backed 1571CR machine */
+    Drive1571Cr second_real_drive; /* optional second ROM-backed 1571CR */
     IecBus  iec_bus;     /* physical slow IEC pins, separate from VirtualDrive */
     DriveMonitor drive_monitor; /* host-only LED and audio presentation */
+    DriveMonitor drive2_monitor;
     unsigned drive_clock_fraction;
+    unsigned drive2_clock_fraction;
     u64 drive_host_cycle_synced;
     unsigned drive_clock_denominator;
     unsigned drive_media_generation;
+    unsigned drive2_media_generation;
     bool drive_raw_iec; /* opt-in diagnostic: KERNAL serial ROM is unpatched */
+    bool drive2_raw_iec; /* second physical 1571 joined to the same IEC bus */
     Config *cfg;
     bool    paused;
     bool    fast;        /* 8502 at 2 MHz (C128 fast mode) */

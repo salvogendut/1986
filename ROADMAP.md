@@ -232,8 +232,11 @@ cycle-level 1571 implementation without conflating their interfaces.
   and `LOAD` work on D64 through the drive ROM (#98).
 - [x] GEOS 128 drive-RAM `M-W`/`M-E` loader reaches the Desktop through the
   true-drive path with CIA2 bus-cycle synchronization for fast IEC reads (#74).
+- [x] Second ROM-backed 1571CR shares the open-collector IEC bus at an
+  independent unit address, with its own D64/D71 image, LED, audio, and
+  visual-monitor track (#109).
 - [ ] Complete true-drive mode: WD1770/FDC2, fast serial, accurate
-  mechanism timing, second-drive bus sharing, and broader D71 validation.
+  mechanism timing, and broader D71 validation.
 - [x] Media persists a per-drive hardware type when real-drive mode is selected;
   1581 is shown as future hardware rather than confused with D81 image support.
 - [x] Separate, live Drive 1/Drive 2 activity LEDs in both display windows

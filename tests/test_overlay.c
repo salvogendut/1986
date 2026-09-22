@@ -41,6 +41,14 @@ void c128_set_4080(C128 *c, bool col80) {
 }
 static int machine_resets;
 void c128_reset(C128 *c) { (void)c; machine_resets++; }
+DiskSaveResult gcr_drive_flush(GcrDrive *g) {
+    (void)g;
+    return DISK_SAVE_OK;
+}
+void drive1571cr_reset(Drive1571Cr *d) { (void)d; }
+void iec_bus_enable_second(IecBus *bus, bool enabled) {
+    bus->drive2_enabled = enabled;
+}
 
 static char picker_location[CONFIG_PATH_MAX];
 static char picker_filter[128];
@@ -95,6 +103,35 @@ static bool overlay_draws_after_one_f9(const Overlay *ov) {
             drawn = SDL_ReadSurfacePixel(pixels, 15, 15,
                                          &red, &green, &blue, &alpha) &&
                     red == 0x30 && green == 0x40 && blue == 0x60;
+            SDL_DestroySurface(pixels);
+        }
+        SDL_DestroyRenderer(renderer);
+    }
+    if (window) SDL_DestroyWindow(window);
+    SDL_Quit();
+    return drawn;
+}
+
+static bool scope_draws_two_tracks(Overlay *ov) {
+    if (!SDL_Init(SDL_INIT_VIDEO)) return false;
+    SDL_Window *window = SDL_CreateWindow("drive scope test", 1100, 800, 0);
+    SDL_Renderer *renderer = window ? SDL_CreateRenderer(window, NULL) : NULL;
+    bool drawn = false;
+    if (renderer) {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        overlay_render_drive_scope(ov, renderer);
+        SDL_Surface *pixels = SDL_RenderReadPixels(renderer, NULL);
+        if (pixels) {
+            Uint8 red, green, blue, alpha;
+            /* The two baselines are 64 pixels apart; Drive 2 is above Drive 1. */
+            bool upper = SDL_ReadSurfacePixel(pixels, 20, 664,
+                                              &red, &green, &blue, &alpha) &&
+                         (red || green || blue);
+            bool lower = SDL_ReadSurfacePixel(pixels, 20, 728,
+                                              &red, &green, &blue, &alpha) &&
+                         (red || green || blue);
+            drawn = upper && lower;
             SDL_DestroySurface(pixels);
         }
         SDL_DestroyRenderer(renderer);
@@ -484,6 +521,14 @@ int main(void) {
     for (int i = 0; i < 12; i++) key(&ov, SDL_SCANCODE_DOWN);
     CHECK(ov.row == 6,
           "fast-drive Media layout hides hardware type while gate is off");
+
+    ov.visible = false;
+    cfg.drive_visual_monitor = true;
+    c->drive_raw_iec = true;
+    c->drive2_raw_iec = true;
+    CHECK(scope_draws_two_tracks(&ov),
+          "two real drives draw separate visual-monitor tracks");
+    c->drive_raw_iec = c->drive2_raw_iec = false;
 
     const char *preview = getenv("C128_OVERLAY_PREVIEW");
     if (preview) {

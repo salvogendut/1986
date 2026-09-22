@@ -149,8 +149,8 @@ channel accepts `S:pattern` (SCRATCH) and `R:new=old` (RENAME) for unlocked
 SEQ/PRG/USR root-directory entries on all three formats. SCRATCH updates the
 BAM and reports the removed-file count; both commands use the same atomic
 write-back and external-change guard as SAVE. The Advanced overlay's Real Disk
-Drive switch is a persisted future-backend preference, currently shown as
-pending while the fast virtual drive remains active.
+Drive switch is a persisted selection for the ROM-backed 1571 backend when
+the required DOS ROM is present.
 An optional second fast virtual drive owns a separate image and unit. The
 logical IEC callbacks fan out attention/data to both devices, and only the
 addressed unit answers. The Advanced > Second Drive switch disconnects it
@@ -159,8 +159,8 @@ cycling prevent #8-#11 address collisions. The F9 overlay is a compact top
 panel, following the sibling emulators' layout.
 
 The C128 KERNAL's burst-mode flag is cleared while this command-level backend
-is active, keeping transfers on the trapped byte routines. A true 1571 will
-instead provide the CIA shift-register endpoint needed by fast serial.
+is active, keeping transfers on the trapped byte routines. The true 1571's
+fast-serial CIA shift-register endpoint is not connected yet.
 
 The independent `Drive1571Cr` core now owns a 2K mirrored RAM, 32K DOS ROM,
 reset/interrupt vectors, an NMOS 6502 instruction executor, and two 6522 VIAs.
@@ -181,8 +181,14 @@ sectors and accepts standard sector writes through its CB2 write gate and PA
 byte latch. On gate close, head/side change, or eject, checksum-valid sectors
 are decoded and atomically persisted. An unsuccessful flush leaves old media
 attached; arbitrary raw/protection tracks cannot be stored in D64/D71.
-True-drive mode currently represents only the integrated Drive 1; the optional
-second drive is not on the physical IEC bus yet.
+When enabled with 1571CR selected for both drives, a second independent
+`Drive1571Cr` shares the same open-collector IEC ATN/CLOCK/DATA lines. Each
+VIA1 senses its own #8-#11 address straps and the common ATN edge, while the
+drives keep separate CPU clocks, media, GCR writes, LEDs, and activity/audio
+history. The visual monitor stacks Drive 2 above Drive 1. Disabling Drive 2
+releases its IEC outputs after pending writes have been flushed. Because the
+KERNAL traps and ROM-level IEC cannot be mixed, selecting 1581 for either
+enabled drive falls back to the fast virtual pair at the next launch.
 The core is a sibling of the command-level `VirtualDrive`, never behind its
 interface; the modes will share only neutral disk-image/media code. The
 Advanced real-drive gate selects this backend after restart when its DOS ROM

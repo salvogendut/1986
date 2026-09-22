@@ -11,6 +11,10 @@ static void via_port(void *ctx, unsigned port, u8 pins) {
     if (port == 1) iec_bus_set_drive(ctx, pins);
 }
 
+static void via_port2(void *ctx, unsigned port, u8 pins) {
+    if (port == 1) iec_bus_set_drive2(ctx, pins);
+}
+
 int main(void) {
     Via6522 via;
     IecBus bus;
@@ -63,6 +67,34 @@ int main(void) {
     iec_bus_set_host(&bus, 0x00, 0x00); /* input pins float high */
     CHECK(!bus.atn_high && !bus.clock_high,
           "CIA2 input DDR uses the same effective-port pins as VICE");
+
+    Via6522 via2;
+    via6522_init(&via2);
+    via6522_write(&via2, 12, 0x01);
+    iec_bus_attach_second(&bus, &via2, 9);
+    via6522_set_port_hook(&via2, via_port2, &bus);
+    via6522_write(&via2, 2, 0x1a);
+    via6522_write(&via2, 0, 0x00);
+    iec_bus_set_host(&bus, 0x00, 0x38);
+    iec_bus_enable_second(&bus, true);
+    CHECK(bus.atn_high && bus.clock_high && bus.data_high &&
+          (via6522_read(&via2, 0) & 0x60) == 0x20,
+          "second VIA shares idle bus but senses IEC unit 9");
+    iec_bus_set_host(&bus, 0x08, 0x38);
+    CHECK((via6522_read(&via, 0) & 0x80) &&
+          (via6522_read(&via2, 0) & 0x80) &&
+          (via6522_read(&via2, 13) & 0x02),
+          "ATN reaches both drive VIA interrupt inputs");
+    iec_bus_set_host(&bus, 0x00, 0x38);
+    via6522_write(&via2, 0, 0x08);
+    CHECK(!bus.clock_high && (via6522_read(&via, 0) & 0x04),
+          "second drive pulls shared CLOCK low for first drive");
+    via6522_write(&via2, 0, 0x02);
+    CHECK(!bus.data_high && (via6522_read(&via, 0) & 0x01),
+          "second drive pulls shared DATA low for first drive");
+    iec_bus_enable_second(&bus, false);
+    CHECK(bus.clock_high && bus.data_high,
+          "disconnecting second drive releases its IEC outputs");
 
     if (failures) {
         fprintf(stderr, "test-iec-bus: %d failure(s)\n", failures);

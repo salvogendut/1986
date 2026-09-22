@@ -284,6 +284,8 @@ int main(int argc, char **argv) {
         if (drive_rom_len > 0 && (size_t)drive_rom_len < sizeof(drive_rom_path) &&
             drive1571cr_load_rom(&c.integrated_drive, drive_rom_path)) {
             fprintf(stderr, "1986: loaded 1571CR DOS ROM from '%s'\n", drive_rom_path);
+            if (!drive1571cr_load_rom(&c.second_real_drive, drive_rom_path))
+                fprintf(stderr, "1986: could not load second 1571CR DOS ROM\n");
         } else if (cfg.real_disk_drive) {
             fprintf(stderr, "1986: 1571CR DOS ROM missing/invalid in '%s' (32 KiB required)\n", dir);
         }
@@ -329,10 +331,18 @@ int main(int argc, char **argv) {
         .receive = c128_iec_receive,
         .take_status = c128_iec_take_status,
     };
+    /* The ROM-level serial path cannot mix a physical 1571 with a trapped
+     * virtual 1581. Fall back as a pair until that hardware is implemented. */
     c.drive_raw_iec = cfg.real_disk_drive && cfg.drive_type == 1571 &&
-                      c.integrated_drive.rom_loaded;
+                      c.integrated_drive.rom_loaded &&
+                      (!cfg.second_drive || (cfg.drive2_type == 1571 &&
+                                             c.second_real_drive.rom_loaded));
+    c.drive2_raw_iec = c.drive_raw_iec && cfg.second_drive &&
+                       cfg.drive2_type == 1571 && c.second_real_drive.rom_loaded;
+    iec_bus_enable_second(&c.iec_bus, c.drive2_raw_iec);
     if (c.drive_raw_iec)
-        fprintf(stderr, "1986: 1571CR DOS ROM and line-level IEC active\n");
+        fprintf(stderr, "1986: %d 1571CR DOS ROM drive(s) on line-level IEC\n",
+                c.drive2_raw_iec ? 2 : 1);
     else {
         if (cfg.real_disk_drive)
             fprintf(stderr, "1986: real-drive backend unavailable; using fast virtual drive\n");
@@ -629,6 +639,8 @@ int main(int argc, char **argv) {
             uint64_t emulated_frame_ns = c128_cycles_to_ns(&c, cycles);
             drive_monitor_mix(&c.drive_monitor, c.audio_frame, c.audio_count,
                               cfg.drive_audio_monitor && c.drive_raw_iec);
+            drive_monitor_mix(&c.drive2_monitor, c.audio_frame, c.audio_count,
+                              cfg.drive_audio_monitor && c.drive2_raw_iec);
             /* Keep only a few frames queued if the host stalls. The SID core
              * keeps clocking even without an available audio device. */
             if (audio_stream && c.audio_count > 0 &&
@@ -712,7 +724,9 @@ int main(int argc, char **argv) {
     int drive_exit_status = drive_attach_disk(&c.drive, NULL);
     if (drive_exit_status == -2)
         fprintf(stderr, "1986: unsaved 1571 GCR write at exit; original disk image was not overwritten\n");
-    drive_attach_disk(&c.drive2, NULL);
+    int drive2_exit_status = drive_attach_disk(&c.drive2, NULL);
+    if (drive2_exit_status == -2)
+        fprintf(stderr, "1986: unsaved drive 2 GCR write at exit; original disk image was not overwritten\n");
     display_destroy(&c.display);
-    return drive_exit_status == -2 ? 1 : 0;
+    return drive_exit_status == -2 || drive2_exit_status == -2 ? 1 : 0;
 }
