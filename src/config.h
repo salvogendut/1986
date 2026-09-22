@@ -54,7 +54,9 @@ typedef struct {
     int        drive2_unit;       /* distinct IEC device number (8-11) */
     int        drive_type;        /* drive 1 hardware: 1571 or 1581 */
     int        drive2_type;       /* drive 2 hardware: 1571 or 1581 */
-    bool       real_disk_drive;   /* future hardware backend preference */
+    bool       real_disk_drive;   /* select ROM-backed 1571 when available */
+    bool       drive_audio_monitor; /* synthetic motor/head audio for real 1571 */
+    bool       drive_visual_monitor; /* on-screen real-1571 waveform */
     bool       second_drive;      /* expose the second virtual IEC drive */
 
     /* Tinker-gated Advanced overlay section. */

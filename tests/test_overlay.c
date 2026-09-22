@@ -174,7 +174,7 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.vdc_ram_kb == 64 && c->vdc.address_mask == 0xFFFF,
           "Advanced VDC RAM switches back to 64K");
-    for (int i = 0; i < 2; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 4; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.second_drive && second_led_enabled,
           "Second Drive toggle enables its device and LED");
@@ -195,7 +195,7 @@ int main(void) {
     CHECK(ov.row == 6, "Tinker Media includes U36 with Drive 2 enabled");
 
     key(&ov, SDL_SCANCODE_RIGHT);
-    for (int i = 0; i < 7; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 9; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!cfg.second_drive && !second_led_enabled,
           "Second Drive toggle disables its device and LED");
@@ -224,7 +224,7 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RIGHT);
     CHECK(ov.section == OV_ADVANCED && ov.row == 0,
           "Advanced opens at its first row for keyboard map");
-    for (int i = 0; i < 16; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 18; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.keyboard_map_visible, "Advanced opens the keyboard map");
     key(&ov, SDL_SCANCODE_LEFT);
@@ -449,6 +449,16 @@ int main(void) {
     ov.row = 6;
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.real_disk_drive, "Advanced enables real-drive preference");
+    ov.row = 7;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.drive_audio_monitor, "Advanced enables drive audio monitor");
+    ov.row = 8;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.drive_visual_monitor, "Advanced enables drive visual monitor");
+    key(&ov, SDL_SCANCODE_F9); /* persist the Advanced change on close */
+    CHECK(config_load(&saved, config_file) && saved.drive_audio_monitor &&
+          saved.drive_visual_monitor, "drive monitor toggles persist");
+    key(&ov, SDL_SCANCODE_F9);
     ov.section = OV_MEDIA;
     ov.row = 1;
     key(&ov, SDL_SCANCODE_RETURN);
@@ -457,7 +467,7 @@ int main(void) {
     CHECK(config_load(&saved, config_file) && saved.drive_type == 1581,
           "drive 1 hardware selection persists");
     ov.section = OV_ADVANCED;
-    ov.row = 7;
+    ov.row = 9;
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.second_drive, "enable second drive for independent type selection");
     ov.section = OV_MEDIA;
@@ -487,7 +497,7 @@ int main(void) {
             c->display.window = window;
             if (getenv("C128_OVERLAY_PREVIEW_KEYBOARD")) {
                 ov.section = OV_ADVANCED;
-                ov.row = 16;
+                ov.row = 18;
                 ov.keyboard_map_visible = true;
             } else if (getenv("C128_OVERLAY_PREVIEW_ABOUT")) {
                 ov.section = OV_GENERAL;
@@ -495,11 +505,24 @@ int main(void) {
                 ov.about_visible = true;
             } else {
                 ov.section = OV_ADVANCED;
-                ov.row = 7;
+                ov.row = 9;
             }
             SDL_SetRenderDrawColor(renderer, 0x20, 0x40, 0x20, 255);
             SDL_RenderClear(renderer);
-            overlay_render(&ov, renderer);
+            if (getenv("C128_OVERLAY_PREVIEW_SCOPE")) {
+                ov.visible = false;
+                cfg.drive_visual_monitor = true;
+                c->drive_raw_iec = true;
+                c->integrated_drive.gcr.motor = true;
+                c->integrated_drive.gcr.half_track = 36;
+                c->integrated_drive.gcr.step_events = 4;
+                c->integrated_drive.gcr.read_events = 100;
+                drive_monitor_reset(&c->drive_monitor);
+                drive_monitor_update(&c->drive_monitor, true, 4, 100);
+                s16 audio[882] = {0};
+                drive_monitor_mix(&c->drive_monitor, audio, 882, false, true);
+                overlay_render_drive_scope(&ov, renderer);
+            } else overlay_render(&ov, renderer);
             SDL_Surface *surface = SDL_RenderReadPixels(renderer, NULL);
             CHECK(surface && SDL_SaveBMP(surface, preview),
                   "save overlay preview image");

@@ -17,6 +17,7 @@ typedef struct {
     bool motor, led, sync, byte_ready;
     u8 read_byte;
     u64 bit_budget;
+    unsigned step_events, read_events; /* presentation-only activity counters */
 } GcrDrive;
 
 void gcr_drive_init(GcrDrive *g);

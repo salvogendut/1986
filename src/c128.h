@@ -13,6 +13,7 @@
 #include "drive.h"
 #include "drive1571cr.h"
 #include "iec_bus.h"
+#include "drive_monitor.h"
 #include "config.h"
 #include <stdbool.h>
 
@@ -44,6 +45,7 @@ typedef struct {
     Drive   drive2;
     Drive1571Cr integrated_drive; /* independent ROM-backed 1571CR machine */
     IecBus  iec_bus;     /* physical slow IEC pins, separate from VirtualDrive */
+    DriveMonitor drive_monitor; /* host-only LED and audio presentation */
     unsigned drive_clock_fraction;
     unsigned drive_media_generation;
     bool drive_raw_iec; /* opt-in diagnostic: KERNAL serial ROM is unpatched */

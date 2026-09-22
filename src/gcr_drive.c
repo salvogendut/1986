@@ -103,6 +103,7 @@ void gcr_drive_init(GcrDrive *g) {
 
 void gcr_drive_reset(GcrDrive *g) {
     g->motor = g->led = false;
+    g->step_events = g->read_events = 0;
     g->zone = zone_for_track(g->half_track / 2);
     build_track(g);
 }
@@ -131,6 +132,7 @@ void gcr_drive_set_port_b(GcrDrive *g, u8 pins) {
         if (delta == 3 && next > 2) next--;
         if (next != g->half_track) {
             g->half_track = next;
+            g->step_events++;
             build_track(g);
         }
     }
@@ -170,6 +172,7 @@ bool gcr_drive_tick(GcrDrive *g, Via6522 *via, unsigned cycles, bool fast) {
 }
 
 u8 gcr_drive_read_byte(GcrDrive *g) {
+    if (g->byte_ready) g->read_events++;
     g->byte_ready = false;
     return g->read_byte;
 }
