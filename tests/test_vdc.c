@@ -203,6 +203,30 @@ int main(void) {
     vdc_set_bus_clock(v, 1044, false);
     CHECK(vdc_read_status(v) & 0x80,
           "VDC becomes ready after the active-display transfer interval");
+    unsigned saved_frame_counter = v->frame_counter;
+    reg_write(v, 4, 0xFF);
+    reg_write(v, 6, 0xFE);
+    v->frame_counter = 6;
+    vdc_set_raster_line(v, 100);
+    CHECK(!(vdc_read_status(v) & 0x20),
+          "long VDC frame stays active across PAL frame boundaries");
+    vdc_set_raster_line(v, 168);
+    CHECK(vdc_read_status(v) & 0x20,
+          "long VDC frame reaches its own bottom border");
+    vdc_set_raster_line(v, 184);
+    CHECK(!(vdc_read_status(v) & 0x20),
+          "long VDC frame restarts its active display");
+    reg_write(v, 9, 0xE0); /* One raster per row makes the VDC frame 256 lines. */
+    vdc_set_raster_line(v, 176);
+    CHECK(vdc_read_status(v) & 0x20,
+          "short R4=$ff VDC frame has its own VBLANK pulse");
+    vdc_set_raster_line(v, 177);
+    CHECK(!(vdc_read_status(v) & 0x20),
+          "short R4=$ff VDC frame resumes active display");
+    reg_write(v, 9, 7);
+    v->frame_counter = saved_frame_counter;
+    reg_write(v, 4, 39);
+    reg_write(v, 6, 25);
     reg_write(v, 16, 0xAA);
     CHECK(reg_read(v, 16) == 0, "light-pen registers are read-only");
 

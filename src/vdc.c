@@ -72,6 +72,15 @@ static void vdc_busy(Vdc *v, unsigned nominal_cycles) {
 
 static bool vdc_display_active(const Vdc *v) {
     int rasters_per_row = (v->regs[9] & 0x1F) + 1;
+    unsigned frame_lines = ((unsigned)v->regs[4] + 1u) * (unsigned)rasters_per_row;
+    if (v->regs[4] == 0xFF) {
+        /* With R4=$ff the VDC row counter rolls independently of the PAL
+         * frame, even when R9 makes its own frame shorter than 312 lines. */
+        unsigned line = (unsigned)(((u64)v->frame_counter * 312u + v->raster_line)
+                                   % frame_lines);
+        unsigned row = line / (unsigned)rasters_per_row;
+        return row >= 1u && row <= v->regs[6];
+    }
     int border = ((int)v->regs[4] + 1 - (int)v->regs[7]) * rasters_per_row
                - (v->regs[3] >> 4);
     if (border < 0) border = 0;

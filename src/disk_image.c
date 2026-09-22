@@ -392,14 +392,15 @@ static bool filename_matches(const char *pattern, const char *name) {
 int disk_image_find_file(const DiskImage *d, const char *name, DiskDirEntry *entry) {
     if (!d || !name || !entry) return -1;
 
-    while (*name == ' ' || *name == '@') name++;
+    /* Ordinary spaces are legal filename bytes; only 0xA0 directory padding
+     * is discarded when entries are decoded. */
+    if (*name == '@') name++;
     if (name[0] >= '0' && name[0] <= '9' && name[1] == ':') name += 2;
 
     char pattern[17];
     size_t n = 0;
     while (*name && *name != ',' && n < sizeof(pattern) - 1)
         pattern[n++] = *name++;
-    while (n > 0 && pattern[n - 1] == ' ') n--;
     pattern[n] = '\0';
     if (n == 0) {
         if (d->format != DISK_FORMAT_PRG) return -1;
