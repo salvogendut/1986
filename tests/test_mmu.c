@@ -17,8 +17,16 @@ int main(void) {
     CHECK(mmu.rcr == 0x2A, "RAM configuration from $D506");
     CHECK(mmu_read(&mmu, 0xD506) == 0x2A, "$D506 readback");
 
-    mmu_write(&mmu, 0xD507, 0xC0);   /* 2 MHz + Z80 */
-    CHECK((mmu.mode & 0xC0) == 0xC0, "mode bits");
+    mmu_write(&mmu, 0xD508, 0x01);   /* bank latch commits with page number */
+    CHECK(mmu_read(&mmu, 0xD508) == 0xF0, "uncommitted bank readback");
+    mmu_write(&mmu, 0xD507, 0xC0);
+    CHECK(mmu.page0 == 0xC0 && mmu.page0_bank == 1,
+          "zero page relocation commits page and bank");
+    CHECK(mmu_read(&mmu, 0xD508) == 0xF1, "committed zero-page bank readback");
+    mmu_write(&mmu, 0xD50A, 0x01);
+    mmu_write(&mmu, 0xD509, 0xF0);
+    CHECK(mmu.page1 == 0xF0 && mmu.page1_bank == 1,
+          "stack page relocation commits page and bank");
 
     mmu_write(&mmu, 0xD50D, 0x02);
     CHECK(mmu.vdc_bank == 0x02, "VDC bank");

@@ -149,7 +149,7 @@
 #endif
 
 #ifndef PAGE_ONE
-#define PAGE_ONE (mem_ram + 0x100)
+#define PAGE_ONE mem_page_one
 #endif
 
 #ifndef STORE_IND
@@ -597,4 +597,3 @@ unsigned int maincpu_get_sp(void) {
 }
 
 /* ------------------------------------------------------------------------- */
-

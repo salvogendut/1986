@@ -10,7 +10,7 @@ static int failures = 0;
 
 static u8 image[174848];
 
-/* Build a single-sided 35-track D64 with a BAM header and one directory entry. */
+/* Build a single-sided 35-track D64 with a BAM header and directory entries. */
 static void build_d64(DiskImage *d) {
     memset(image, 0, sizeof(image));
     memset(d, 0, sizeof(*d));
@@ -54,6 +54,14 @@ static void build_d64(DiskImage *d) {
     for (int i = 0; i < 16; i++) e2[5 + i] = (i < 4) ? (u8)nm2[i] : 0xA0;
     e2[30] = 12; e2[31] = 0;           /* 12 blocks */
 
+    /* Amaurote's boot menu requests this 16-character name, including both
+     * ordinary spaces. They are part of the filename, not PETSCII padding. */
+    u8 *e3 = dir + 64;
+    e3[2] = 0x82;
+    e3[3] = 17; e3[4] = 4;
+    memcpy(e3 + 5, " AMAUROTE INTRO ", 16);
+    e3[30] = 1;
+
     /* HELLO is a one-sector PRG: load address $1C01 + three data bytes. The
      * final link byte stores data length + 1. */
     u8 *hello = image + disk_image_d64_track_offset(17) + 1 * DISK_SECTOR_BYTES;
@@ -69,6 +77,11 @@ static void build_d64(DiskImage *d) {
     u8 *data2 = image + disk_image_d64_track_offset(17) + 3 * DISK_SECTOR_BYTES;
     data2[0] = 0; data2[1] = 4;
     data2[2] = 0xDE; data2[3] = 0xAD; data2[4] = 0xBE;
+
+    u8 *intro = image + disk_image_d64_track_offset(17) + 4 * DISK_SECTOR_BYTES;
+    intro[0] = 0; intro[1] = 5;
+    intro[2] = 0x01; intro[3] = 0x1C;
+    intro[4] = 0x11; intro[5] = 0x22;
 }
 
 int main(void) {
@@ -77,7 +90,7 @@ int main(void) {
 
     DiskDirEntry ents[16];
     int n = disk_image_read_directory_entries(&d, ents, 16);
-    CHECK(n == 2, "two entries read");
+    CHECK(n == 3, "three entries read");
 
     CHECK(ents[0].blocks == 5, "entry 0 block count");
     CHECK(ents[0].type == 2, "entry 0 type PRG");
@@ -92,6 +105,8 @@ int main(void) {
     CHECK(strcmp(ents[1].name, "DATA") == 0, "entry 1 name");
     CHECK(ents[0].start_track == 17 && ents[0].start_sector == 1,
           "entry exposes first file sector");
+    CHECK(strcmp(ents[2].name, " AMAUROTE INTRO ") == 0,
+          "ordinary spaces in a full-length disk filename are preserved");
 
     DiskDirEntry found;
     CHECK(disk_image_find_file(&d, "hello", &found) == 0,
@@ -101,6 +116,13 @@ int main(void) {
           "filename lookup supports drive prefix and wildcard");
     CHECK(disk_image_find_file(&d, "MISSING", &found) != 0,
           "missing filename is rejected");
+    CHECK(disk_image_find_file(&d, "0: AMAUROTE INTRO ", &found) == 0 &&
+          strcmp(found.name, " AMAUROTE INTRO ") == 0,
+          "drive-prefixed lookup preserves significant leading and trailing spaces");
+    CHECK(disk_image_find_file(&d, " AMAUROTE INTRO ", &found) == 0,
+          "lookup without a drive prefix preserves a leading space");
+    CHECK(disk_image_find_file(&d, "0: AMAUROTE INTRO", &found) != 0,
+          "a missing trailing space does not match a different filename");
 
     u8 file_data[300];
     int file_len = disk_image_read_file(&d, &ents[0], file_data, sizeof(file_data));
@@ -123,7 +145,7 @@ int main(void) {
 
     u8 listing[256];
     size_t listing_len = disk_image_build_directory_program(&d, listing, sizeof(listing));
-    CHECK(listing_len == 32 + 2 * 32 + 31, "fixed-width directory stream length");
+    CHECK(listing_len == 32 + 3 * 32 + 31, "fixed-width directory stream length");
     CHECK(disk_image_build_directory_program(&d, listing, listing_len - 1) == 0,
           "short directory output buffer is rejected");
     CHECK(listing[0] == 0x01 && listing[1] == 0x04, "directory load address");
@@ -132,8 +154,8 @@ int main(void) {
           "first record starts at byte 32");
     CHECK(listing[64 + 2] == 12 && listing[64 + 3] == 0,
           "second record starts at byte 64");
-    CHECK(memcmp(listing + 96 + 4, "BLOCKS FREE.", 12) == 0,
-          "trailing free-block record starts at byte 96");
+    CHECK(memcmp(listing + 128 + 4, "BLOCKS FREE.", 12) == 0,
+          "trailing free-block record starts at byte 128");
     CHECK(listing[listing_len - 1] == 0, "directory stream has final terminator");
 
     /* Exercise the command-level IEC channel lifecycle used by ROM traps. */
@@ -191,6 +213,26 @@ int main(void) {
     CHECK(receive_status == 2 && received_len == 5, "virtual PRG ends with EOI");
     CHECK(memcmp(received, (u8[]){ 0x01, 0x1C, 0xAA, 0xBB, 0xCC }, 5) == 0,
           "virtual PRG bytes");
+
+    /* The fast IEC path must pass the exact requested name to disk lookup. */
+    virtual_drive_attention(&vdrive, 0x5F);
+    virtual_drive_attention(&vdrive, 0x28);
+    virtual_drive_attention(&vdrive, 0xF0);
+    const char *intro_name = "0: AMAUROTE INTRO ";
+    for (const char *p = intro_name; *p; p++) virtual_drive_send(&vdrive, (u8)*p);
+    virtual_drive_attention(&vdrive, 0x3F);
+    CHECK(virtual_drive_take_bus_status(&vdrive) == 0,
+          "fast-drive OPEN accepts a filename with significant spaces");
+    virtual_drive_attention(&vdrive, 0x48);
+    virtual_drive_attention(&vdrive, 0x60);
+    received_len = 0;
+    do {
+        receive_status = virtual_drive_receive(&vdrive, &received[received_len]);
+        if (receive_status) received_len++;
+    } while (receive_status == 1);
+    CHECK(receive_status == 2 && received_len == 4 &&
+          memcmp(received, (u8[]){ 0x01, 0x1C, 0x11, 0x22 }, 4) == 0,
+          "fast-drive OPEN streams the space-padded PRG");
 
     /* A failed open is reported through the DOS status channel. */
     virtual_drive_attention(&vdrive, 0x5F);

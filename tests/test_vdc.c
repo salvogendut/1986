@@ -61,6 +61,19 @@ int main(void) {
     CHECK(pixels[640] == 0x000000 && pixels[641] == 0xFFFFFF,
           "bitmap address advances to the next byte row every raster");
 
+    memset(v->ram, 0, sizeof(v->ram));
+    reg_write(v, 6, 0xFE);
+    reg_write(v, 9, 0); /* one raster per row, beyond the text-mode 50-row cap */
+    v->ram[253 * 80] = 0x80;
+    vdc_render(v, pixels, 640, 254);
+    CHECK(pixels[253 * 640] == 0xFFFFFF && pixels[252 * 640] == 0x000000,
+          "bitmap mode renders R6 rows beyond the text-mode row limit");
+    reg_write(v, 6, 25);
+    reg_write(v, 9, 7);
+    memset(v->ram, 0, sizeof(v->ram));
+    v->ram[0] = 0x81;
+    v->ram[80] = 0x40;
+
     reg_write(v, 24, 0x40); /* whole-screen reverse */
     vdc_render(v, pixels, 640, 200);
     CHECK(pixels[0] == 0x000000 && pixels[1] == 0xFFFFFF,
@@ -203,6 +216,53 @@ int main(void) {
     vdc_set_bus_clock(v, 1044, false);
     CHECK(vdc_read_status(v) & 0x80,
           "VDC becomes ready after the active-display transfer interval");
+    Vdc *timing = calloc(1, sizeof(*timing));
+    CHECK(timing != NULL, "allocate independent VDC timing fixture");
+    if (timing) {
+        vdc_init(timing);
+        reg_write(timing, 4, 0xFF);
+        reg_write(timing, 6, 0xFE);
+        for (int frame = 0; frame < 6; ++frame) {
+            vdc_set_raster_line(timing, 311);
+            vdc_set_raster_line(timing, 0);
+        }
+        vdc_set_raster_line(timing, 100);
+        CHECK(!(vdc_read_status(timing) & 0x20),
+              "long VDC frame stays active across PAL frame boundaries");
+        vdc_set_raster_line(timing, 168);
+        CHECK(vdc_read_status(timing) & 0x20,
+              "long VDC frame reaches its own bottom border");
+        vdc_set_raster_line(timing, 184);
+        CHECK(!(vdc_read_status(timing) & 0x20),
+              "long VDC frame restarts its active display");
+        reg_write(timing, 9, 0xE0); /* One raster per row: 256-line VDC frame. */
+        bool short_blank_seen = false;
+        bool short_active_again = false;
+        unsigned host_line = 184;
+        for (int i = 0; i < 400; ++i) {
+            host_line = (host_line + 1u) % 312u;
+            vdc_set_raster_line(timing, host_line);
+            if (vdc_read_status(timing) & 0x20) short_blank_seen = true;
+            else if (short_blank_seen) { short_active_again = true; break; }
+        }
+        CHECK(short_blank_seen,
+              "short R4=$ff VDC frame has its own VBLANK pulse");
+        CHECK(short_active_again,
+              "short R4=$ff VDC frame resumes active display");
+        vdc_reset(timing);
+        reg_write(timing, 4, 0xFF);
+        reg_write(timing, 6, 0xFE);
+        vdc_set_raster_line(timing, 5);
+        reg_write(timing, 9, 0xE0);
+        vdc_set_raster_line(timing, 32);
+        CHECK(vdc_read_status(timing) & 0x20,
+              "mid-row R9 change waits for 5-bit raster counter equality");
+        vdc_set_raster_line(timing, 33);
+        CHECK(!(vdc_read_status(timing) & 0x20),
+              "latched R9 match advances to the next visible row");
+        free(timing->fb);
+        free(timing);
+    }
     reg_write(v, 16, 0xAA);
     CHECK(reg_read(v, 16) == 0, "light-pen registers are read-only");
 

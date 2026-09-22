@@ -46,6 +46,8 @@ void mem_reset(Mem *m);
 void mem_set_processor_port(Mem *m, u8 dir, u8 data);
 u8   mem_read(Mem *m, u16 addr);
 void mem_write(Mem *m, u16 addr, u8 val);
+/* Physical RAM page backing CPU page 0 or 1 (also used by the 8502 stack). */
+u32 mem_cpu_page_offset(const Mem *m, unsigned page);
 /* CR bit 0 is active-low: zero exposes I/O at $D000-$DFFF. */
 bool mem_io_visible(const Mem *m);
 

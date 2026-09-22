@@ -38,6 +38,9 @@ typedef struct {
 
     int  frame_counter;  /* incremented each frame (cursor/attribute blink) */
     unsigned raster_line; /* current PAL scan line for the status register */
+    unsigned row_counter; /* VDC vertical character row, independent of PAL */
+    unsigned raster_in_row; /* current raster within the VDC character row */
+    bool row_advance_latched; /* previous raster matched R9; advance next line */
     u64 bus_clock;       /* 8502 clock at the latest VDC port access */
     u64 ready_clock;     /* approximate end of the current VDC operation */
     unsigned clock_scale; /* 8502 clocks per nominal VDC bus clock */

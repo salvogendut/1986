@@ -46,6 +46,8 @@ void vic_reset(Vic *v) {
     v->bank_addr = 0;
     v->prev_raster = 0;
     v->cycles = 0;
+    memset(v->raster_ctrl2, v->ctrl2, sizeof(v->raster_ctrl2));
+    v->raster_ctrl2_valid = false;
 }
 
 /* Re-evaluate the VIC IRQ line (bit 7) from the pending masked flags. */
@@ -54,6 +56,12 @@ static void vic_irq_line_update(Vic *v) {
         v->irq_status |= 0x80;
     else
         v->irq_status &= 0x7F;
+}
+
+static void vic_set_raster_irq_line(Vic *v, u16 line) {
+    if (line != v->raster_irq_line)
+        v->raster_irq_fired = 0;
+    v->raster_irq_line = line;
 }
 
 void vic_write(Vic *v, u16 addr, u8 val) {
@@ -67,8 +75,16 @@ void vic_write(Vic *v, u16 addr, u8 val) {
 
     switch (reg) {
         case 0x10: v->sprite_x_msb = val; break;
-        case 0x11: v->vmode = val; break;
-        case 0x12: v->raster = val; v->raster_irq_line = (u8)(v->raster_irq_line & 0x100) | val; break;
+        case 0x11:
+            v->vmode = val;
+            vic_set_raster_irq_line(v,
+                (u16)((v->raster_irq_line & 0xFF) | ((val & 0x80) << 1)));
+            break;
+        case 0x12:
+            v->raster = val;
+            vic_set_raster_irq_line(v,
+                (u16)((v->raster_irq_line & 0x100) | val));
+            break;
         case 0x15: v->sprite_enable = val; break;
         case 0x16: v->ctrl1 = val; break;
         case 0x17: v->sprite_y_expand = val; break;
@@ -97,6 +113,16 @@ void vic_write(Vic *v, u16 addr, u8 val) {
     }
 }
 
+void vic_write_rmw(Vic *v, u16 addr, u8 val) {
+    /* 6502 read-modify-write instructions put the unmodified byte on the
+     * bus before writing the result. VICE's core reports this as one write
+     * with maincpu_rmw_flag, so reproduce the first bus write here. On
+     * $D019 this acknowledges pending VIC IRQ bits even when LSR's final
+     * value no longer has those bits set. */
+    vic_write(v, addr, vic_read(v, addr));
+    vic_write(v, addr, val);
+}
+
 /* Current raster line, derived from the CPU cycle counter so it advances as
  * the CPU executes (one raster line per 63 cycles). */
 static unsigned vic_raster(const Vic *v) {
@@ -114,7 +140,7 @@ u8 vic_read(Vic *v, u16 addr) {
 
     switch (reg) {
         case 0x10: return v->sprite_x_msb;
-        case 0x11: return (u8)(v->vmode | ((raster & 0x100) ? 0x80 : 0));
+        case 0x11: return (u8)((v->vmode & 0x7F) | ((raster & 0x100) ? 0x80 : 0));
         case 0x12: return (u8)(raster & 0xFF);
         case 0x15: return v->sprite_enable;
         case 0x16: return v->ctrl1;
@@ -163,7 +189,7 @@ bool vic_tick(Vic *v) {
     if (raster < v->prev_raster)
         v->raster_irq_fired = 0;
 
-    if ((raster & 0xFF) == (v->raster_irq_line & 0xFF) && !v->raster_irq_fired) {
+    if (raster == v->raster_irq_line && !v->raster_irq_fired) {
         v->irq_status |= 0x01;   /* raster IRQ flag */
         v->raster_irq_fired = 1;
     }
@@ -171,6 +197,13 @@ bool vic_tick(Vic *v) {
 
     vic_irq_line_update(v);
     return (v->irq_status & 0x80) != 0;
+}
+
+void vic_latch_raster(Vic *v, unsigned line) {
+    if (line < VIC_RASTER_LINES) {
+        v->raster_ctrl2[line] = v->ctrl2;
+        v->raster_ctrl2_valid = true;
+    }
 }
 
 /* VICE maps sprite X into its normal PAL canvas with left-border-width - 24.
@@ -289,21 +322,24 @@ void vic_render(Vic *v, Mem *m, Display *d) {
      * sources for pixel values 00..11 are $D021, screen high nibble, screen
      * low nibble, and colour RAM respectively. */
     if (v->vmode & 0x20) {
-        u32 bitmap_addr = v->bank_addr + (((v->ctrl2 & 0x0E) << 10) & 0x2000);
-        u32 screen_base = v->bank_addr + ((v->ctrl2 & 0xF0) << 6);
         bool multicolor = (v->ctrl1 & 0x10) != 0;
 
         for (int cy = 0; cy < VIC_CHARS_Y; cy++) {
             for (int cx = 0; cx < VIC_CHARS_X; cx++) {
                 u16 cell = (u16)(cy * VIC_CHARS_X + cx);
-                u8 screen = m->ram[screen_base + cell];
 
                 if (!multicolor) {
-                    u32 fg = VIC_COLORS[screen >> 4];
-                    u32 cell_bg = VIC_COLORS[screen & 0x0F];
                     for (int py = 0; py < 8; py++) {
-                        u8 bits = m->ram[bitmap_addr + cy * 320 + cx * 8 + py];
                         int dy = VIC_TEXT_Y + cy * 8 + py;
+                        unsigned raster = (unsigned)(dy + VIC_FIRST_VISIBLE_LINE);
+                        u8 ctrl2 = v->raster_ctrl2_valid
+                            ? v->raster_ctrl2[raster] : v->ctrl2;
+                        u32 screen_base = v->bank_addr + ((ctrl2 & 0xF0) << 6);
+                        u32 bitmap_addr = v->bank_addr + (((ctrl2 & 0x0E) << 10) & 0x2000);
+                        u8 screen = m->ram[screen_base + cell];
+                        u32 fg = VIC_COLORS[screen >> 4];
+                        u32 cell_bg = VIC_COLORS[screen & 0x0F];
+                        u8 bits = m->ram[bitmap_addr + cy * 320 + cx * 8 + py];
                         for (int px = 0; px < 8; px++) {
                             int dx = VIC_TEXT_X + cx * 8 + px;
                             unsigned off = (unsigned)(dy * C128_SCREEN_W + dx);
@@ -315,15 +351,19 @@ void vic_render(Vic *v, Mem *m, Display *d) {
                 } else {
                     unsigned cbank = (m->pla_data >> 1) & 0x01;
                     u8 cram = m->color_ram[cbank * 0x400 + (cell & 0x3FF)] & 0x0F;
-                    u32 colors[4] = {
-                        bg,
-                        VIC_COLORS[screen >> 4],
-                        VIC_COLORS[screen & 0x0F],
-                        VIC_COLORS[cram]
-                    };
                     for (int py = 0; py < 8; py++) {
-                        u8 bits = m->ram[bitmap_addr + cy * 320 + cx * 8 + py];
                         int dy = VIC_TEXT_Y + cy * 8 + py;
+                        unsigned raster = (unsigned)(dy + VIC_FIRST_VISIBLE_LINE);
+                        u8 ctrl2 = v->raster_ctrl2_valid
+                            ? v->raster_ctrl2[raster] : v->ctrl2;
+                        u32 screen_base = v->bank_addr + ((ctrl2 & 0xF0) << 6);
+                        u32 bitmap_addr = v->bank_addr + (((ctrl2 & 0x0E) << 10) & 0x2000);
+                        u8 screen = m->ram[screen_base + cell];
+                        u32 colors[4] = {
+                            bg, VIC_COLORS[screen >> 4],
+                            VIC_COLORS[screen & 0x0F], VIC_COLORS[cram]
+                        };
+                        u8 bits = m->ram[bitmap_addr + cy * 320 + cx * 8 + py];
                         for (int px = 0; px < 4; px++) {
                             u8 code = (u8)((bits >> (6 - px * 2)) & 0x03);
                             int dx = VIC_TEXT_X + cx * 8 + px * 2;

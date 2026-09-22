@@ -103,8 +103,11 @@ Current working pieces include:
 - VICE's 8502/6510 core and a reused Z80 core wired to the C128 bus.
 - A fast virtual IEC drive that reads and writes D64, D71, and D81 images,
   supporting `DIRECTORY`, `LOAD`/`DLOAD`, `SAVE`/`DSAVE`, and DOS `SCRATCH`/
-  `RENAME` commands with status errors. It also loads standalone `.prg` files
-  as read-only single-file media.
+  `RENAME` commands with status errors. VICE-style direct-access `#` buffers
+  support `U1`/`U2` and `B-R`/`B-W`/`B-P` block commands. Binary `M-W`/`M-R`
+  commands access virtual drive RAM; `M-E` is acknowledged but cannot execute
+  uploaded drive code. It also loads standalone `.prg` files as read-only
+  single-file media.
 - Native C128 generic `.crt` cartridges and raw 8/16/32 KiB external
   function-ROM `.bin` images (also repeated 64 KiB EPROM dumps), with live
   Media-overlay insertion/ejection and `--cart` startup loading. C64-only and
@@ -112,7 +115,8 @@ Current working pieces include:
 - Optional U36 internal function-ROM slot for raw 8/16/32 KiB `.bin`/`.rom`
   images, selected from Media when Tinker is enabled and restored at launch.
 - Tests for the CPU, MMU, CIA/SID, VIC graphics and sprites, configuration,
-  GIF encoder, disk formats, KERNAL IEC traps, and virtual-drive channels.
+  GIF encoder, disk formats, KERNAL IEC traps, virtual-drive channels, and
+  atomic block-command writes.
 
 Tape playback, further write-side DOS commands, complete 1571 emulation,
 high-fidelity SID filter/combined-waveform emulation, CP/M mode, and several

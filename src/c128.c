@@ -113,7 +113,13 @@ static u8 io_read(C128 *c, u16 addr) {
 }
 
 static void io_write(C128 *c, u16 addr, u8 val) {
-    if (addr >= 0xD000 && addr < 0xD400) { vic_write(&c->vic, addr, val); return; }
+    if (addr >= 0xD000 && addr < 0xD400) {
+        if ((addr & 0x3F) == 0x19 && cpu_rmw_active())
+            vic_write_rmw(&c->vic, addr, val);
+        else
+            vic_write(&c->vic, addr, val);
+        return;
+    }
     if (addr >= 0xD400 && addr < 0xD500) { sid_write(&c->sid, addr, val); return; }
     if (addr >= 0xD800 && addr < 0xDC00) {
         unsigned bank = c->mem.pla_data & 0x01;   /* CPU colour-RAM bank */
@@ -123,6 +129,8 @@ static void io_write(C128 *c, u16 addr, u8 val) {
     if (addr >= 0xD500 && addr < 0xD510) {
         if (c->mem.mmu.mmio) {
             mmu_write(&c->mem.mmu, addr, val);
+            if ((addr & 0xff) == 0x06 || (addr & 0xff) == 0x09)
+                cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
             if (mmu_take_c64_request(&c->mem.mmu))
                 notify_post("C64 MODE IS NOT SUPPORTED - USING NATIVE C128 MODE");
             return;
@@ -227,6 +235,7 @@ void c128_init(C128 *c, Config *cfg) {
 
 void c128_reset(C128 *c) {
     mem_reset(&c->mem);
+    cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
     cpu_reset(&c->cpu);
     vic_reset(&c->vic);
     vdc_reset(&c->vdc);
@@ -251,6 +260,7 @@ void c128_reset(C128 *c) {
     drive_set_unit(&c->drive2, c->cfg->drive2_unit);
     c->paused = false;
     c->frames_since_reset = 0;
+    c->cpu_frame_debt = 0;
     /* Preserve the 40/80 column choice across resets. */
     c->mem.mmu.col4080 = !c->col_mode_80;
     display_set_vdc_active(&c->display, c->col_mode_80);
@@ -272,23 +282,24 @@ int c128_frame(C128 *c) {
     c->drive_host_cycle_synced = cpu_cycles();
     int remaining = frame_cycles;
     int total = 0;
-    int cpu_debt = 0;
+    int cpu_debt = c->cpu_frame_debt;
     c->audio_count = 0;
     while (remaining > 0) {
         int chunk = (remaining > 63) ? 63 : remaining;
         vdc_set_raster_line(&c->vdc,
             (unsigned)((frame_cycles - remaining) * 312 / frame_cycles));
-        int target = c->drive_raw_iec ? chunk - cpu_debt : chunk;
+        int target = chunk - cpu_debt;
         int progressed = 0;
         while (progressed < target) {
             /* A full raster-line gap can swallow an IEC bit transition.
              * In true-drive mode, alternate one 8502
              * instruction with the corresponding 1571 clock slice. */
-            int ran = cpu_step_budget(&c->cpu, c->drive_raw_iec ? 1 : chunk);
-            if (ran <= 0 && c->drive_raw_iec) break;
-            int elapsed = c->drive_raw_iec ? ran : chunk;
-            if (ran > 0) total += ran;
-            progressed += elapsed;
+            int ran = cpu_step_budget(&c->cpu,
+                c->drive_raw_iec ? 1 : target - progressed);
+            if (ran <= 0) break;
+            int elapsed = ran;
+            total += ran;
+            progressed += ran;
             cia_tick(&c->cia1, elapsed);
             cia_tick(&c->cia2, elapsed);
             drive_sync_to_cpu(c);
@@ -303,12 +314,15 @@ int c128_frame(C128 *c) {
                 c->audio_frame + c->audio_count,
                 C128_AUDIO_FRAME_CAPACITY - c->audio_count);
         }
-        cpu_debt = c->drive_raw_iec ? progressed - target : 0;
+        cpu_debt = progressed - target;
         remaining -= chunk;
+        vic_latch_raster(&c->vic,
+            (unsigned)((frame_cycles - remaining) * VIC_RASTER_LINES / frame_cycles));
         bool vic_irq = vic_tick(&c->vic);
         cpu_irq(&c->cpu, cia_irq_line(&c->cia1) || vic_irq);
         cpu_nmi(&c->cpu, cia_irq_line(&c->cia2) || c->restore_down);
     }
+    c->cpu_frame_debt = cpu_debt;
     /* The 6526 TOD input follows the PAL 50 Hz mains signal, not the 8502
      * clock (which may run at 2 MHz). One completed PAL frame is one pulse. */
     cia_tod_tick(&c->cia1);

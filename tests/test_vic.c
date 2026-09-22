@@ -11,7 +11,8 @@ static int failures = 0;
 
 /* vic.c uses the CPU cycle count only for raster-register reads. Rendering
  * tests do not advance the raster, so a fixed value is sufficient here. */
-u64 cpu_cycles(void) { return 0; }
+static u64 test_cpu_cycles;
+u64 cpu_cycles(void) { return test_cpu_cycles; }
 
 static u32 pixel(const Display *d, int x, int y) {
     return d->pixels[(VIC_TEXT_Y + y) * C128_SCREEN_W + VIC_TEXT_X + x];
@@ -43,6 +44,38 @@ int main(void) {
     mem_set_processor_port(mem, 0x07, 0x00); /* VIC colour banks 0, ROM on */
 
     vic_init(&vic);
+    vic_write(&vic, 0xD01A, 0x01);
+    vic.irq_status = 0x81;
+    vic_write(&vic, 0xD019, 0x40); /* final value of LSR $D019 */
+    CHECK(vic.irq_status == 0x81,
+          "ordinary write only acknowledges IRQ bits in its value");
+    vic_write_rmw(&vic, 0xD019, 0x40);
+    CHECK(vic.irq_status == 0,
+          "LSR $D019 acknowledges the read byte through its RMW bus write");
+    vic_reset(&vic);
+    vic_write(&vic, 0xD01A, 0x01);
+    vic_write(&vic, 0xD012, 100);
+    test_cpu_cycles = 100 * 63;
+    CHECK(vic_tick(&vic) && (vic_read(&vic, 0xD019) & 0x01),
+          "first raster compare asserts its IRQ");
+    vic_write(&vic, 0xD019, 0x01);
+    vic_write(&vic, 0xD012, 120);
+    test_cpu_cycles = 120 * 63;
+    CHECK(vic_tick(&vic) && (vic_read(&vic, 0xD019) & 0x01),
+          "a new compare can assert another raster IRQ in the same frame");
+    vic_write(&vic, 0xD019, 0x01);
+    CHECK(!vic_tick(&vic), "one compare does not repeatedly fire on one raster");
+    vic_write(&vic, 0xD011, 0x80);
+    vic_write(&vic, 0xD012, 44); /* 256 + 44 = raster 300 */
+    CHECK(vic.raster_irq_line == 300,
+          "D011 bit 7 supplies the ninth raster compare bit");
+    test_cpu_cycles = 300 * 63;
+    CHECK(vic_tick(&vic), "raster compare can match above line 255");
+    test_cpu_cycles = 100 * 63;
+    CHECK(!(vic_read(&vic, 0xD011) & 0x80),
+          "D011 read bit 7 reports the current raster, not the compare latch");
+    test_cpu_cycles = 0;
+    vic_reset(&vic);
     vic_write(&vic, 0xD011, 0x3B); /* display on, bitmap mode */
     vic_write(&vic, 0xD018, 0x18); /* screen $0400, bitmap $2000 */
     vic.bg_color[0] = 0x02;        /* must not replace hires cell background */
@@ -54,6 +87,28 @@ int main(void) {
     vic_render(&vic, mem, display);
     CHECK(pixel(display, 0, 0) == 0xC46C71, "hires set bit uses screen high nibble");
     CHECK(pixel(display, 1, 0) == 0x75CEC8, "hires clear bit uses screen low nibble");
+
+    /* A raster split can point adjacent bitmap scanlines at different screen
+     * matrices; rendering from the final $D018 value loses half the image. */
+    vic_reset(&vic);
+    vic_write(&vic, 0xD011, 0x3B);
+    vic_write(&vic, 0xD018, 0x10); /* first scanline: matrix $0400 */
+    mem->ram[0x0400] = 0xA0;
+    mem->ram[0x0800] = 0xF0;
+    mem->ram[0x0000] = 0x80;
+    mem->ram[0x0001] = 0x80;
+    vic_latch_raster(&vic, 51);
+    vic_write(&vic, 0xD018, 0x20); /* second scanline: matrix $0800 */
+    vic_latch_raster(&vic, 52);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xC46C71 &&
+          pixel(display, 0, 1) == 0xB2B2B2,
+          "bitmap raster split uses the matrix selected on each scanline");
+
+    vic_reset(&vic);
+    vic_write(&vic, 0xD011, 0x3B);
+    vic_write(&vic, 0xD018, 0x18);
+    vic.bg_color[0] = 0x02;
 
     /* Multicolor: 00=$D021, 01=screen high, 10=screen low, 11=colour RAM. */
     mem->ram[0x0400] = 0xB4;

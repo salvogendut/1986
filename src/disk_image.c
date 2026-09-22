@@ -392,14 +392,15 @@ static bool filename_matches(const char *pattern, const char *name) {
 int disk_image_find_file(const DiskImage *d, const char *name, DiskDirEntry *entry) {
     if (!d || !name || !entry) return -1;
 
-    while (*name == ' ' || *name == '@') name++;
+    /* Ordinary spaces are legal filename bytes; only 0xA0 directory padding
+     * is discarded when entries are decoded. */
+    if (*name == '@') name++;
     if (name[0] >= '0' && name[0] <= '9' && name[1] == ':') name += 2;
 
     char pattern[17];
     size_t n = 0;
     while (*name && *name != ',' && n < sizeof(pattern) - 1)
         pattern[n++] = *name++;
-    while (n > 0 && pattern[n - 1] == ' ') n--;
     pattern[n] = '\0';
     if (n == 0) {
         if (d->format != DISK_FORMAT_PRG) return -1;
@@ -695,6 +696,41 @@ static int persist_image(const DiskImage *d, const u8 *image) {
     free(temp);
     return ok ? 0 : -1;
 #endif
+}
+
+DiskSaveResult disk_image_write_sector(DiskImage *d, int track, int sector,
+                                       const u8 *buf) {
+    if (!d || !d->data || !d->writable || d->format == DISK_FORMAT_PRG)
+        return DISK_SAVE_WRITE_PROTECT;
+    int sectors = disk_image_track_sectors(d, track);
+    if (!buf || sectors <= 0 || sector < 0 || sector >= sectors)
+        return DISK_SAVE_IO_ERROR;
+    size_t offset = (size_t)disk_image_track_offset(d, track) +
+                    (size_t)sector * DISK_SECTOR_BYTES;
+    if (offset + DISK_SECTOR_BYTES > d->size) return DISK_SAVE_IO_ERROR;
+
+    size_t error_byte = 0;
+    if (d->has_errors) {
+        error_byte = (size_t)disk_image_track_offset(d, d->tracks + 1) +
+                     offset / DISK_SECTOR_BYTES;
+        if (error_byte >= d->size) return DISK_SAVE_IO_ERROR;
+    }
+    if (!memcmp(d->data + offset, buf, DISK_SECTOR_BYTES) &&
+        (!d->has_errors || d->data[error_byte] == 1))
+        return DISK_SAVE_OK;
+
+    u8 *next = malloc(d->size);
+    if (!next) return DISK_SAVE_IO_ERROR;
+    memcpy(next, d->data, d->size);
+    memcpy(next + offset, buf, DISK_SECTOR_BYTES);
+    if (d->has_errors) next[error_byte] = 1;
+    if (persist_image(d, next) != 0) {
+        free(next);
+        return DISK_SAVE_IO_ERROR;
+    }
+    memcpy(d->data, next, d->size);
+    free(next);
+    return DISK_SAVE_OK;
 }
 
 DiskSaveResult disk_image_write_gcr_track(DiskImage *d, int track,

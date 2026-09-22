@@ -52,6 +52,7 @@ typedef struct {
 
 void cpu_init(Cpu8502 *cpu, CpuBus bus);
 void cpu_attach_mem(Cpu8502 *cpu, u8 *ram); /* set the RAM base used for the stack page */
+void cpu_set_stack_page(u8 *page); /* follow $D509/A stack-page relocation */
 void cpu_reset(Cpu8502 *cpu);
 int  cpu_step(Cpu8502 *cpu);          /* run one frame of cycles; returns cycles */
 int  cpu_step_budget(Cpu8502 *cpu, int budget); /* run up to budget cycles */
@@ -59,6 +60,7 @@ void cpu_irq(Cpu8502 *cpu, bool level);
 void cpu_nmi(Cpu8502 *cpu, bool level);
 void cpu_pc(Cpu8502 *cpu, u16 pc);
 u64  cpu_cycles(void);                /* total cycles executed (for raster sync) */
+bool cpu_rmw_active(void);            /* current instruction has an RMW bus write */
 void cpu_install_serial_traps(u8 *kernal); /* patch the KERNAL ROM with IEC traps */
 
 /* IEC (serial-bus) trap callbacks, invoked by the KERNAL's patched routines.

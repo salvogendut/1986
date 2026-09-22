@@ -33,6 +33,7 @@ static store_func_ptr_t g_write_tab[0x101];
 read_func_ptr_t *_mem_read_tab_ptr = g_read_tab;
 store_func_ptr_t *_mem_write_tab_ptr = g_write_tab;
 BYTE *mem_ram = NULL;
+BYTE *mem_page_one = NULL;
 
 /* The active CpuBus (its ctx is the C128). Set by cpu_init(). */
 static CpuBus g_bus;
@@ -274,6 +275,11 @@ void cpu_init(Cpu8502 *cpu, CpuBus bus) {
 void cpu_attach_mem(Cpu8502 *cpu, u8 *ram) {
     (void)cpu;
     mem_ram = (BYTE *)ram;
+    mem_page_one = mem_ram + 0x100;
+}
+
+void cpu_set_stack_page(u8 *page) {
+    mem_page_one = (BYTE *)page;
 }
 
 void cpu_reset(Cpu8502 *cpu) {
@@ -346,4 +352,8 @@ void cpu_pc(Cpu8502 *cpu, u16 pc) {
 
 u64 cpu_cycles(void) {
     return (u64)maincpu_clk;
+}
+
+bool cpu_rmw_active(void) {
+    return maincpu_rmw_flag != 0;
 }
