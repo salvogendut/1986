@@ -57,6 +57,7 @@ typedef struct {
     bool    col_mode_80; /* persistent 40/80 mode: true = 80-col (survives reset) */
     bool    restore_down; /* RESTORE is an NMI pin, not a keyboard-matrix key */
     int     frames_since_reset; /* frames elapsed since the last reset */
+    int     cpu_frame_debt; /* instruction-cycle overrun carried across raster frames */
     u64     total_cycles;
 } C128;
 

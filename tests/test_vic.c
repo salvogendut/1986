@@ -88,6 +88,28 @@ int main(void) {
     CHECK(pixel(display, 0, 0) == 0xC46C71, "hires set bit uses screen high nibble");
     CHECK(pixel(display, 1, 0) == 0x75CEC8, "hires clear bit uses screen low nibble");
 
+    /* A raster split can point adjacent bitmap scanlines at different screen
+     * matrices; rendering from the final $D018 value loses half the image. */
+    vic_reset(&vic);
+    vic_write(&vic, 0xD011, 0x3B);
+    vic_write(&vic, 0xD018, 0x10); /* first scanline: matrix $0400 */
+    mem->ram[0x0400] = 0xA0;
+    mem->ram[0x0800] = 0xF0;
+    mem->ram[0x0000] = 0x80;
+    mem->ram[0x0001] = 0x80;
+    vic_latch_raster(&vic, 51);
+    vic_write(&vic, 0xD018, 0x20); /* second scanline: matrix $0800 */
+    vic_latch_raster(&vic, 52);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xC46C71 &&
+          pixel(display, 0, 1) == 0xB2B2B2,
+          "bitmap raster split uses the matrix selected on each scanline");
+
+    vic_reset(&vic);
+    vic_write(&vic, 0xD011, 0x3B);
+    vic_write(&vic, 0xD018, 0x18);
+    vic.bg_color[0] = 0x02;
+
     /* Multicolor: 00=$D021, 01=screen high, 10=screen low, 11=colour RAM. */
     mem->ram[0x0400] = 0xB4;
     mem->ram[0x2000] = 0x1B;       /* 00, 01, 10, 11 */

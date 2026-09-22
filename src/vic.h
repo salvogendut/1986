@@ -47,6 +47,8 @@ typedef struct {
     u32 bank_addr;          /* MMU/CIA2-selected 16K VIC RAM window */
     unsigned prev_raster; /* previous raster line (for wrap detection) */
     u64  cycles;       /* raster cycle counter */
+    u8   raster_ctrl2[VIC_RASTER_LINES]; /* $D018 at each raster line */
+    bool raster_ctrl2_valid;
 } Vic;
 
 void vic_init(Vic *v);
@@ -59,5 +61,6 @@ void vic_set_bank(Vic *v, unsigned bank);
 /* Advance raster/IRQ state and return true if the raster IRQ line is now
  * asserted. Called once per raster-line chunk. */
 bool vic_tick(Vic *v);
+void vic_latch_raster(Vic *v, unsigned line);
 /* Render one full frame (raster 0..199) into the display buffer. */
 void vic_render(Vic *v, Mem *m, Display *d);
