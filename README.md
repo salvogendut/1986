@@ -104,8 +104,10 @@ Current working pieces include:
 - A fast virtual IEC drive that reads and writes D64, D71, and D81 images,
   supporting `DIRECTORY`, `LOAD`/`DLOAD`, `SAVE`/`DSAVE`, and DOS `SCRATCH`/
   `RENAME` commands with status errors. VICE-style direct-access `#` buffers
-  support `U1`/`U2` and `B-R`/`B-W`/`B-P` block commands. It also loads
-  standalone `.prg` files as read-only single-file media.
+  support `U1`/`U2` and `B-R`/`B-W`/`B-P` block commands. Binary `M-W`/`M-R`
+  commands access virtual drive RAM; `M-E` is acknowledged but cannot execute
+  uploaded drive code. It also loads standalone `.prg` files as read-only
+  single-file media.
 - Native C128 generic `.crt` cartridges and raw 8/16/32 KiB external
   function-ROM `.bin` images (also repeated 64 KiB EPROM dumps), with live
   Media-overlay insertion/ejection and `--cart` startup loading. C64-only and

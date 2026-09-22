@@ -42,6 +42,13 @@ static void send_command(VirtualDrive *v, const char *command) {
     virtual_drive_attention(v, 0x3f);
 }
 
+static void send_command_bytes(VirtualDrive *v, const u8 *bytes, size_t count) {
+    virtual_drive_attention(v, (u8)(0x20 | v->unit));
+    virtual_drive_attention(v, 0x6f);
+    for (size_t i = 0; i < count; ++i) virtual_drive_send(v, bytes[i]);
+    virtual_drive_attention(v, 0x3f);
+}
+
 static void write_buffer(VirtualDrive *v, unsigned channel,
                          const u8 *bytes, size_t count) {
     virtual_drive_attention(v, (u8)(0x20 | v->unit));
@@ -188,10 +195,45 @@ static void exercise_format(DiskFormat format, int track, int sector) {
     unlink(path);
 }
 
+static void exercise_memory_commands(void) {
+    VirtualDrive v;
+    virtual_drive_init(&v, 8);
+    const u8 write[] = {'M', '-', 'W', 0xfe, 0x7f, 4,
+                        0x00, 0x0d, 0x80, 0x55};
+    send_command_bytes(&v, write, sizeof(write));
+    CHECK(strncmp(v.status, "00,", 3) == 0 &&
+          v.ram[0x7ffe] == 0 && v.ram[0x7fff] == 0x0d &&
+          v.ram[0] == 0x80 && v.ram[1] == 0x55,
+          "M-W stores binary NUL and CR and wraps virtual RAM");
+
+    const u8 read[] = {'M', '-', 'R', 0xfe, 0x7f, 4};
+    send_command_bytes(&v, read, sizeof(read));
+    u8 received[256] = {0};
+    int result = 0;
+    size_t n = read_buffer(&v, 15, received, sizeof(received), &result);
+    CHECK(n == 4 && result == 2 &&
+          memcmp(received, write + 6, 4) == 0,
+          "M-R returns virtual RAM through the status channel");
+    n = read_buffer(&v, 15, received, sizeof(received), &result);
+    CHECK(n > 4 && memcmp(received, "00,", 3) == 0,
+          "status channel returns DOS status after memory data");
+
+    const u8 execute[] = {'M', '-', 'E', 0xe2, 0x03};
+    send_command_bytes(&v, execute, sizeof(execute));
+    CHECK(strncmp(v.status, "00,", 3) == 0,
+          "M-E acknowledges without running uploaded drive code");
+    const u8 truncated[] = {'M', '-', 'W', 0x00, 0x03, 2, 0x99};
+    send_command_bytes(&v, truncated, sizeof(truncated));
+    CHECK(strncmp(v.status, "31,SYNTAX ERROR", 15) == 0,
+          "truncated M-W does not write virtual RAM");
+    virtual_drive_reset(&v);
+}
+
 int main(void) {
     exercise_format(DISK_FORMAT_D64, 18, 0);
     exercise_format(DISK_FORMAT_D71, 53, 2);
     exercise_format(DISK_FORMAT_D81, 40, 0);
+    exercise_memory_commands();
     if (!failures) puts("test-vdrive-blocks: OK");
     return failures ? 1 : 0;
 }

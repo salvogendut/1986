@@ -194,6 +194,50 @@ static void execute_block_command(VirtualDrive *v, const char *command) {
     set_status(v, "00, OK,00,00\r");
 }
 
+static void execute_memory_command(VirtualDrive *v, const u8 *bytes,
+                                   size_t length) {
+    if (length < 5) {
+        command_error(v, 31, "SYNTAX ERROR", 0, 0);
+        return;
+    }
+    unsigned address = (unsigned)bytes[3] | (unsigned)bytes[4] << 8;
+    switch (toupper((unsigned char)bytes[2])) {
+        case 'W': {
+            if (length < 6 || length - 6 < bytes[5]) {
+                command_error(v, 31, "SYNTAX ERROR", 0, 0);
+                return;
+            }
+            /* VICE's virtual drive keeps 32 KiB of drive RAM. This accepts
+             * binary payloads, including NUL and CR, without executing the
+             * uploaded 6502 program. */
+            if (address < VDRIVE_RAM_SIZE)
+                for (unsigned i = 0; i < bytes[5]; ++i)
+                    v->ram[(address + i) & (VDRIVE_RAM_SIZE - 1)] = bytes[6 + i];
+            set_status(v, "00, OK,00,00\r");
+            return;
+        }
+        case 'R': {
+            unsigned count = length < 6 || bytes[5] == 0
+                ? (length < 6 ? 1u : DISK_SECTOR_BYTES) : bytes[5];
+            for (unsigned i = 0; i < count; ++i)
+                v->memory_read[i] = v->ram[(address + i) &
+                                            (VDRIVE_RAM_SIZE - 1)];
+            v->memory_read_len = count;
+            v->memory_read_pending = true;
+            set_status(v, "00, OK,00,00\r");
+            return;
+        }
+        case 'E':
+            /* Like VICE's virtual drive, M-E acknowledges the command but
+             * cannot run uploaded drive code. True drive mode is required. */
+            set_status(v, "00, OK,00,00\r");
+            return;
+        default:
+            command_error(v, 31, "SYNTAX ERROR", 0, 0);
+            return;
+    }
+}
+
 static void execute_command(VirtualDrive *v, const u8 *bytes, size_t length,
                             bool overflow) {
     if (length == 0 && !overflow) return;
@@ -204,6 +248,12 @@ static void execute_command(VirtualDrive *v, const u8 *bytes, size_t length,
     }
     memcpy(command, bytes, length);
     command[length] = '\0';
+    v->memory_read_pending = false;
+    if (length >= 2 && toupper((unsigned char)bytes[0]) == 'M' &&
+        bytes[1] == '-') {
+        execute_memory_command(v, bytes, length);
+        return;
+    }
     while (length && (command[length - 1] == '\r' ||
                       command[length - 1] == '\n'))
         command[--length] = '\0';
@@ -423,11 +473,15 @@ static void prepare_talk(VirtualDrive *v) {
         v->response_len = v->response_pos = 0;
         v->response_channel = 15;
         v->response_error = false;
-        size_t length = strlen(v->status);
+        size_t length = v->memory_read_pending ? v->memory_read_len
+                                               : strlen(v->status);
         if (reserve_response(v, length)) {
             v->response_len = length;
-            memcpy(v->response, v->status, length);
+            memcpy(v->response,
+                   v->memory_read_pending ? v->memory_read
+                                          : (const u8 *)v->status, length);
         }
+        v->memory_read_pending = false;
         return;
     }
     if (v->channel_open[channel] && v->channel_direct[channel]) {

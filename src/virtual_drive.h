@@ -14,6 +14,7 @@
 #define VDRIVE_NAME_MAX     64
 #define VDRIVE_DIRECTORY_MAX (32u + 512u * 32u + 31u)
 #define VDRIVE_SAVE_MAX     (3200u * 254u)
+#define VDRIVE_RAM_SIZE     0x8000u
 
 typedef enum {
     VDRIVE_WRITE_NONE = 0,
@@ -43,7 +44,12 @@ typedef struct {
     size_t channel_cap[VDRIVE_CHANNELS];
     bool channel_overflow[VDRIVE_CHANNELS];
 
-    u8 write_buf[256];
+    u8 ram[VDRIVE_RAM_SIZE];
+    u8 memory_read[DISK_SECTOR_BYTES];
+    size_t memory_read_len;
+    bool memory_read_pending;
+
+    u8 write_buf[512];
     size_t write_len;
     bool write_overflow;
     u8 *response;

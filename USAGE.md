@@ -149,8 +149,9 @@ The fast virtual drive also has VICE-style direct-access `#` channels with
 `OPEN 2,8,2,"#":OPEN 15,8,15:PRINT#15,"U1:2,0,18,0"` reads track 18,
 sector 0 into channel 2's buffer. `U2` and `B-W` write raw sectors directly to
 the image; they can damage its filesystem, so use a backup. Errors appear in
-`DS$`. These commands do not execute uploaded drive code or replace the real
-1571 needed by GEOS.
+`DS$`. VICE-style binary `M-W` and `M-R` commands can write and read the fast
+drive's 32 KiB of virtual RAM. `M-E` is accepted but does not execute uploaded
+drive code; GEOS still requires the real 1571 backend to boot.
 
 Advanced > Real Disk Drive defaults to Off. With it On, Media set to 1571CR,
 and `dos1571cr.bin` installed, restart to use the ROM-backed integrated 1571

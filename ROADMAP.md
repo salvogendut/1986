@@ -208,8 +208,10 @@ cycle-level 1571 implementation without conflating their interfaces.
   read/write support (#55).
 - [x] Fast virtual-drive direct-access buffers and `U1`/`U2`, `B-R`/`B-W`/
   `B-P` block commands, with atomic sector write-back on D64/D71/D81 (#107).
+- [x] VICE-style binary `M-W`/`M-R` virtual drive RAM commands and non-executing
+  `M-E` acknowledgement (#107).
 - [ ] Further VICE virtual-drive parity: REL files, partition commands,
-  full DOS memory-command semantics, and burst serial.
+  remaining DOS memory-command semantics, and burst serial.
 - [ ] D81 partition navigation and REL-file operations.
 - [ ] True integrated 1571: drive CPU, 2K RAM, DOS ROM, CIA/VIA/FDC,
   mechanism timing, line-level IEC, and fast serial (#30).
