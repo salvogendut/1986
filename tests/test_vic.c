@@ -44,6 +44,12 @@ int main(void) {
     mem_set_processor_port(mem, 0x07, 0x00); /* VIC colour banks 0, ROM on */
 
     vic_init(&vic);
+    CHECK(!vic.fast_mode && (vic_read(&vic, 0xD030) & 1) == 0,
+          "VIC-IIe fast mode defaults off");
+    vic_write(&vic, 0xD030, 0x01);
+    CHECK(vic.fast_mode && (vic_read(&vic, 0xD030) & 1),
+          "$D030 bit 0 selects VIC-IIe 2 MHz mode");
+    vic_reset(&vic);
     vic_write(&vic, 0xD01A, 0x01);
     vic.irq_status = 0x81;
     vic_write(&vic, 0xD019, 0x40); /* final value of LSR $D019 */
@@ -184,6 +190,28 @@ int main(void) {
     vic_render(&vic, mem, display);
     CHECK(pixel(display, 0, 0) == 0xFFFFFF,
           "native character ROM remains visible in another VIC bank");
+
+    /* In C64 personality the VIC sees the lower 4K character-ROM half and
+     * the first 1K color RAM, even when the latched CPU/VIC RAM bank is 1. */
+    mmu_set_c64_enabled(&mem->mmu, true);
+    mem->mmu.mcr = 0x40;
+    mmu_write(&mem->mmu, 0xD505, 0x47);
+    vic_set_bank(&vic, 4);
+    vic_write(&vic, 0xD018, 0x14);
+    mem->ram[0x10400] = 0x01;
+    mem->chargen[0x0008] = 0x20;
+    mem->chargen[0x1008] = 0x00;
+    mem->color_ram[0] = 0x01;
+    mem->color_ram[0x400] = 0x02;
+    mem_set_processor_port(mem, 0x07, 0x03);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 2, 0) == 0xFFFFFF,
+          "C64 personality renders from lower character-ROM half");
+    CHECK(pixel(display, 0, 0) == 0x000000,
+          "C64 character glyph preserves clear pixels");
+    mmu_set_c64_enabled(&mem->mmu, false);
+    mem_set_processor_port(mem, 0x47, 0x00);
+    mem->chargen[0x1008] = 0x80;
 
     vic_set_bank(&vic, 4); /* first 16K window in second 64K RAM bank */
     vic_write(&vic, 0xD018, 0x18);

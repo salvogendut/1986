@@ -15,6 +15,10 @@
 #                   [0x4000..0x7FFF]  BASIC high-> $8000-$BFFF
 #   chargen.bin  0x2000 bytes — C64 + native-C128 character banks (optional;
 #                               legacy 0x1000-byte dumps are also accepted)
+#   basic64.bin   0x2000 bytes — C64 BASIC V2 (optional development test mode;
+#                               basic64.rom and basic64-901226-01.bin accepted)
+#   kernal64.bin  0x2000 bytes — C64 KERNAL (optional development test mode;
+#                               kernal64.rom and kernal64-901227-03.bin accepted)
 #   dos1571cr.bin 0x8000 bytes — integrated 1571CR DOS ROM (optional while
 #                                the physical-IEC drive backend is unfinished)
 #

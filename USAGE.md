@@ -2,10 +2,20 @@
 
 ## Supported machine modes
 
-1986 runs native Commodore 128 software in the 40-column VIC-IIe and
-80-column VDC environments. The C64 compatibility personality is
-intentionally not implemented. Entering `GO64`, or requesting C64 mode during
-boot, displays a notification and safely returns to native C128 mode.
+1986 runs Commodore 128 software in the 40-column VIC-IIe and 80-column VDC
+environments. It is a C128-first emulator, not a general-purpose C64 emulator.
+By default, entering `GO64` displays an unsupported-mode notification and the
+machine remains in native C128 mode.
+
+For hardware testing only, enable **General > Tinker**, install the optional
+C64 BASIC and KERNAL ROMs listed below, then enable **Advanced > C64 Test
+Mode**. `GO64` will then enter the C128's real C64 personality. The setting is
+Off by default and the gate cannot be armed without both ROMs. The same C128
+machine continues running—8502, VIC-IIe, SID, CIA, RAM, and IEC state are not
+replaced by a separate C64 instance. Turn the setting Off to reset back into
+native C128 mode. This temporary test facility is intended for shared-hardware
+validation and C128-enhanced programs which start in C64 mode; broad C64 and
+C64-cartridge compatibility is not guaranteed.
 
 CP/M is a separate C128 operating mode and remains planned.
 
@@ -92,7 +102,7 @@ larger or bank-switched images need a cartridge-specific mapper. Smaller raw
 ROMs are mirrored through the 32 KiB function-ROM space. Inserting, replacing,
 or ejecting a cartridge resets the machine, and Del ejects it. A failed
 replacement leaves the slot empty and clears the saved path. C64-only CRTs
-cannot be used because the C64 personality is intentionally unsupported.
+are not supported by the experimental C64 test personality.
 Some cartridges draw on the VIC 40-column output even when the saved default
 is VDC 80-column; select **General > 40/80 key > 40 columns (VIC)** to make
 the VIC output the persistent default, or press F10 to switch while running.
@@ -108,7 +118,9 @@ and tape pulses feed CIA1. T64 contains files rather than recorded pulses;
 it is ready for `LOAD"",1` as soon as it is mounted, and F3 returns to its
 first file. `--tape PATH` attaches either format at launch; `--tape-play`
 presses Play immediately, while `--tape-play-at N` delays that press until
-frame N for automated testing. Tape recording is not implemented.
+frame N for automated testing. In experimental C64 Test Mode, TAP uses the
+same physical cassette signals and T64 uses the C64 KERNAL's tape entry
+points. Tape recording is not implemented.
 
 With Tinker enabled, **Advanced > Tape Audio Monitor** plays the TAP signal
 itself through the normal audio output, without artificial motor or button
@@ -215,6 +227,9 @@ in `1986.conf`; the default is the install-time `pkgdatadir/roms`):
 | `kernal.rom`  | 0x4000   | C128 KERNAL ($C000-$FFFF)     |
 | `basic.rom`   | 0x8000   | BASIC 7.0 (low + high)        |
 | `chargen.rom` | 0x2000   | C64 + native-C128 character banks |
+| `basic64.rom` | 0x2000   | Optional C64 BASIC V2 test ROM    |
+| `kernal64.rom`| 0x2000   | Optional C64 KERNAL test ROM      |
 
 These ROMs are copyrighted Commodore and are not bundled. The emulator still
-renders its test pattern without them.
+renders its test pattern without them. The optional files may instead use the
+VICE-set names `basic64-901226-01.bin` and `kernal64-901227-03.bin`.

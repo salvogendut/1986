@@ -41,6 +41,14 @@ void c128_set_4080(C128 *c, bool col80) {
 }
 static int machine_resets;
 void c128_reset(C128 *c) { (void)c; machine_resets++; }
+bool c128_set_c64_test_mode(C128 *c, bool enabled) {
+    if (enabled && !mem_c64_roms_loaded(&c->mem)) return false;
+    mmu_set_c64_enabled(&c->mem.mmu, enabled);
+    return true;
+}
+bool c128_is_c64_mode(const C128 *c) {
+    return mmu_is_c64_mode(&c->mem.mmu);
+}
 bool c128_mount_tape(C128 *c, const char *path) {
     (void)c; (void)path;
     return true;
@@ -314,6 +322,19 @@ int main(void) {
           "F9 closes options and clears keyboard map state");
     key(&ov, SDL_SCANCODE_F9);
     CHECK(ov.visible, "reopen options for subsequent media checks");
+
+    ov.section = OV_ADVANCED;
+    ov.row = 19;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(!cfg.c64_test_mode && !c->mem.mmu.c64_enabled,
+          "C64 test gate refuses to arm without optional C64 ROMs");
+    c->mem.c64_roms_loaded = true;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.c64_test_mode && c->mem.mmu.c64_enabled,
+          "Advanced can arm the experimental C64 personality");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(!cfg.c64_test_mode && !c->mem.mmu.c64_enabled,
+          "Advanced can disarm the experimental C64 personality");
 
     char disk_a[CONFIG_PATH_MAX / 2], disk_b[CONFIG_PATH_MAX / 2];
     snprintf(disk_a, sizeof(disk_a), "%s/disk-a", temp_home);

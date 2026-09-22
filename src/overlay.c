@@ -79,9 +79,10 @@ static const char *const keyboard_map_lines[] = {
 #define ADV_DEBUG               16
 #define ADV_JOY_HIDAPI          17
 #define ADV_KEYBOARD_MAP        18
-#define ADV_RESET               19
-#define ADV_VERSION             20
-#define ADV_ROWS                21
+#define ADV_C64_TEST            19
+#define ADV_RESET               20
+#define ADV_VERSION             21
+#define ADV_ROWS                22
 
 static int cycle_gif_width(int width) {
     switch (width) {
@@ -673,6 +674,18 @@ static void overlay_activate(Overlay *ov) {
                 case ADV_KEYBOARD_MAP:
                     ov->keyboard_map_visible = true;
                     break;
+                case ADV_C64_TEST: {
+                    bool enabled = !ov->cfg->c64_test_mode;
+                    if (!c128_set_c64_test_mode(ov->c128, enabled)) {
+                        notify_post("C64 TEST MODE NEEDS BASIC64 AND KERNAL64 ROMS");
+                        break;
+                    }
+                    ov->cfg->c64_test_mode = enabled;
+                    notify_post(enabled
+                        ? "C64 TEST MODE ARMED - GO64 IS ENABLED"
+                        : "C64 TEST MODE OFF - NATIVE C128 RESET");
+                    break;
+                }
                 case ADV_RESET:
                     if (gcr_drive_flush(&ov->c128->integrated_drive.gcr) !=
                             DISK_SAVE_OK ||
@@ -686,6 +699,7 @@ static void overlay_activate(Overlay *ov) {
                     ov->c128->drive2_raw_iec = false;
                     iec_bus_enable_second(&ov->c128->iec_bus, false);
                     config_set_defaults(ov->cfg);
+                    c128_set_c64_test_mode(ov->c128, false);
                     vdc_set_ram_size_kb(&ov->c128->vdc, ov->cfg->vdc_ram_kb);
                     drive_set_unit(&ov->c128->drive, ov->cfg->drive_unit);
                     drive_set_unit(&ov->c128->drive2, ov->cfg->drive2_unit);
@@ -1186,6 +1200,11 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
                  ov->row == ADV_JOY_HIDAPI); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Keyboard map", "[Enter]",
                  ov->row == ADV_KEYBOARD_MAP); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "C64 Test Mode",
+                 ov->cfg->c64_test_mode
+                    ? (c128_is_c64_mode(ov->c128) ? "On (active)" : "On (GO64 armed)")
+                    : "Off",
+                 ov->row == ADV_C64_TEST); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Reset defaults", NULL,
                  ov->row == ADV_RESET); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Version", version, ov->row == ADV_VERSION);

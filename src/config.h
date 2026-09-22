@@ -66,6 +66,7 @@ typedef struct {
     NotifyMode notify_mode;         /* Notifications: off/screen/console */
     bool       tape_audio_monitor;  /* play TAP signal through host audio */
     bool       tape_video_monitor;  /* on-screen TAP/T64 status and waveform */
+    bool       c64_test_mode;       /* allow experimental C128 C64 personality */
     bool       debug_overlay;       /* stub */
     bool       joystick_hidapi;     /* SDL HIDAPI backend (restart to apply) */
     int        main_input_port;     /* host gamepad/mouse targets port 1 or 2 */

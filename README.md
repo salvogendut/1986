@@ -53,19 +53,26 @@ reference for the rest of the machine. Ported VICE source files retain their
 original copyright and license notices in `src/vice/`. Thank you to the VICE
 team for making this work available.
 
-## Native C128 scope
+## C128-first scope
 
-1986 deliberately treats the Commodore 128 as a platform in its own right.
-It targets native C128 software, including the VIC-IIe 40-column and VDC
-80-column environments; CP/M mode is also planned. The separate C64
-personality entered with `GO64` or the Commodore-key boot path is intentionally
-out of scope. A C64-mode request is rejected with a clear notification and the
-machine continues in native C128 mode.
+1986 deliberately treats the Commodore 128 as a platform in its own right. It
+targets native C128 software, including the VIC-IIe 40-column and VDC
+80-column environments; CP/M mode is also planned. Its product scope does not
+include becoming a general-purpose C64 emulator.
 
-The shared VIC-IIe, SID, CIA and IEC hardware will still be implemented as
-accurately as native C128 software requires. This scope decision avoids
-carrying a partial C64 PLA, ROM, cartridge and compatibility implementation in
-a project whose purpose is the C128 itself.
+For development, **Advanced > C64 Test Mode** can temporarily arm the real
+C128 C64 personality entered by `GO64`. It follows VICE's x128 architecture:
+the existing C128 switches ROM/PLA personality while retaining its shared
+8502, VIC-IIe, SID, CIA, RAM, and IEC hardware. This lets C64 software exercise
+those shared components and supports investigation of C128-enhanced software
+which starts in C64 mode. It requires separate C64 BASIC and KERNAL ROMs and
+defaults to Off. With it Off, `GO64` remains deliberately unavailable and the
+machine reports that C64 mode is unsupported.
+
+The overlay toggle is a temporary development aid. Once it has served its
+hardware-validation purpose, the UI will be removed while the dormant
+personality code remains disabled by default. C64 cartridge compatibility and
+general C64 software support are not release goals.
 
 ## Status
 
@@ -101,6 +108,9 @@ Current working pieces include:
   second virtual IEC drive, separately selected disk image/unit, and
   per-entry remembered file-picker directories.
 - VICE's 8502/6510 core and a reused Z80 core wired to the C128 bus.
+- An opt-in, experimental C64-personality test path, disabled by default,
+  used to validate the C128's shared VIC-IIe/SID/CIA/IEC hardware. It is not a
+  promise of general C64 compatibility.
 - A fast virtual IEC drive that reads and writes D64, D71, and D81 images,
   supporting `DIRECTORY`, `LOAD`/`DLOAD`, `SAVE`/`DSAVE`, and DOS `SCRATCH`/
   `RENAME` commands with status errors. VICE-style direct-access `#` buffers

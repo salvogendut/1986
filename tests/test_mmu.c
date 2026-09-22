@@ -44,6 +44,22 @@ int main(void) {
     mmu_write(&mmu, 0xD505, 0x47);
     CHECK(mmu_take_c64_request(&mmu), "a later C64 request is reported again");
 
+    /* The same hardware request changes personality only when the temporary
+     * development gate has explicitly armed it. */
+    mmu_set_c64_enabled(&mmu, true);
+    mmu.mcr = 0x40;
+    mmu_write(&mmu, 0xD505, 0x47);
+    CHECK(mmu_is_c64_mode(&mmu), "enabled gate accepts C64 personality request");
+    CHECK(mmu.c64_ram_bank == 1, "C64 personality latches the selected RAM bank");
+    CHECK((mmu_read(&mmu, 0xD505) & 0x40) == 0,
+          "$D505 mode bit is write-only in C64 personality");
+    mmu_set_c64_enabled(&mmu, false);
+    CHECK(!mmu_is_c64_mode(&mmu) && !(mmu.mcr5 & 0x40),
+          "disabling gate leaves native personality active");
+    mmu_reset(&mmu);
+    CHECK(!mmu_is_c64_mode(&mmu) && !mmu.c64_enabled,
+          "reset preserves the disabled test gate");
+
     if (failures == 0) { printf("test-mmu: OK\n"); return 0; }
     printf("test-mmu: %d failure(s)\n", failures);
     return 1;

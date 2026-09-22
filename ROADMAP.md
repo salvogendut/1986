@@ -7,8 +7,10 @@ the Z80 core for CP/M mode, and VICE's 8502 (6510-core) instruction set.
 This document is the forward plan. The current status and technical notes are
 in [Development.md](Development.md); controls are in [CONTROLS.md](CONTROLS.md).
 
-The roadmap targets the native C128 platform and eventual CP/M support. The
-separate C64 compatibility personality is intentionally out of scope.
+The roadmap targets the C128 platform and eventual CP/M support. A temporary,
+default-Off C64-personality gate exists only to validate hardware shared with
+the C128 and C128-enhanced software which starts in C64 mode; general C64
+emulation remains out of scope.
 
 Checkboxes track progress: `[x]` = done, `[ ]` = pending.
 
@@ -37,7 +39,8 @@ READY.
 - [x] Fast virtual IEC drive with D64/D71/D81 `DIRECTORY`, `LOAD`/`DLOAD`,
   and `SAVE`/`DSAVE`.
 - [x] Live disk-image replacement/ejection from the Media Overlay.
-- [x] Explicit rejection of the out-of-scope C64 personality (`GO64`).
+- [x] Default rejection of `GO64`, plus an opt-in experimental C128 C64
+  personality for shared-hardware testing (#113).
 
 The remaining milestones focus on hardware completeness and accuracy rather
 than reaching the first usable BASIC prompt.
@@ -83,7 +86,7 @@ layouts without relying on emulator-only shortcuts.
 ## Milestone 3 — Native C128 PLA accuracy  `[ ]`
 
 **Goal.** Finish the 8502 `$00`/`$01` port and remaining native C128 memory
-visibility rules without introducing a partial C64 personality. On the
+visibility rules, using the gated C64 personality for validation. On the
 International/US model, `$01` bit 6 does not select the character-ROM half;
 localized DIN/ASCII variants are a separate future scope decision.
 
@@ -96,12 +99,18 @@ localized DIN/ASCII variants are a separate future scope decision.
   bank when ROM is not mapped (#47).
 - [ ] Verify remaining native PLA memory visibility and processor-port
   electrical/readback details against VICE's tests.
-- [x] Reject `$D505` C64-mode requests with a one-shot user notification and
-  recover through the native C128 reset path.
+- [x] Reject `$D505` C64-mode requests by default with a one-shot notification.
+- [x] Behind a default-Off development gate, switch the same C128 machine to
+  C64 ROM/PLA mappings, lower character ROM, color RAM, `$D030`, and C64
+  KERNAL IEC traps; verify a `GO64` boot to BASIC V2 (#113).
+- [ ] Exercise shared VIC-IIe, SID, CIA, IEC, and 128K behavior with C64 and
+  C128-enhanced test software; fix discrepancies in the shared C128 devices.
+- [ ] Remove the temporary Advanced toggle when validation is complete, while
+  leaving the dormant implementation disabled by default.
 
-**Done when.** Native processor-port visibility and readback track the
-KERNAL's `$00/$01` writes and remaining VICE hardware tests, without leaving
-partial MMU state on unsupported mode requests.
+**Done when.** Processor-port visibility and readback track the KERNAL's
+`$00/$01` writes and remaining VICE hardware tests, without leaving partial
+MMU state on disabled mode requests.
 
 ---
 
@@ -298,7 +307,8 @@ ROM through emulated hardware.
 The main unfinished areas, grouped by likely development scale, are:
 
 1. **Core accuracy:** remaining native PLA tests, VIC-IIe bad-lines/raster
-   effects, CIA2 RS-232, and optional external harness wiring.
+   effects, C64-personality shared-hardware validation, CIA2 RS-232, and
+   optional external harness wiring.
 2. **Audio accuracy:** SID analog filter, combined waveforms, and edge-case
    timing beyond the working three-voice SDL3 output.
 3. **Storage features:** further DOS write commands, D81 partitions, and

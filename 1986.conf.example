@@ -26,6 +26,11 @@ joy_port_1_mode = 0
 joy_port_2_mode = 0
 joystick_hidapi = 0
 
+# Temporary development gate for the C128's C64 personality. Default off;
+# requires optional basic64 and kernal64 ROM images. The overlay control is
+# shown only with Tinker enabled and is not intended as a release feature.
+c64_test_mode = 0
+
 # Advanced: ROM-backed 1571 drive if dos1571cr.bin is present (restart to apply)
 real_disk_drive = 0
 # Original, quiet motor/step audio for the real 1571 (live toggle, default off)

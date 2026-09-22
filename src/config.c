@@ -46,6 +46,7 @@ void config_set_defaults(Config *cfg) {
     cfg->notify_mode = NOTIFY_MODE_SCREEN;
     cfg->tape_audio_monitor = false;
     cfg->tape_video_monitor = false;
+    cfg->c64_test_mode = false;
     cfg->debug_overlay = false;
     cfg->joystick_hidapi = false;
     cfg->main_input_port = 2;
@@ -163,6 +164,7 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "notify_mode")) cfg->notify_mode = (NotifyMode)atoi(value);
     else if (!strcasecmp(key, "tape_audio_monitor")) cfg->tape_audio_monitor = atoi(value) != 0;
     else if (!strcasecmp(key, "tape_video_monitor")) cfg->tape_video_monitor = atoi(value) != 0;
+    else if (!strcasecmp(key, "c64_test_mode"))      cfg->c64_test_mode = atoi(value) != 0;
     else if (!strcasecmp(key, "debug_overlay"))      cfg->debug_overlay = atoi(value) != 0;
     else if (!strcasecmp(key, "joystick_hidapi"))    cfg->joystick_hidapi = atoi(value) != 0;
     else if (!strcasecmp(key, "main_input_port"))    cfg->main_input_port = atoi(value);
@@ -238,6 +240,7 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "notify_mode = %d\n", (int)cfg->notify_mode);
     fprintf(f, "tape_audio_monitor = %d\n", cfg->tape_audio_monitor ? 1 : 0);
     fprintf(f, "tape_video_monitor = %d\n", cfg->tape_video_monitor ? 1 : 0);
+    fprintf(f, "c64_test_mode = %d\n", cfg->c64_test_mode ? 1 : 0);
     fprintf(f, "debug_overlay = %d\n", cfg->debug_overlay ? 1 : 0);
     fprintf(f, "joystick_hidapi = %d\n", cfg->joystick_hidapi ? 1 : 0);
     fprintf(f, "main_input_port = %d\n", cfg->main_input_port);

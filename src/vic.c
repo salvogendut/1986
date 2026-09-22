@@ -48,6 +48,7 @@ void vic_reset(Vic *v) {
     v->cycles = 0;
     memset(v->raster_ctrl2, v->ctrl2, sizeof(v->raster_ctrl2));
     v->raster_ctrl2_valid = false;
+    v->fast_mode = false;
 }
 
 /* Re-evaluate the VIC IRQ line (bit 7) from the pending masked flags. */
@@ -109,6 +110,7 @@ void vic_write(Vic *v, u16 addr, u8 val) {
         case 0x2B: case 0x2C: case 0x2D: case 0x2E:
             v->sprite_color[reg - 0x27] = val & 0x0F;
             break;
+        case 0x30: v->fast_mode = (val & 0x01) != 0; break;
         default: break;
     }
 }
@@ -171,6 +173,7 @@ u8 vic_read(Vic *v, u16 addr) {
         case 0x27: case 0x28: case 0x29: case 0x2A:
         case 0x2B: case 0x2C: case 0x2D: case 0x2E:
             return v->sprite_color[reg - 0x27];
+        case 0x30: return (u8)(0xFC | (v->fast_mode ? 1 : 0));
         default: return 0xFF;
     }
 }
@@ -349,7 +352,8 @@ void vic_render(Vic *v, Mem *m, Display *d) {
                         }
                     }
                 } else {
-                    unsigned cbank = (m->pla_data >> 1) & 0x01;
+                    unsigned cbank = mem_c64_mode(m) ? 0 :
+                                     (m->pla_data >> 1) & 0x01;
                     u8 cram = m->color_ram[cbank * 0x400 + (cell & 0x3FF)] & 0x0F;
                     for (int py = 0; py < 8; py++) {
                         int dy = VIC_TEXT_Y + cy * 8 + py;
@@ -386,7 +390,8 @@ void vic_render(Vic *v, Mem *m, Display *d) {
             for (int cx = 0; cx < VIC_CHARS_X; cx++) {
                 u32 cell = screen_base + (unsigned)(cy * VIC_CHARS_X + cx);
                 u8 ch = m->ram[cell];
-                unsigned cbank = (m->pla_data >> 1) & 0x01;
+                unsigned cbank = mem_c64_mode(m) ? 0 :
+                                 (m->pla_data >> 1) & 0x01;
                 u8 col = m->color_ram[cbank * 0x400 + ((cy * VIC_CHARS_X + cx) & 0x3FF)] & 0x0F;
                 u32 fg = VIC_COLORS[col];
                 /* Native C128 PLA: $01 bit 2 low maps the character ROM into
@@ -394,10 +399,14 @@ void vic_render(Vic *v, Mem *m, Display *d) {
                  * the selected VIC RAM bank at the $D018 character pointer.
                  * The International/US machine uses the upper 4K ROM half. */
                 u16 glyph_addr = (u16)(v->char_addr + ((u16)ch << 3));
-                bool rom = !(m->pla_data & 0x04) &&
-                           (glyph_addr & 0x3000) == 0x1000;
+                u32 physical_glyph = v->bank_addr + glyph_addr;
+                bool rom = mem_c64_mode(m)
+                    ? (physical_glyph & 0x7000) == 0x1000
+                    : (!(m->pla_data & 0x04) &&
+                       (glyph_addr & 0x3000) == 0x1000);
                 const u8 *glyph = rom
-                    ? &m->chargen[0x1000 + (glyph_addr & 0x0FFF)]
+                    ? &m->chargen[(mem_c64_mode(m) ? 0 : 0x1000) +
+                                  (glyph_addr & 0x0FFF)]
                     : &m->ram[v->bank_addr + glyph_addr];
                 for (int py = 0; py < 8; py++) {
                     u8 bits = glyph[py];

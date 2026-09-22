@@ -17,6 +17,7 @@ int main(void) {
     CHECK(!cfg.real_disk_drive, "real drive defaults off");
     CHECK(!cfg.drive_audio_monitor, "drive audio monitor defaults off");
     CHECK(!cfg.drive_visual_monitor, "drive visual monitor defaults off");
+    CHECK(!cfg.c64_test_mode, "experimental C64 personality defaults off");
     CHECK(cfg.drive_type == 1571 && cfg.drive2_type == 1571,
           "both hardware drive types default to 1571");
     CHECK(!cfg.second_drive && cfg.drive_unit == 8 && cfg.drive2_unit == 9,
@@ -49,6 +50,7 @@ int main(void) {
     cfg.real_disk_drive = true;
     cfg.drive_audio_monitor = true;
     cfg.drive_visual_monitor = true;
+    cfg.c64_test_mode = true;
     cfg.second_drive = true;
     cfg.drive_unit = 9;
     cfg.drive2_unit = 10;
@@ -76,6 +78,7 @@ int main(void) {
     CHECK(back.real_disk_drive, "real-drive preference roundtrip");
     CHECK(back.drive_audio_monitor, "drive audio monitor roundtrip");
     CHECK(back.drive_visual_monitor, "drive visual monitor roundtrip");
+    CHECK(back.c64_test_mode, "experimental C64 personality gate roundtrip");
     CHECK(back.drive_type == 1581 && back.drive2_type == 1571,
           "hardware type selection roundtrip");
     CHECK(back.second_drive && back.drive_unit == 9 && back.drive2_unit == 10 &&
@@ -118,6 +121,8 @@ int main(void) {
     CHECK(back.second_drive && back.drive2_unit == 10 &&
           strcmp(back.disk2_path, "second.d81") == 0,
           "mode-only save preserves second-drive media settings");
+    CHECK(back.c64_test_mode,
+          "mode-only save preserves experimental C64 personality gate");
 
     CHECK(config_save_column_mode(path, false), "save 40-column mode only");
     CHECK(config_load(&back, path), "reload 40-column mode");
