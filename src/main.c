@@ -628,8 +628,7 @@ int main(int argc, char **argv) {
             int cycles = c128_frame(&c);
             uint64_t emulated_frame_ns = c128_cycles_to_ns(&c, cycles);
             drive_monitor_mix(&c.drive_monitor, c.audio_frame, c.audio_count,
-                              cfg.drive_audio_monitor && c.drive_raw_iec,
-                              cfg.drive_visual_monitor && c.drive_raw_iec);
+                              cfg.drive_audio_monitor && c.drive_raw_iec);
             /* Keep only a few frames queued if the host stalls. The SID core
              * keeps clocking even without an available audio device. */
             if (audio_stream && c.audio_count > 0 &&

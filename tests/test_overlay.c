@@ -518,9 +518,13 @@ int main(void) {
                 c->integrated_drive.gcr.step_events = 4;
                 c->integrated_drive.gcr.read_events = 100;
                 drive_monitor_reset(&c->drive_monitor);
-                drive_monitor_update(&c->drive_monitor, true, 4, 100);
-                s16 audio[882] = {0};
-                drive_monitor_mix(&c->drive_monitor, audio, 882, false, true);
+                unsigned reads = 0, steps = 0;
+                for (unsigned i = 0; i < DRIVE_MONITOR_HISTORY_FRAMES; ++i) {
+                    reads += i % 7 == 0 ? 8 : 0;
+                    steps += i % 37 == 0 ? 1 : 0;
+                    drive_monitor_update(&c->drive_monitor, true, false, 36,
+                                         steps, reads, 0);
+                }
                 overlay_render_drive_scope(&ov, renderer);
             } else overlay_render(&ov, renderer);
             SDL_Surface *surface = SDL_RenderReadPixels(renderer, NULL);

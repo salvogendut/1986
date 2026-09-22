@@ -3,27 +3,33 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#define DRIVE_MONITOR_WAVEFORM_SAMPLES 2048
+#define DRIVE_MONITOR_HISTORY_FRAMES 256
 
-/* Host-side presentation of the real 1571 mechanism. This is deliberately
- * separate from the emulated drive: disabling sound never changes its timing. */
 typedef struct {
-    bool motor;
-    unsigned last_steps, last_reads;
-    unsigned frame, activity_frames;
-    unsigned click_remaining, click_strength;
-    float motor_level, hum_phase;
-    u32 noise;
-    s16 waveform[DRIVE_MONITOR_WAVEFORM_SAMPLES];
-    size_t waveform_head, waveform_count;
+    unsigned reads, writes, steps;
+    bool motor, led;
+} DriveActivity;
+
+/* Host-side presentation only; it must never affect emulated drive timing. */
+typedef struct {
+    bool motor, audible_last;
+    unsigned last_steps, last_reads, last_writes;
+    unsigned half_track;
+    unsigned motor_stage;
+    size_t motor_sample, step_sample;
+    const signed char *step_clip;
+    size_t step_length;
+    DriveActivity history[DRIVE_MONITOR_HISTORY_FRAMES];
+    size_t history_head, history_count;
 } DriveMonitor;
 
 void drive_monitor_reset(DriveMonitor *m);
-/* Returns true for a visible activity-LED pulse at the current video frame. */
-bool drive_monitor_update(DriveMonitor *m, bool motor,
-                          unsigned step_events, unsigned read_events);
-/* Mix original, synthetic motor hum and head clicks into the SID PCM frame. */
-void drive_monitor_mix(DriveMonitor *m, s16 *pcm, int samples,
-                       bool audible, bool visual);
-size_t drive_monitor_waveform_copy(const DriveMonitor *m, s16 *out,
-                                   size_t capacity);
+/* Record one emulated video frame; return true while the real LED or actual
+ * motor/byte/head activity should light the frontend drive lamp. */
+bool drive_monitor_update(DriveMonitor *m, bool motor, bool led,
+                          unsigned half_track, unsigned step_events,
+                          unsigned read_events, unsigned write_events);
+/* Mix VICE's GPL-licensed mechanism recordings into the SID PCM frame. */
+void drive_monitor_mix(DriveMonitor *m, s16 *pcm, int samples, bool audible);
+size_t drive_monitor_history_copy(const DriveMonitor *m, DriveActivity *out,
+                                  size_t capacity);
