@@ -217,6 +217,8 @@ cycle-level 1571 implementation without conflating their interfaces.
   (following VICE's limited 1571CR handling; extra FDC2 registers remain open).
 - [x] Clock the 1571CR ROM alongside the C128 at 1/2 MHz and connect slow IEC
   ATN/CLOCK/DATA/ATNA between CIA2 and VIA1, with bus and ROM-probe tests (#94).
+- [x] Read-only D64/D71 GCR tracks through VIA2: motor, stepper, side, speed,
+  sync, write-protect and byte-ready signals, with deterministic tests (#96).
 - [ ] Emulate WD1770/FDC2, mechanism and fast serial; replace virtual KERNAL
   traps with the hardware backend only once disk commands work reliably.
 - [x] Media persists a per-drive hardware type when real-drive mode is selected;

@@ -21,6 +21,7 @@ typedef struct Drive {
 
     DiskImage image;          /* attached disk image or standalone PRG */
     bool    disk_attached;
+    unsigned media_generation; /* changes on insert/eject, including replacement */
 } Drive;
 
 void drive_init(Drive *d, Config *cfg);

@@ -26,6 +26,7 @@ void drive_reset(Drive *d) {
 }
 
 int drive_attach_disk(Drive *d, const char *path) {
+    d->media_generation++;
     bool had_disk = d->disk_attached;
     virtual_drive_attach(&d->virtual_drive, NULL);
     if (d->disk_attached) {

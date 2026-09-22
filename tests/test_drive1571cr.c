@@ -201,6 +201,24 @@ int main(void) {
     CHECK(drive1571cr_step(&drive) == 0 && drive.cpu.jammed,
           "unsupported opcode stops rather than masquerading as NOP");
 
+    /* The ROM-facing register path must deliver disk bytes and SO/CA1, not
+     * merely advance the standalone GCR encoder. */
+    static u8 disk_bytes[174848];
+    DiskImage image = { .data = disk_bytes, .size = sizeof(disk_bytes),
+                        .format = DISK_FORMAT_D64, .tracks = 35 };
+    disk_bytes[disk_image_d64_track_offset(18) + 0xa2] = 'T';
+    disk_bytes[disk_image_d64_track_offset(18) + 0xa3] = 'S';
+    install_program(&drive, (const u8[]){0xea}, 1);
+    gcr_drive_attach(&drive.gcr, &image);
+    drive1571cr_write(&drive, 0x1c02, 0xff); /* VIA2 DDRB */
+    drive1571cr_write(&drive, 0x1c00, 0x64); /* motor, zone 3 */
+    drive1571cr_write(&drive, 0x1c0c, 0x22); /* read and byte-ready enable */
+    for (int i = 0; i < 90; ++i) drive1571cr_step(&drive);
+    CHECK((drive.cpu.p & 0x40) && (drive.via2.ifr & 2) &&
+          drive.gcr.byte_ready, "GCR byte reaches CPU SO and VIA2 CA1");
+    CHECK(drive1571cr_read(&drive, 0x1c01) == drive.gcr.read_byte &&
+          !drive.gcr.byte_ready, "VIA2 port A reads and acknowledges GCR byte");
+
     const char *user_rom = getenv("C128_TEST_1571_ROM");
     if (user_rom && *user_rom) {
         CHECK(drive1571cr_load_rom(&drive, user_rom),

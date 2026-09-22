@@ -215,6 +215,7 @@ void c128_reset(C128 *c) {
     iec_bus_reset(&c->iec_bus);
     iec_bus_set_host(&c->iec_bus, c->cia2.pra, c->cia2.ddra);
     c->drive_clock_fraction = 0;
+    c->drive_media_generation = (unsigned)-1;
     drive_set_unit(&c->drive2, c->cfg->drive2_unit);
     c->paused = false;
     c->frames_since_reset = 0;
@@ -224,6 +225,13 @@ void c128_reset(C128 *c) {
 }
 
 int c128_frame(C128 *c) {
+    if (c->drive_media_generation != c->drive.media_generation) {
+        gcr_drive_attach(&c->integrated_drive.gcr,
+            c->drive.disk_attached ? &c->drive.image : NULL);
+        gcr_drive_update_via(&c->integrated_drive.gcr,
+                             &c->integrated_drive.via2);
+        c->drive_media_generation = c->drive.media_generation;
+    }
     /* Run the 8502 in raster-line chunks (63 cycles each), ticking the VIC
      * between chunks so the raster IRQ fires when the raster crosses the
      * compare line (VICE's alarm-based timing). */
@@ -274,12 +282,19 @@ int c128_frame(C128 *c) {
     c->frames_since_reset++;
     if (drive_probe_active(c) && getenv("C128_1571_TRACE") &&
         c->frames_since_reset % 50 == 0) {
-        fprintf(stderr, "[1571] frame=%d pc=$%04x cycles=%llu via1=$%02x/$%02x IEC=%d%d%d%s\n",
+        fprintf(stderr, "[1571] frame=%d pc=$%04x cycles=%llu via1=$%02x/$%02x IEC=%d%d%d GCR=m%d s%u h%u z%u p%u $%02x sync%d%s\n",
                 c->frames_since_reset, c->integrated_drive.cpu.pc,
                 (unsigned long long)c->integrated_drive.cpu.cycles,
                 c->integrated_drive.via1.ora, c->integrated_drive.via1.orb,
                 c->iec_bus.atn_high, c->iec_bus.clock_high,
                 c->iec_bus.data_high,
+                c->integrated_drive.gcr.motor,
+                c->integrated_drive.gcr.side,
+                c->integrated_drive.gcr.half_track,
+                c->integrated_drive.gcr.zone,
+                c->integrated_drive.gcr.byte_pos,
+                c->integrated_drive.gcr.read_byte,
+                c->integrated_drive.gcr.sync,
                 c->integrated_drive.cpu.jammed ? " JAMMED" : "");
     }
 

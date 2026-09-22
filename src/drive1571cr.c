@@ -5,11 +5,18 @@
 enum { C = 1, Z = 2, I = 4, D = 8, B = 16, U = 32, V = 64, N = 128 };
 typedef enum { IMM, ZP, ZPX, ZPY, ABS, ABSX, ABSY, INDX, INDY } AddrMode;
 
+static void via2_port_change(void *ctx, unsigned port, u8 pins) {
+    Drive1571Cr *d = ctx;
+    if (port == 1) gcr_drive_set_port_b(&d->gcr, pins);
+}
+
 void drive1571cr_init(Drive1571Cr *d) {
     memset(d, 0, sizeof(*d));
     via6522_init(&d->via1);
     via6522_init(&d->via2);
     cia_init(&d->mos5710);
+    gcr_drive_init(&d->gcr);
+    via6522_set_port_hook(&d->via2, via2_port_change, d);
 }
 
 bool drive1571cr_load_rom(Drive1571Cr *d, const char *path) {
@@ -82,8 +89,13 @@ u8 drive1571cr_read(Drive1571Cr *d, u16 addr) {
     Drive1571CrIo chip;
     if (decode_io(addr, &chip)) {
         if (chip == DRIVE1571CR_VIA1 || chip == DRIVE1571CR_VIA2) {
+            if (chip == DRIVE1571CR_VIA2)
+                gcr_drive_update_via(&d->gcr, &d->via2);
             u8 value = via6522_read(chip == DRIVE1571CR_VIA1 ? &d->via1 :
                                     &d->via2, addr);
+            if (chip == DRIVE1571CR_VIA2 &&
+                ((addr & 15) == 0 || (addr & 15) == 1 || (addr & 15) == 15))
+                gcr_drive_read_byte(&d->gcr);
             update_irq(d);
             return value;
         }
@@ -105,8 +117,13 @@ void drive1571cr_write(Drive1571Cr *d, u16 addr, u8 value) {
             via6522_write(chip == DRIVE1571CR_VIA1 ? &d->via1 : &d->via2,
                           addr, value);
             if (chip == DRIVE1571CR_VIA1 &&
-                ((addr & 15) == 1 || (addr & 15) == 3 || (addr & 15) == 15))
+                ((addr & 15) == 1 || (addr & 15) == 3 || (addr & 15) == 15)) {
                 d->clock_2mhz = (via6522_output_a(&d->via1) & 0x20) != 0;
+                gcr_drive_set_side(&d->gcr,
+                    (via6522_output_a(&d->via1) & 0x04) != 0);
+            }
+            if (chip == DRIVE1571CR_VIA2)
+                gcr_drive_update_via(&d->gcr, &d->via2);
             update_irq(d);
         } else if (chip == DRIVE1571CR_MOS5710) mos5710_write(d, addr, value);
         else if (d->io_write) d->io_write(d->io_ctx, chip, addr, value);
@@ -123,6 +140,8 @@ void drive1571cr_reset(Drive1571Cr *d) {
     via6522_reset(&d->via1);
     via6522_reset(&d->via2);
     cia_reset(&d->mos5710);
+    gcr_drive_reset(&d->gcr);
+    gcr_drive_update_via(&d->gcr, &d->via2);
     d->external_irq = false;
     d->clock_debt = 0;
     d->clock_2mhz = false;
@@ -310,6 +329,7 @@ int drive1571cr_step(Drive1571Cr *d) {
         via6522_tick(&d->via1, 7);
         via6522_tick(&d->via2, 7);
         cia_tick(&d->mos5710, 7);
+        if (gcr_drive_tick(&d->gcr, &d->via2, 7, d->clock_2mhz)) c->p |= V;
         update_irq(d);
         c->cycles += 7;
         return 7;
@@ -437,6 +457,8 @@ int drive1571cr_step(Drive1571Cr *d) {
     via6522_tick(&d->via1, (unsigned)cycles);
     via6522_tick(&d->via2, (unsigned)cycles);
     cia_tick(&d->mos5710, cycles);
+    if (gcr_drive_tick(&d->gcr, &d->via2, (unsigned)cycles,
+                       d->clock_2mhz)) c->p |= V;
     update_irq(d);
     c->cycles += (u64)cycles;
     return cycles;
