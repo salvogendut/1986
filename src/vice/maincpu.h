@@ -49,5 +49,6 @@ void maincpu_set_carry(int c);
 void maincpu_set_interrupt(int i);
 unsigned int maincpu_get_pc(void);
 unsigned int maincpu_get_a(void);
+unsigned int maincpu_get_x(void);
 
 #endif

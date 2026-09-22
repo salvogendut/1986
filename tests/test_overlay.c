@@ -41,6 +41,11 @@ void c128_set_4080(C128 *c, bool col80) {
 }
 static int machine_resets;
 void c128_reset(C128 *c) { (void)c; machine_resets++; }
+bool c128_mount_tape(C128 *c, const char *path) {
+    (void)c; (void)path;
+    return true;
+}
+void c128_eject_tape(C128 *c) { (void)c; }
 DiskSaveResult gcr_drive_flush(GcrDrive *g) {
     (void)g;
     return DISK_SAVE_OK;
@@ -132,6 +137,38 @@ static bool scope_draws_two_tracks(Overlay *ov) {
                                               &red, &green, &blue, &alpha) &&
                          (red || green || blue);
             drawn = upper && lower;
+            SDL_DestroySurface(pixels);
+        }
+        SDL_DestroyRenderer(renderer);
+    }
+    if (window) SDL_DestroyWindow(window);
+    SDL_Quit();
+    return drawn;
+}
+
+static bool tape_scope_stacks_above_drives(Overlay *ov) {
+    if (!SDL_Init(SDL_INIT_VIDEO)) return false;
+    SDL_Window *window = SDL_CreateWindow("tape scope test", 1100, 800, 0);
+    SDL_Renderer *renderer = window ? SDL_CreateRenderer(window, NULL) : NULL;
+    bool drawn = false;
+    if (renderer) {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        overlay_render_drive_scope(ov, renderer);
+        overlay_render_tape_scope(ov, renderer);
+        SDL_Surface *pixels = SDL_RenderReadPixels(renderer, NULL);
+        if (pixels) {
+            Uint8 red, green, blue, alpha;
+            bool tape = SDL_ReadSurfacePixel(pixels, 20, 592,
+                                             &red, &green, &blue, &alpha) &&
+                        (red || green || blue);
+            bool drive2 = SDL_ReadSurfacePixel(pixels, 20, 664,
+                                               &red, &green, &blue, &alpha) &&
+                          (red || green || blue);
+            bool drive1 = SDL_ReadSurfacePixel(pixels, 20, 728,
+                                               &red, &green, &blue, &alpha) &&
+                          (red || green || blue);
+            drawn = tape && drive2 && drive1;
             SDL_DestroySurface(pixels);
         }
         SDL_DestroyRenderer(renderer);
@@ -528,6 +565,13 @@ int main(void) {
     c->drive2_raw_iec = true;
     CHECK(scope_draws_two_tracks(&ov),
           "two real drives draw separate visual-monitor tracks");
+    cfg.tape_video_monitor = true;
+    c->tape.kind = TAPE_TAP;
+    c->tape.position = 20;
+    c->tape.payload_end = 26;
+    CHECK(tape_scope_stacks_above_drives(&ov),
+          "tape visual monitor stacks above both drive tracks");
+    c->tape.kind = TAPE_NONE;
     c->drive_raw_iec = c->drive2_raw_iec = false;
 
     const char *preview = getenv("C128_OVERLAY_PREVIEW");

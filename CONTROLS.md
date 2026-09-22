@@ -7,6 +7,8 @@ media, and configuration are covered in [`USAGE.md`](USAGE.md).
 
 | Key | Action |
 |-----|--------|
+| F2  | Tape Play/Stop |
+| F3  | Rewind tape |
 | F4  | Save a PPM screenshot |
 | F5  | Reset |
 | F6  | Toggle animated GIF recording |

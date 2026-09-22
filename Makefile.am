@@ -32,6 +32,7 @@ dist_man1_MANS = 1986.1
 	src/drive.c \
 	src/drive1571cr.c \
 	src/drive_monitor.c \
+	src/tape.c \
 	src/gcr_drive.c \
 	src/iec_bus.c \
 	src/via6522.c \
@@ -66,6 +67,7 @@ noinst_HEADERS = \
 	src/drive.h \
 	src/drive1571cr.h \
 	src/drive_monitor.h \
+	src/tape.h \
 	src/drive_sound_samples.h \
 	src/gcr_drive.h \
 	src/iec_bus.h \

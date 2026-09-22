@@ -120,6 +120,9 @@ static void usage(const char *argv0) {
         "  --fast           run the 8502 at 2 MHz\n"
         "  --rom DIR        directory holding the machine ROM images\n"
         "  --disk PATH      attach a D64, D71, D81, or PRG at launch\n"
+        "  --tape PATH      attach a TAP or T64 tape at launch\n"
+        "  --tape-play      press Play on a mounted TAP at launch\n"
+        "  --tape-play-at N press Play at emulated frame N\n"
         "  --cart PATH      attach a generic C128 CRT or raw function ROM\n"
         "  --gif-out PATH   start recording a GIF at launch\n"
         "  --paste TEXT     inject text through the keyboard matrix\n"
@@ -129,6 +132,8 @@ static void usage(const char *argv0) {
         "  --help           this message\n"
         "\n"
         "  F1     Swap host joystick port (1/2)\n"
+        "  F2     Tape Play/Stop\n"
+        "  F3     Rewind tape\n"
         "  F4     Screenshot (PPM)\n"
         "  F5     Reset\n"
         "  F6     Toggle GIF capture\n"
@@ -148,6 +153,9 @@ int main(int argc, char **argv) {
     config_set_defaults(&cfg);
     const char *rom_dir = NULL;
     const char *disk_path = NULL;
+    const char *tape_path = NULL;
+    bool tape_autoplay = false;
+    long tape_play_frame = 0;
     const char *cart_path = NULL;
     const char *gif_out = NULL;
     const char *paste_arg = NULL;
@@ -162,6 +170,12 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--fast")) cfg.fast = true;
         else if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom_dir = argv[++i];
         else if (!strcmp(argv[i], "--disk") && i + 1 < argc) disk_path = argv[++i];
+        else if (!strcmp(argv[i], "--tape") && i + 1 < argc) tape_path = argv[++i];
+        else if (!strcmp(argv[i], "--tape-play")) tape_autoplay = true;
+        else if (!strcmp(argv[i], "--tape-play-at") && i + 1 < argc) {
+            tape_autoplay = true;
+            tape_play_frame = atol(argv[++i]);
+        }
         else if (!strcmp(argv[i], "--cart") && i + 1 < argc) cart_path = argv[++i];
         else if (!strcmp(argv[i], "--gif-out") && i + 1 < argc) gif_out = argv[++i];
         else if (!strcmp(argv[i], "--paste") && i + 1 < argc) paste_arg = argv[++i];
@@ -180,6 +194,7 @@ int main(int argc, char **argv) {
         config_save(&cfg, cfg_path);
     if (rom_dir) snprintf(cfg.rom_dir, sizeof(cfg.rom_dir), "%s", rom_dir);
     if (disk_path) snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s", disk_path);
+    if (tape_path) snprintf(cfg.tape_path, sizeof(cfg.tape_path), "%s", tape_path);
     if (cart_path) snprintf(cfg.cart_path, sizeof(cfg.cart_path), "%s", cart_path);
     g_boot_trace = getenv("C128_BOOT_TRACE") != NULL;
     g_sid_trace = getenv("C128_SID_TRACE") != NULL;
@@ -294,6 +309,12 @@ int main(int argc, char **argv) {
         if (cfg.disk2_path[0] && drive_attach_disk(&c.drive2, cfg.disk2_path) != 0)
             fprintf(stderr, "1986: could not attach second-drive media '%s'\n",
                     cfg.disk2_path);
+        if (cfg.tape_path[0]) {
+            if (!c128_mount_tape(&c, cfg.tape_path))
+                fprintf(stderr, "1986: could not attach TAP/T64 tape '%s'\n",
+                        cfg.tape_path);
+            else if (tape_autoplay && tape_play_frame <= 0) tape_play(&c.tape);
+        }
         if (cfg.cart_path[0]) {
             CartridgeResult result = cartridge_attach(&c.mem.cart, cfg.cart_path);
             if (result != CART_OK) {
@@ -527,6 +548,21 @@ int main(int argc, char **argv) {
                     if (!config_save_input_port(cfg_path, cfg.main_input_port))
                         fprintf(stderr, "1986: could not save host input port to '%s'\n", cfg_path);
                     notify_post("HOST INPUT: JOY PORT %d", cfg.main_input_port);
+                } else if (ev.key.scancode == SDL_SCANCODE_F2) {
+                    if (c.tape.kind == TAPE_NONE) notify_post("NO TAPE INSERTED");
+                    else if (c.tape.play_button) {
+                        tape_stop(&c.tape);
+                        notify_post("TAPE STOP");
+                    } else {
+                        tape_play(&c.tape);
+                        notify_post("TAPE PLAY");
+                    }
+                } else if (ev.key.scancode == SDL_SCANCODE_F3) {
+                    if (c.tape.kind == TAPE_NONE) notify_post("NO TAPE INSERTED");
+                    else {
+                        tape_rewind(&c.tape);
+                        notify_post("TAPE REWOUND");
+                    }
                 } else if (ev.key.scancode == SDL_SCANCODE_F8) {
                     if (monitor_is_open(monitor))
                         monitor_handle_event(monitor,
@@ -622,6 +658,11 @@ int main(int argc, char **argv) {
             paste_text(&paste, paste_arg);
             paste_started = true;
         }
+        if (tape_autoplay && tape_play_frame > 0 &&
+            c128_frame_count >= tape_play_frame) {
+            tape_play(&c.tape);
+            tape_autoplay = false;
+        }
         paste_tick(&paste, &c.kbd);
 
         /* --- Overlay (process async file-dialog results) --- */
@@ -696,6 +737,7 @@ int main(int argc, char **argv) {
         /* --- Frame present --- */
         display_upload(&c.display);
         overlay_render_drive_scope(&overlay, display_active_renderer(&c.display));
+        overlay_render_tape_scope(&overlay, display_active_renderer(&c.display));
         overlay_render(&overlay, display_active_renderer(&c.display));
         display_render_function_keys(&c.display);
         if (paused) display_draw_paused_label(&c.display);
@@ -727,6 +769,7 @@ int main(int argc, char **argv) {
     int drive2_exit_status = drive_attach_disk(&c.drive2, NULL);
     if (drive2_exit_status == -2)
         fprintf(stderr, "1986: unsaved drive 2 GCR write at exit; original disk image was not overwritten\n");
+    c128_eject_tape(&c);
     display_destroy(&c.display);
     return drive_exit_status == -2 || drive2_exit_status == -2 ? 1 : 0;
 }

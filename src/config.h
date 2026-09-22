@@ -36,10 +36,10 @@ typedef struct {
     bool       gif_ffmpeg;         /* optimize GIF via ffmpeg if present */
     char       rom_dir[CONFIG_PATH_MAX];  /* directory holding machine ROMs */
 
-    /* Media files chosen in the overlay. Tape remains a placeholder. */
+    /* Media files chosen in the overlay. */
     char       disk_path[CONFIG_PATH_MAX];  /* D64/D71/D81 image or PRG */
     char       disk2_path[CONFIG_PATH_MAX]; /* second drive image or PRG */
-    char       tape_path[CONFIG_PATH_MAX];  /* Tape .tap image */
+    char       tape_path[CONFIG_PATH_MAX];  /* Tape .tap/.t64 image */
     char       cart_path[CONFIG_PATH_MAX];  /* native C128 CRT/raw function ROM */
     char       u36_path[CONFIG_PATH_MAX];   /* internal function ROM socket */
     /* Per-picker directories survive ejection; empty uses selected media. */
@@ -64,8 +64,8 @@ typedef struct {
     bool       one_display;         /* unified display (VIC/VDC share one window) */
     bool       display_change_reset;/* reset when switching 40<->80 display */
     NotifyMode notify_mode;         /* Notifications: off/screen/console */
-    bool       tape_audio_monitor;  /* stub */
-    bool       tape_video_monitor;  /* stub */
+    bool       tape_audio_monitor;  /* play TAP signal through host audio */
+    bool       tape_video_monitor;  /* on-screen TAP/T64 status and waveform */
     bool       debug_overlay;       /* stub */
     bool       joystick_hidapi;     /* SDL HIDAPI backend (restart to apply) */
     int        main_input_port;     /* host gamepad/mouse targets port 1 or 2 */

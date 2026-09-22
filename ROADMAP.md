@@ -278,6 +278,9 @@ ROM through emulated hardware.
   including live Media attach/eject; bank-switched cartridges remain future work.
 - [x] U36 internal function-ROM socket with Tinker-gated Media selection and
   persistent live attach/eject.
+- [x] TAP pulse playback through the C128 cassette port and T64 file loading,
+  with F2/F3 transport controls plus optional tape-signal audio and visual
+  monitors (#111). Tape recording remains future work.
 - [ ] Snapshots (VICE `.vsf` or a simple own format) for save/load of machine
   state.
 - [ ] Full native C128 keyboard coverage, host layouts, and auto-repeat.

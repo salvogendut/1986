@@ -14,6 +14,7 @@
 #include "drive1571cr.h"
 #include "iec_bus.h"
 #include "drive_monitor.h"
+#include "tape.h"
 #include "config.h"
 #include <stdbool.h>
 
@@ -41,6 +42,7 @@ typedef struct {
     int     sid_fast_remainder;
     Kbd     kbd;
     JoyPorts joyports;
+    Tape    tape;
     Drive   drive;
     Drive   drive2;
     Drive1571Cr integrated_drive; /* independent ROM-backed 1571CR machine */
@@ -73,6 +75,8 @@ u64  c128_cycles_to_ns(const C128 *c, int cycles);
 void c128_key_event(C128 *c, int scancode, bool down);
 void c128_set_4080(C128 *c, bool col80); /* set the latched 40/80 key and active display */
 void c128_switch_4080(C128 *c);   /* toggle 40-column VIC <-> 80-column VDC */
+bool c128_mount_tape(C128 *c, const char *path);
+void c128_eject_tape(C128 *c);
 
 /* IEC serial-bus forwarding (installed via cpu_install_iec_traps). */
 void c128_iec_attention(void *ctx, u8 b);

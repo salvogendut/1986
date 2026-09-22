@@ -13,6 +13,7 @@
 #include "vice/traps.h"
 #include "vice/mos6510.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 /* ------------------------------------------------------------------------- */
@@ -101,6 +102,14 @@ static const C128Trap g_serial_traps[] = {
 #define N_SERIAL_TRAPS (sizeof(g_serial_traps) / sizeof(g_serial_traps[0]))
 
 static IecCallbacks g_iec;
+static TapeCallbacks g_tape;
+static bool g_tape_active;
+static u8 *g_tape_kernal;
+static u8 g_tape_original[2][3];
+static const C128Trap g_tape_traps[] = {
+    { 0xE8D3, 0xE8D6, 0 }, /* Find next T64 header. */
+    { 0xEA60, 0xEE57, 1 }, /* Receive file bytes. */
+};
 
 static void apply_iec_status(void) {
     if (!g_iec.take_status) return;
@@ -119,6 +128,52 @@ static void select_trapped_serial(void) {
 
 DWORD traps_handler(void) {
     unsigned pc = reg_pc;
+    if (g_tape_active) {
+        for (size_t i = 0; i < 2; ++i) {
+            const C128Trap *t = &g_tape_traps[i];
+            if (pc != t->addr && pc != (unsigned)(t->addr + 1)) continue;
+            if (i == 0) {
+                u8 header[21] = { 5 }; /* EOF if no next file. */
+                if (g_tape.next_header)
+                    g_tape.next_header(g_tape.ctx, header);
+                u16 buffer = (u16)(cpu_mem_read(0xB2) |
+                                   ((u16)cpu_mem_read(0xB3) << 8));
+                for (unsigned j = 0; j < sizeof(header); ++j)
+                    cpu_mem_write((u16)(buffer + j), header[j]);
+                if (getenv("C128_TAPE_TRACE"))
+                    fprintf(stderr, "[tape] header type=%u start=$%04x end=$%04x buffer=$%04x\n",
+                            header[0], header[1] | header[2] << 8,
+                            header[3] | header[4] << 8, buffer);
+                cpu_mem_write(0x90, 0);
+                cpu_mem_write(0x93, 0);
+                cpu_mem_write(0xA09, 0);
+                cpu_mem_write(0xA0A, 0);
+                maincpu_set_carry(0);
+                maincpu_set_zero(1);
+            } else {
+                u16 start = (u16)(cpu_mem_read(0xC1) |
+                                   ((u16)cpu_mem_read(0xC2) << 8));
+                u16 end = (u16)(cpu_mem_read(0xAE) |
+                                 ((u16)cpu_mem_read(0xAF) << 8));
+                bool ok = maincpu_get_x() == 0x0e && end >= start;
+                for (u32 addr = start; ok && addr < end; ++addr) {
+                    int byte = g_tape.read_byte ? g_tape.read_byte(g_tape.ctx) : -1;
+                    if (byte < 0) ok = false;
+                    else cpu_mem_write((u16)addr, (u8)byte);
+                }
+                cpu_mem_write(0xA09, 0);
+                cpu_mem_write(0xA0A, 0);
+                cpu_mem_write(0x90, ok ? 0x40 : 0x10);
+                if (getenv("C128_TAPE_TRACE"))
+                    fprintf(stderr, "[tape] receive X=$%02x start=$%04x end=$%04x ok=%d\n",
+                            maincpu_get_x(), start, end, ok);
+                maincpu_set_carry(0);
+                maincpu_set_interrupt(0);
+            }
+            maincpu_set_pc(t->resume);
+            return 0;
+        }
+    }
     for (size_t i = 0; i < N_SERIAL_TRAPS; i++) {
         /* reg_pc is the address just after the fetched TRAP_OPCODE. */
         if (pc == g_serial_traps[i].addr || pc == (unsigned)(g_serial_traps[i].addr + 1)) {
@@ -192,6 +247,23 @@ void cpu_install_iec_traps(u8 *kernal, const IecCallbacks *cb) {
 
 void cpu_install_serial_traps(u8 *kernal) {
     cpu_install_iec_traps(kernal, NULL);
+}
+
+void cpu_set_tape_traps(u8 *kernal, const TapeCallbacks *cb) {
+    if (!kernal) return;
+    if (g_tape_kernal != kernal) {
+        g_tape_kernal = kernal;
+        for (size_t i = 0; i < 2; ++i)
+            memcpy(g_tape_original[i], kernal + g_tape_traps[i].addr - 0xE000, 3);
+    }
+    g_tape_active = cb != NULL;
+    if (cb) g_tape = *cb;
+    else memset(&g_tape, 0, sizeof(g_tape));
+    for (size_t i = 0; i < 2; ++i) {
+        u8 *site = kernal + g_tape_traps[i].addr - 0xE000;
+        if (g_tape_active) site[0] = TRAP_OPCODE;
+        else memcpy(site, g_tape_original[i], 3);
+    }
 }
 
 monitor_interface_t *maincpu_monitor_interface_get(void) {
