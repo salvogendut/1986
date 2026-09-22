@@ -79,6 +79,7 @@ static int t64_byte_callback(void *ctx) {
 
 void c128_eject_tape(C128 *c) {
     cpu_set_tape_traps(c->mem.kernal, NULL);
+    cpu_set_c64_tape_traps(c->mem.c64_kernal, NULL);
     tape_eject(&c->tape);
 }
 
@@ -92,6 +93,8 @@ bool c128_mount_tape(C128 *c, const char *path) {
             .read_byte = t64_byte_callback,
         };
         cpu_set_tape_traps(c->mem.kernal, &cb);
+        if (mem_c64_roms_loaded(&c->mem))
+            cpu_set_c64_tape_traps(c->mem.c64_kernal, &cb);
     }
     return true;
 }
@@ -115,10 +118,13 @@ static u8 io_read(C128 *c, u16 addr) {
         } else v = sid_read(&c->sid, addr);
     }
     else if (addr >= 0xD800 && addr < 0xDC00) {
-        unsigned bank = c->mem.pla_data & 0x01;   /* CPU colour-RAM bank */
+        unsigned bank = mem_c64_mode(&c->mem) ? 0 :
+                        c->mem.pla_data & 0x01;   /* CPU colour-RAM bank */
         v = c->mem.color_ram[bank * 0x400 + (addr & 0x3FF)];
     }
-    else if (addr >= 0xD500 && addr < 0xD510 && c->mem.mmu.mmio) v = mmu_read(&c->mem.mmu, addr);
+    else if (!mem_c64_mode(&c->mem) &&
+             addr >= 0xD500 && addr < 0xD510 && c->mem.mmu.mmio)
+        v = mmu_read(&c->mem.mmu, addr);
     else if (addr >= 0xDC00 && addr < 0xDD00) {
         /* CIA1 keyboard scan: the KERNAL drives port A as the row output and
          * reads port B for the columns. */
@@ -157,7 +163,7 @@ static u8 io_read(C128 *c, u16 addr) {
                      iec_bus_host_inputs(&c->iec_bus));
         } else v = cia_read(&c->cia2, addr);
     }
-    else if (addr >= 0xD600 && addr < 0xD700) {
+    else if (!mem_c64_mode(&c->mem) && addr >= 0xD600 && addr < 0xD700) {
         vdc_set_bus_clock(&c->vdc, cpu_cycles(), c->fast);
         v = ((addr & 1) == 0) ? vdc_read_status(&c->vdc) : vdc_read_data(&c->vdc);
     }
@@ -176,17 +182,25 @@ static void io_write(C128 *c, u16 addr, u8 val) {
     }
     if (addr >= 0xD400 && addr < 0xD500) { sid_write(&c->sid, addr, val); return; }
     if (addr >= 0xD800 && addr < 0xDC00) {
-        unsigned bank = c->mem.pla_data & 0x01;   /* CPU colour-RAM bank */
+        unsigned bank = mem_c64_mode(&c->mem) ? 0 :
+                        c->mem.pla_data & 0x01;   /* CPU colour-RAM bank */
         c->mem.color_ram[bank * 0x400 + (addr & 0x3FF)] = val & 0x0F;
         return;
     }
-    if (addr >= 0xD500 && addr < 0xD510) {
+    if (!mem_c64_mode(&c->mem) && addr >= 0xD500 && addr < 0xD510) {
         if (c->mem.mmu.mmio) {
+            bool was_c64 = mmu_is_c64_mode(&c->mem.mmu);
             mmu_write(&c->mem.mmu, addr, val);
             if ((addr & 0xff) == 0x06 || (addr & 0xff) == 0x09)
                 cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
             if (mmu_take_c64_request(&c->mem.mmu))
                 notify_post("C64 MODE IS NOT SUPPORTED - USING NATIVE C128 MODE");
+            if (!was_c64 && mmu_is_c64_mode(&c->mem.mmu)) {
+                cpu_set_stack_page(c->mem.ram +
+                    ((u32)c->mem.mmu.c64_ram_bank << 16) + 0x100);
+                display_set_vdc_active(&c->display, false);
+                notify_post("EXPERIMENTAL C64 TEST MODE");
+            }
             return;
         }
     }
@@ -198,7 +212,7 @@ static void io_write(C128 *c, u16 addr, u8 val) {
             iec_bus_set_host(&c->iec_bus, c->cia2.pra, c->cia2.ddra);
         return;
     }
-    if (addr >= 0xD600 && addr < 0xD700) {
+    if (!mem_c64_mode(&c->mem) && addr >= 0xD600 && addr < 0xD700) {
         vdc_set_bus_clock(&c->vdc, cpu_cycles(), c->fast);
         if ((addr & 1) == 0) vdc_write_index(&c->vdc, val);   /* $D600 */
         else                 vdc_write_data(&c->vdc, val);    /* $D601 */
@@ -225,7 +239,8 @@ u8 c128_mem_read(void *ctx, u16 addr) {
         }
         return value;
     }
-    if (addr >= 0xFF00 && addr <= 0xFF04) return mmu_ffxx_read(&c->mem.mmu, addr);
+    if (!mem_c64_mode(&c->mem) && addr >= 0xFF00 && addr <= 0xFF04)
+        return mmu_ffxx_read(&c->mem.mmu, addr);
     if (addr >= 0xD000 && addr < 0xE000 && mem_io_visible(&c->mem))
         return io_read(c, addr);
     return mem_read(&c->mem, addr);
@@ -235,7 +250,10 @@ void c128_mem_write(void *ctx, u16 addr, u8 val) {
     C128 *c = ctx;
     if (addr == 0x0000) { c->cpu.io_ddr = val; pla_update(c); tape_motor_update(c); return; }
     if (addr == 0x0001) { c->cpu.io_port = val; pla_update(c); tape_motor_update(c); return; }
-    if (addr >= 0xFF00 && addr <= 0xFF04) { mmu_ffxx_write(&c->mem.mmu, addr, val); return; }
+    if (!mem_c64_mode(&c->mem) && addr >= 0xFF00 && addr <= 0xFF04) {
+        mmu_ffxx_write(&c->mem.mmu, addr, val);
+        return;
+    }
     if (addr >= 0xD000 && addr < 0xE000 && mem_io_visible(&c->mem)) {
         io_write(c, addr, val);
         return;
@@ -358,7 +376,9 @@ int c128_frame(C128 *c) {
     /* Run the 8502 in raster-line chunks (63 cycles each), ticking the VIC
      * between chunks so the raster IRQ fires when the raster crosses the
      * compare line (VICE's alarm-based timing). */
-    int frame_cycles = c->fast ? 2 * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
+    bool fast_now = c->fast || c->vic.fast_mode;
+    c->cpu.fast = fast_now;
+    int frame_cycles = fast_now ? 2 * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
     c->drive_clock_denominator = (unsigned)frame_cycles;
     c->drive_host_cycle_synced = cpu_cycles();
     int remaining = frame_cycles;
@@ -388,7 +408,7 @@ int c128_frame(C128 *c) {
             drive_sync_to_cpu(c);
             /* Fast mode doubles CPU cycles per frame, not the SID clock. */
             int sid_cycles = elapsed;
-            if (c->fast) {
+            if (fast_now) {
                 sid_cycles += c->sid_fast_remainder;
                 c->sid_fast_remainder = sid_cycles & 1;
                 sid_cycles /= 2;
@@ -500,7 +520,9 @@ int c128_frame(C128 *c) {
      * port A bits 0-1 select the inverted 16K window inside it. Input pins
      * float high, matching the 6526's (PRA | ~DDRA) effective port value. */
     u8 cia2_pa = c->cia2.pra | (u8)~c->cia2.ddra;
-    unsigned vic_bank = ((unsigned)(c->mem.mmu.rcr >> 6) & 0x01) << 2;
+    unsigned vic_bank = mem_c64_mode(&c->mem)
+        ? (unsigned)c->mem.mmu.c64_ram_bank << 2
+        : ((unsigned)(c->mem.mmu.rcr >> 6) & 0x01) << 2;
     vic_bank |= (unsigned)(~cia2_pa) & 0x03;
     vic_set_bank(&c->vic, vic_bank);
 
@@ -509,13 +531,26 @@ int c128_frame(C128 *c) {
      * it (notably when a cartridge draws to VIC while BASIC is in 80-col). */
     vic_render(&c->vic, &c->mem, &c->display);
     vdc_render(&c->vdc, c->display.vdc_pixels, VDC_SCREEN_W, VDC_SCREEN_H);
-    display_set_vdc_active(&c->display, !c->mem.mmu.col4080);
+    display_set_vdc_active(&c->display,
+                           mem_c64_mode(&c->mem) ? false : !c->mem.mmu.col4080);
     return total;
 }
 
 u64 c128_cycles_to_ns(const C128 *c, int cycles) {
-    u64 hz = c->fast ? 2000000ULL : 1000000ULL;
+    u64 hz = (c->fast || c->vic.fast_mode) ? 2000000ULL : 1000000ULL;
     return ((u64)(uint64_t)cycles * 1000000000ULL) / hz;
+}
+
+bool c128_set_c64_test_mode(C128 *c, bool enabled) {
+    if (enabled && !mem_c64_roms_loaded(&c->mem)) return false;
+    bool active = mmu_is_c64_mode(&c->mem.mmu);
+    mmu_set_c64_enabled(&c->mem.mmu, enabled);
+    if (!enabled && active) c128_reset(c);
+    return true;
+}
+
+bool c128_is_c64_mode(const C128 *c) {
+    return mmu_is_c64_mode(&c->mem.mmu);
 }
 
 void c128_key_event(C128 *c, int scancode, bool down) {

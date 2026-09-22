@@ -46,13 +46,22 @@ tests/
 
 ## Machine-mode scope
 
-The emulation target is the native C128 platform. C64 compatibility mode is
-not an incremental MMU configuration: it brings a separate ROM personality,
-PLA map, cartridge behavior, startup path, and compatibility surface. It is
-therefore intentionally unsupported. `$D505` bit 6 requests are latched for a
-one-shot user notification and rejected; the KERNAL reset-vector path then
-returns the machine safely to native C128 mode. The boundary remains explicit
-so support could be added later without maintaining a misleading partial mode.
+The product target remains the C128 platform, not a general-purpose C64
+emulator. There is nevertheless an experimental development path for the
+C128's own C64 personality. Like VICE x128, it does not instantiate a second
+machine: `$D505` bit 6 changes the ROM/PLA personality while the same 8502,
+VIC-IIe, SID, CIAs, RAM, and IEC devices continue running. The implementation
+includes the C64 processor-port PLA map, C64 BASIC/KERNAL ROM windows, the
+lower character-ROM bank, bank-0 color RAM, VIC-IIe `$D030` fast mode, and C64
+KERNAL IEC trap addresses.
+
+The path is guarded by `c64_test_mode`, defaults to disabled, and additionally
+requires the optional C64 BASIC and KERNAL ROMs. With the gate disabled,
+`$D505` C64 requests are still rejected with the existing one-shot
+notification. The Advanced toggle is intentionally temporary: after shared
+C128 hardware has been validated with C64 software and C128-enhanced programs,
+the UI can be removed without deleting the dormant, default-disabled core.
+General C64 cartridge compatibility is not part of this work.
 
 CP/M remains in scope as a native advertised use of the C128 hardware.
 

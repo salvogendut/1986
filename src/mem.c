@@ -39,7 +39,14 @@ static u32 bank_off(const Mem *m, u16 addr) {
      * bits 0-1 choose 1K, 4K, 8K, or 16K. Pages 0 and 1 are separately
      * relocated by the MMU and default to bank 0. */
     unsigned size = common_size(m);
-    u8 bank = (m->mmu.mcr >> 6) & 0x01;
+    u8 bank = mmu_is_c64_mode(&m->mmu)
+            ? m->mmu.c64_ram_bank : (m->mmu.mcr >> 6) & 0x01;
+    if (mmu_is_c64_mode(&m->mmu)) {
+        if (((m->mmu.rcr & 0x04) && addr < size) ||
+            ((m->mmu.rcr & 0x08) && addr >= 0x10000 - size))
+            bank = 0;
+        return ((u32)bank << 16) | addr;
+    }
     if (addr < 0x100)
         return mem_cpu_page_offset(m, 0) | (addr & 0xff);
     if (addr < 0x200)
@@ -78,10 +85,36 @@ static unsigned upper_rom_select(const Mem *m) {
 }
 
 bool mem_io_visible(const Mem *m) {
+    if (mmu_is_c64_mode(&m->mmu))
+        return (m->pla_data & 0x04) && (m->pla_data & 0x03);
     return (m->mmu.mcr & 0x01) == 0;
 }
 
+bool mem_c64_mode(const Mem *m) {
+    return mmu_is_c64_mode(&m->mmu);
+}
+
+bool mem_c64_roms_loaded(const Mem *m) {
+    return m->c64_roms_loaded;
+}
+
+static u8 c64_read(Mem *m, u16 addr) {
+    u8 port = m->pla_data;
+    bool loram = (port & 0x01) != 0;
+    bool hiram = (port & 0x02) != 0;
+    bool charen = (port & 0x04) != 0;
+
+    if (addr >= 0xA000 && addr < 0xC000 && loram && hiram)
+        return m->c64_basic[addr - 0xA000];
+    if (addr >= 0xD000 && addr < 0xE000 && !charen && (loram || hiram))
+        return m->chargen[addr & 0x0FFF];
+    if (addr >= 0xE000 && hiram)
+        return m->c64_kernal[addr - 0xE000];
+    return m->ram[bank_off(m, addr)];
+}
+
 u8 mem_read(Mem *m, u16 addr) {
+    if (mmu_is_c64_mode(&m->mmu)) return c64_read(m, addr);
     unsigned cfg = c128_config(m);
 
     if (addr < 0x4000) return m->ram[bank_off(m, addr)];
@@ -180,6 +213,12 @@ int mem_load_c128_roms(Mem *m, const char *dir) {
     static const char *chargen_names[] = {
         "chargen.bin", "chargen.rom", "characters-c128d", NULL
     };
+    static const char *c64_basic_names[] = {
+        "basic64.bin", "basic64.rom", "basic64-901226-01.bin", NULL
+    };
+    static const char *c64_kernal_names[] = {
+        "kernal64.bin", "kernal64.rom", "kernal64-901227-03.bin", NULL
+    };
 
     u8 img[0x8000];
 
@@ -231,6 +270,27 @@ int mem_load_c128_roms(Mem *m, const char *dir) {
             break;
         }
     }
+
+    bool basic64_loaded = false, kernal64_loaded = false;
+    for (int i = 0; c64_basic_names[i]; ++i) {
+        snprintf(path, sizeof(path), "%s/%s", dir, c64_basic_names[i]);
+        if (read_file(path, m->c64_basic, sizeof(m->c64_basic)) ==
+                sizeof(m->c64_basic)) {
+            basic64_loaded = true;
+            loaded++;
+            break;
+        }
+    }
+    for (int i = 0; c64_kernal_names[i]; ++i) {
+        snprintf(path, sizeof(path), "%s/%s", dir, c64_kernal_names[i]);
+        if (read_file(path, m->c64_kernal, sizeof(m->c64_kernal)) ==
+                sizeof(m->c64_kernal)) {
+            kernal64_loaded = true;
+            loaded++;
+            break;
+        }
+    }
+    m->c64_roms_loaded = basic64_loaded && kernal64_loaded;
 
     return loaded;
 }

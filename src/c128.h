@@ -75,6 +75,8 @@ u64  c128_cycles_to_ns(const C128 *c, int cycles);
 void c128_key_event(C128 *c, int scancode, bool down);
 void c128_set_4080(C128 *c, bool col80); /* set the latched 40/80 key and active display */
 void c128_switch_4080(C128 *c);   /* toggle 40-column VIC <-> 80-column VDC */
+bool c128_set_c64_test_mode(C128 *c, bool enabled);
+bool c128_is_c64_mode(const C128 *c);
 bool c128_mount_tape(C128 *c, const char *path);
 void c128_eject_tape(C128 *c);
 

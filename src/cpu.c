@@ -101,14 +101,32 @@ static const C128Trap g_serial_traps[] = {
 };
 #define N_SERIAL_TRAPS (sizeof(g_serial_traps) / sizeof(g_serial_traps[0]))
 
+/* VICE x128 uses the C64 KERNAL trap addresses while the same machine is in
+ * compatibility mode. These drive the same IEC devices and callbacks. */
+static const C128Trap g_c64_serial_traps[] = {
+    { 0xEEA9, 0xEDAB, TRAP_READY },
+    { 0xED24, 0xEDAB, TRAP_ATTENTION },
+    { 0xED37, 0xEDAB, TRAP_ATTENTION },
+    { 0xED41, 0xEDAB, TRAP_SEND },
+    { 0xEE14, 0xEDAB, TRAP_RECEIVE },
+};
+#define N_C64_SERIAL_TRAPS \
+    (sizeof(g_c64_serial_traps) / sizeof(g_c64_serial_traps[0]))
+
 static IecCallbacks g_iec;
 static TapeCallbacks g_tape;
 static bool g_tape_active;
 static u8 *g_tape_kernal;
 static u8 g_tape_original[2][3];
+static u8 *g_c64_tape_kernal;
+static u8 g_c64_tape_original[2][3];
 static const C128Trap g_tape_traps[] = {
     { 0xE8D3, 0xE8D6, 0 }, /* Find next T64 header. */
     { 0xEA60, 0xEE57, 1 }, /* Receive file bytes. */
+};
+static const C128Trap g_c64_tape_traps[] = {
+    { 0xF72F, 0xF732, 0 }, /* C64 KERNAL: find next T64 header. */
+    { 0xF8A1, 0xFC93, 1 }, /* C64 KERNAL: receive file bytes. */
 };
 
 static void apply_iec_status(void) {
@@ -122,15 +140,19 @@ static void apply_iec_status(void) {
  * than letting BASIC 7 select the 1571 burst path.  Bit 6 of $0A1C is the
  * KERNAL's "fast serial available" flag, tested by DLOAD at $F3E0. */
 static void select_trapped_serial(void) {
-    if (g_iec.force_slow_serial)
+    if (g_iec.force_slow_serial &&
+        !(g_iec.c64_mode && g_iec.c64_mode(g_iec.ctx)))
         cpu_mem_write(0x0A1C, (u8)(cpu_mem_read(0x0A1C) & ~0x40));
 }
 
 DWORD traps_handler(void) {
     unsigned pc = reg_pc;
     if (g_tape_active) {
-        for (size_t i = 0; i < 2; ++i) {
-            const C128Trap *t = &g_tape_traps[i];
+        for (size_t list = 0; list < 2; ++list) {
+          const C128Trap *traps = list ? g_c64_tape_traps : g_tape_traps;
+          u16 workspace = list ? 0x029F : 0x0A09;
+          for (size_t i = 0; i < 2; ++i) {
+            const C128Trap *t = &traps[i];
             if (pc != t->addr && pc != (unsigned)(t->addr + 1)) continue;
             if (i == 0) {
                 u8 header[21] = { 5 }; /* EOF if no next file. */
@@ -146,8 +168,8 @@ DWORD traps_handler(void) {
                             header[3] | header[4] << 8, buffer);
                 cpu_mem_write(0x90, 0);
                 cpu_mem_write(0x93, 0);
-                cpu_mem_write(0xA09, 0);
-                cpu_mem_write(0xA0A, 0);
+                cpu_mem_write(workspace, 0);
+                cpu_mem_write((u16)(workspace + 1), 0);
                 maincpu_set_carry(0);
                 maincpu_set_zero(1);
             } else {
@@ -161,8 +183,8 @@ DWORD traps_handler(void) {
                     if (byte < 0) ok = false;
                     else cpu_mem_write((u16)addr, (u8)byte);
                 }
-                cpu_mem_write(0xA09, 0);
-                cpu_mem_write(0xA0A, 0);
+                cpu_mem_write(workspace, 0);
+                cpu_mem_write((u16)(workspace + 1), 0);
                 cpu_mem_write(0x90, ok ? 0x40 : 0x10);
                 if (getenv("C128_TAPE_TRACE"))
                     fprintf(stderr, "[tape] receive X=$%02x start=$%04x end=$%04x ok=%d\n",
@@ -172,12 +194,16 @@ DWORD traps_handler(void) {
             }
             maincpu_set_pc(t->resume);
             return 0;
+          }
         }
     }
-    for (size_t i = 0; i < N_SERIAL_TRAPS; i++) {
+    for (size_t list = 0; list < 2; ++list) {
+      const C128Trap *traps = list ? g_c64_serial_traps : g_serial_traps;
+      size_t trap_count = list ? N_C64_SERIAL_TRAPS : N_SERIAL_TRAPS;
+      for (size_t i = 0; i < trap_count; i++) {
         /* reg_pc is the address just after the fetched TRAP_OPCODE. */
-        if (pc == g_serial_traps[i].addr || pc == (unsigned)(g_serial_traps[i].addr + 1)) {
-            const C128Trap *t = &g_serial_traps[i];
+        if (pc == traps[i].addr || pc == (unsigned)(traps[i].addr + 1)) {
+            const C128Trap *t = &traps[i];
             switch (t->kind) {
                 case TRAP_ATTENTION:
                     /* The KERNAL passes serial-bus bytes through BSOUR ($95),
@@ -229,6 +255,7 @@ DWORD traps_handler(void) {
             maincpu_set_pc(t->resume);
             return 0;
         }
+      }
     }
     return (DWORD)-1;
 }
@@ -242,6 +269,15 @@ void cpu_install_iec_traps(u8 *kernal, const IecCallbacks *cb) {
         unsigned off = g_serial_traps[i].addr - 0xE000;
         if (off < 0x2000)
             kernal[off] = TRAP_OPCODE;
+    }
+}
+
+void cpu_install_c64_iec_traps(u8 *kernal64, const IecCallbacks *cb) {
+    if (cb) g_iec = *cb;
+    if (!kernal64) return;
+    for (size_t i = 0; i < N_C64_SERIAL_TRAPS; ++i) {
+        unsigned off = g_c64_serial_traps[i].addr - 0xE000;
+        if (off < 0x2000) kernal64[off] = TRAP_OPCODE;
     }
 }
 
@@ -263,6 +299,24 @@ void cpu_set_tape_traps(u8 *kernal, const TapeCallbacks *cb) {
         u8 *site = kernal + g_tape_traps[i].addr - 0xE000;
         if (g_tape_active) site[0] = TRAP_OPCODE;
         else memcpy(site, g_tape_original[i], 3);
+    }
+}
+
+void cpu_set_c64_tape_traps(u8 *kernal64, const TapeCallbacks *cb) {
+    if (!kernal64) return;
+    if (g_c64_tape_kernal != kernal64) {
+        g_c64_tape_kernal = kernal64;
+        for (size_t i = 0; i < 2; ++i)
+            memcpy(g_c64_tape_original[i],
+                   kernal64 + g_c64_tape_traps[i].addr - 0xE000, 3);
+    }
+    g_tape_active = cb != NULL;
+    if (cb) g_tape = *cb;
+    else memset(&g_tape, 0, sizeof(g_tape));
+    for (size_t i = 0; i < 2; ++i) {
+        u8 *site = kernal64 + g_c64_tape_traps[i].addr - 0xE000;
+        if (g_tape_active) site[0] = TRAP_OPCODE;
+        else memcpy(site, g_c64_tape_original[i], 3);
     }
 }
 

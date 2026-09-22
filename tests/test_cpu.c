@@ -36,6 +36,20 @@ static u8 test_take_status(void *ctx) {
     pending_status = 0;
     return status;
 }
+static bool test_tape_header(void *ctx, u8 header[21]) {
+    (void)ctx;
+    memset(header, 0, 21);
+    header[0] = 1;
+    header[1] = 0x00;
+    header[2] = 0x20;
+    header[3] = 0x02;
+    header[4] = 0x20;
+    return true;
+}
+static int test_tape_byte(void *ctx) {
+    u8 *next = ctx;
+    return (*next)++;
+}
 
 /* cpu_step() runs a whole frame (CPU_PAL_FRAME_CYCLES) of the VICE 6502 core.
  * The tiny program below loops, so the assertions hold after one frame. */
@@ -136,6 +150,36 @@ int main(void) {
     reg_pc = 0xE43E;
     CHECK(traps_handler() == 0, "failed receive trap handled");
     CHECK((ram[0x90] & 0x02) != 0, "failed receive reports serial error");
+
+    /* VICE x128 uses the C64 KERNAL's own T64 entry points and workspace
+     * after switching personality. */
+    u8 tape_byte = 0xA0;
+    TapeCallbacks tape = {
+        .ctx = &tape_byte,
+        .next_header = test_tape_header,
+        .read_byte = test_tape_byte,
+    };
+    cpu_set_c64_tape_traps(&ram[0xE000], &tape);
+    ram[0xB2] = 0x00;
+    ram[0xB3] = 0x03;
+    reg_pc = 0xF72F;
+    CHECK(traps_handler() == 0 && ram[0x0300] == 1 &&
+          ram[0x0301] == 0x00 && ram[0x0302] == 0x20,
+          "C64 T64 header trap writes the KERNAL tape buffer");
+    ram[0xC1] = 0x00;
+    ram[0xC2] = 0x20;
+    ram[0xAE] = 0x02;
+    ram[0xAF] = 0x20;
+    ram[0x029F] = ram[0x02A0] = 0xFF;
+    ram[0x0A09] = 0x55;
+    maincpu_regs.x = 0x0E;
+    reg_pc = 0xF8A1;
+    CHECK(traps_handler() == 0 && ram[0x2000] == 0xA0 &&
+          ram[0x2001] == 0xA1,
+          "C64 T64 receive trap copies file bytes");
+    CHECK(ram[0x029F] == 0 && ram[0x02A0] == 0 && ram[0x0A09] == 0x55,
+          "C64 T64 trap uses C64 workspace rather than C128 workspace");
+    cpu_set_c64_tape_traps(&ram[0xE000], NULL);
 
     if (failures == 0) { printf("test-cpu: OK\n"); return 0; }
     printf("test-cpu: %d failure(s)\n", failures);

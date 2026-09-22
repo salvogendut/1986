@@ -49,6 +49,7 @@ typedef struct {
     u64  cycles;       /* raster cycle counter */
     u8   raster_ctrl2[VIC_RASTER_LINES]; /* $D018 at each raster line */
     bool raster_ctrl2_valid;
+    bool fast_mode;     /* VIC-IIe $D030 bit 0: 8502 requests 2 MHz */
 } Vic;
 
 void vic_init(Vic *v);

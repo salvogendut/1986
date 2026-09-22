@@ -1,5 +1,6 @@
 #include "mmu.h"
 void mmu_init(Mmu *mmu) {
+    mmu->c64_enabled = false;
     mmu_reset(mmu);
 }
 
@@ -19,6 +20,8 @@ void mmu_reset(Mmu *mmu) {
     mmu->vdc_bank = 0x00;
     mmu->vdc_ctrl = 0x00;
     mmu->mcr5 = 0x00;
+    mmu->c64_mode = false;
+    mmu->c64_ram_bank = 0;
     mmu->c64_request_pending = false;
     mmu->c64_request_active = false;
     mmu->col4080 = true;  /* 40-column key released -> 40-col VIC */
@@ -33,17 +36,24 @@ void mmu_write(Mmu *mmu, u16 addr, u8 val) {
         case 0x03: mmu->pcr3 = val; break;
         case 0x04: mmu->pcr4 = val; break;
         case 0x05:
-            /* Bit 6 changes the real C128 into its C64 personality. 1986 is
-             * intentionally native-C128-only, so latch the request for the
-             * host UI but never let that mode bit enter the emulated state. */
+            /* VICE's x128 changes the memory personality immediately when
+             * MCR bit 6 rises. Keep that authentic path behind the explicit
+             * Advanced test gate; otherwise retain the historical rejection. */
             if (val & 0x40) {
-                if (!mmu->c64_request_active)
+                if (mmu->c64_enabled) {
+                    if (!mmu->c64_mode)
+                        mmu->c64_ram_bank = (mmu->mcr >> 6) & 1;
+                    mmu->c64_mode = true;
+                } else if (!mmu->c64_request_active) {
                     mmu->c64_request_pending = true;
+                }
                 mmu->c64_request_active = true;
             } else {
                 mmu->c64_request_active = false;
+                mmu->c64_mode = false;
             }
-            mmu->mcr5 = (val & 0x3F) | 0x30;
+            mmu->mcr5 = (val & 0x3F) | 0x30 |
+                        (mmu->c64_mode ? 0x40 : 0);
             break;
         case 0x06: mmu->rcr = val; break;
         case 0x07:
@@ -108,4 +118,16 @@ bool mmu_take_c64_request(Mmu *mmu) {
     bool pending = mmu->c64_request_pending;
     mmu->c64_request_pending = false;
     return pending;
+}
+
+void mmu_set_c64_enabled(Mmu *mmu, bool enabled) {
+    mmu->c64_enabled = enabled;
+    if (!enabled) {
+        mmu->c64_mode = false;
+        mmu->mcr5 &= (u8)~0x40;
+    }
+}
+
+bool mmu_is_c64_mode(const Mmu *mmu) {
+    return mmu->c64_mode;
 }

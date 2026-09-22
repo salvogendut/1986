@@ -26,6 +26,10 @@ int g_debug_enabled = 0;
 static bool g_boot_trace = false;
 static bool g_sid_trace = false;
 
+static bool iec_c64_mode(void *ctx) {
+    return c128_is_c64_mode((const C128 *)ctx);
+}
+
 /* One-shot PPM capture (C128_SAVE_PPM=<path>) for visual debugging. */
 static char *g_save_ppm = NULL;
 static int   g_save_ppm_frame = 60;
@@ -336,6 +340,12 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (!c128_set_c64_test_mode(&c, cfg.c64_test_mode) &&
+        cfg.c64_test_mode) {
+        fprintf(stderr, "1986: C64 test mode enabled but BASIC64/KERNAL64 ROMs are missing\n");
+        notify_post("C64 TEST MODE NEEDS BASIC64 AND KERNAL64 ROMS");
+    }
+
     /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */
     c.col_mode_80 = cfg.col_mode_80;
     c128_reset(&c);
@@ -351,6 +361,7 @@ int main(int argc, char **argv) {
         .send = c128_iec_send,
         .receive = c128_iec_receive,
         .take_status = c128_iec_take_status,
+        .c64_mode = iec_c64_mode,
     };
     /* The ROM-level serial path cannot mix a physical 1571 with a trapped
      * virtual 1581. Fall back as a pair until that hardware is implemented. */
@@ -368,6 +379,8 @@ int main(int argc, char **argv) {
         if (cfg.real_disk_drive)
             fprintf(stderr, "1986: real-drive backend unavailable; using fast virtual drive\n");
         cpu_install_iec_traps(c.mem.kernal, &iec);
+        if (mem_c64_roms_loaded(&c.mem))
+            cpu_install_c64_iec_traps(c.mem.c64_kernal, &iec);
     }
 
     Overlay overlay;
@@ -702,8 +715,10 @@ int main(int argc, char **argv) {
             /* Optional boot-progress trace (C128_BOOT_TRACE=1). */
             if (g_boot_trace && (c128_frame_count % 10) == 0) {
                 const Cpu8502 *cpu = &c.cpu;
-                fprintf(stderr, "[boot] frame=%d PC=%04X SP=%02X P=%02X mcr=%02X\n",
-                        c128_frame_count, cpu->pc, cpu->sp, cpu->p, c.mem.mmu.mcr);
+                fprintf(stderr,
+                        "[boot] frame=%d PC=%04X SP=%02X P=%02X mcr=%02X c64=%d\n",
+                        c128_frame_count, cpu->pc, cpu->sp, cpu->p,
+                        c.mem.mmu.mcr, c128_is_c64_mode(&c) ? 1 : 0);
             }
 
             /* Pace to the emulated frame time. */

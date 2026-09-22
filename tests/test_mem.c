@@ -157,6 +157,36 @@ int main(void) {
           mem->ram[0xE100] == 0x92 && mem->ram[0x1E100] == 0,
           "RAM behind KERNAL ROM respects upper common memory");
 
+    /* C64 personality uses the 6510 processor port as its PLA and keeps the
+     * RAM bank latched at the instant $D505 bit 6 is asserted. */
+    mmu_set_c64_enabled(&mem->mmu, true);
+    mem->mmu.mcr = 0x40;
+    mmu_write(&mem->mmu, 0xD506, 0x00);
+    mmu_write(&mem->mmu, 0xD505, 0x47);
+    mem->c64_basic[0] = 0x64;
+    mem->c64_kernal[0] = 0xE6;
+    mem->chargen[0] = 0xC6;
+    mem->ram[0x1A000] = 0x1A;
+    mem->ram[0x1D000] = 0x1D;
+    mem->ram[0x1E000] = 0x1E;
+    mem_set_processor_port(mem, 0x07, 0x07);
+    CHECK(mem_c64_mode(mem) && mem_io_visible(mem),
+          "C64 personality exposes I/O with CHAREN and ROM lines high");
+    CHECK(mem_read(mem, 0xA000) == 0x64 && mem_read(mem, 0xE000) == 0xE6,
+          "C64 BASIC and KERNAL ROMs replace banked RAM");
+    mem_write(mem, 0xA000, 0xA6);
+    CHECK(mem_read(mem, 0xA000) == 0x64 && mem->ram[0x1A000] == 0xA6,
+          "C64 ROM writes pass through to the latched RAM bank");
+    mem_set_processor_port(mem, 0x07, 0x03);
+    CHECK(!mem_io_visible(mem) && mem_read(mem, 0xD000) == 0xC6,
+          "C64 CHAREN low maps the lower character-ROM half");
+    mem_set_processor_port(mem, 0x07, 0x00);
+    CHECK(mem_read(mem, 0xA000) == 0xA6 && mem_read(mem, 0xD000) == 0x1D &&
+          mem_read(mem, 0xE000) == 0x1E,
+          "C64 LORAM/HIRAM low expose underlying latched-bank RAM");
+    mmu_set_c64_enabled(&mem->mmu, false);
+    mmu_reset(&mem->mmu);
+
     /* U36 is selected separately for the lower and upper 16 KiB. */
     char u36_file[] = "/tmp/1986-u36-test-XXXXXX";
     int u36_fd = mkstemp(u36_file);
