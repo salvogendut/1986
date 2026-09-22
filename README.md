@@ -1,4 +1,4 @@
-# 1986 - Commodore C128DCR emulator
+# 1986 - Commodore C128 DCR emulator
 
 ![1986 logo beside the Commodore 128 BASIC screen](1986.png)
 
