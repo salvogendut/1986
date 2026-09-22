@@ -219,14 +219,17 @@ cycle-level 1571 implementation without conflating their interfaces.
   ATN/CLOCK/DATA/ATNA between CIA2 and VIA1, with bus and ROM-probe tests (#94).
 - [x] Read-only D64/D71 GCR tracks through VIA2: motor, stepper, side, speed,
   sync, write-protect and byte-ready signals, with deterministic tests (#96).
-- [ ] Emulate WD1770/FDC2, mechanism and fast serial; replace virtual KERNAL
-  traps with the hardware backend only once disk commands work reliably.
+- [x] Opt-in unpatched KERNAL/1571CR ROM slow IEC path: interleaved host/drive
+  execution, ATN interrupt and address straps, track-zero sensing; `DIRECTORY`
+  and `LOAD` work on D64 through the drive ROM (#98).
+- [ ] Complete true-drive mode: disk writes, WD1770/FDC2, fast serial, accurate
+  mechanism timing, second-drive bus sharing, and broader D71 validation.
 - [x] Media persists a per-drive hardware type when real-drive mode is selected;
   1581 is shown as future hardware rather than confused with D81 image support.
 - [x] Separate, live Drive 1/Drive 2 activity LEDs in both display windows;
   connect the physical drive's LED latch when its backend takes over (#92).
-- [x] Persisted Advanced > Real Disk Drive preference, default Off; On is
-  marked pending and retains the virtual backend until true-drive support (#57).
+- [x] Persisted Advanced > Real Disk Drive preference, default Off; On selects
+  the 1571CR ROM backend on the next launch when its ROM is available (#57, #98).
 - [x] Optional second fast virtual drive with independent image and a distinct
   IEC unit; compact, legible F9 overlay (#59).
 

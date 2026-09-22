@@ -114,30 +114,31 @@ Current working pieces include:
 - Tests for the CPU, MMU, CIA/SID, VIC graphics and sprites, configuration,
   GIF encoder, disk formats, KERNAL IEC traps, and virtual-drive channels.
 
-Tape playback, further write-side DOS commands, true cycle-level 1571 emulation,
+Tape playback, further write-side DOS commands, complete 1571 emulation,
 high-fidelity SID filter/combined-waveform emulation, CP/M mode, and several
 accuracy features remain unfinished. The virtual drive does not emulate 1571
-or 1581 hardware; it and the future true 1571 will share only the media/image
-layer. The independent 1571CR core has a 2K RAM/32K ROM bus map,
+or 1581 hardware; it and the true 1571 share only the media/image layer.
+The independent 1571CR core has a 2K RAM/32K ROM bus map,
 reset/interrupt vectors, a standalone NMOS 6502 instruction core, two
 6522 VIAs with port, timer, and IRQ handling, and the MOS5710's limited CIA
-serial/interrupt registers. With Real Disk Drive selected and a 1571CR ROM
-present, its CPU clocks alongside the C128 and its slow IEC pins connect
-to CIA2. A read-only GCR mechanism now presents D64/D71 sector tracks to the
+serial/interrupt registers. With Advanced > Real Disk Drive enabled, 1571CR
+selected in Media, and a valid `dos1571cr.bin` in the ROM directory, the next
+launch uses the drive DOS ROM and line-level IEC instead of KERNAL traps.
+The drive CPU clocks alongside the C128, and a read-only GCR mechanism presents
+D64/D71 sector tracks to the
 drive ROM through VIA2, including motor, head step, side, speed, sync, and
-write-protect sensing. This is still a hardware probe, not yet a usable disk
-backend: write-side GCR, WD1770/FDC2, accurate mechanism timing, and burst
-serial are missing. Only the integrated Drive 1 is probed; an enabled second
-drive remains virtual.
-Advanced > Real Disk Drive is still a saved preference: while the
-hardware backend is pending, the fast virtual drive still services disk
-commands through KERNAL traps. With that
-preference On, Media exposes a hardware type per drive (1571CR or future 1581);
-selecting 1581 does not imply that its hardware is emulated.
+write-protect and track-zero sensing. BASIC `DIRECTORY` and `LOAD` work through
+the real 1571CR ROM's slow IEC path with D64 media. This mode remains
+experimental and read-only: write-side GCR, WD1770/FDC2, accurate mechanism
+timing, and burst serial are missing. The second drive is not yet reachable in
+true-drive mode; use the fast virtual mode for two drives or disk writes.
+Changing the Real Disk Drive setting, drive hardware type, or true-drive IEC
+address requires restarting the application. If the drive ROM is missing or
+the hardware type is 1581, the fast virtual backend remains active. Selecting
+1581 hardware does not imply that its hardware is emulated.
 The bottom bar shows a separately labeled activity LED for each enabled drive,
-in both the 40-column and 80-column windows. For now these follow the active
-virtual drive's disk and IEC transfers; true-drive hardware LED state will be
-connected when the physical backend becomes operational.
+in both the 40-column and 80-column windows. In true-drive mode, Drive 1's LED
+follows the emulated 1571 mechanism latch.
 For drive-ROM diagnostics, `C128_1571_TRACE=1` logs its PC, cycle count, VIA
 ports, slow IEC line levels, and GCR head/motor state every 50 frames.
 

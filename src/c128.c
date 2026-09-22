@@ -1,5 +1,6 @@
 #include "c128.h"
 #include "notify.h"
+#include "leds.h"
 #include <SDL3/SDL.h>
 #include <string.h>
 #include <stdio.h>
@@ -9,8 +10,7 @@
 int c128_frame_count = 0;
 
 static bool drive_probe_active(const C128 *c) {
-    return c->cfg && c->cfg->real_disk_drive && c->cfg->drive_type == 1571 &&
-           c->integrated_drive.rom_loaded;
+    return c->drive_raw_iec;
 }
 
 static void drive_via_port_change(void *ctx, unsigned port, u8 pins) {
@@ -189,6 +189,7 @@ void c128_init(C128 *c, Config *cfg) {
     drive_set_unit(&c->drive2, cfg->drive2_unit);
     drive1571cr_init(&c->integrated_drive);
     iec_bus_init(&c->iec_bus, &c->integrated_drive.via1);
+    iec_bus_set_unit(&c->iec_bus, cfg->drive_unit);
     via6522_set_port_hook(&c->integrated_drive.via1,
                           drive_via_port_change, c);
 
@@ -238,37 +239,47 @@ int c128_frame(C128 *c) {
     int frame_cycles = c->fast ? 2 * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
     int remaining = frame_cycles;
     int total = 0;
+    int cpu_debt = 0;
     c->audio_count = 0;
     while (remaining > 0) {
         int chunk = (remaining > 63) ? 63 : remaining;
         vdc_set_raster_line(&c->vdc,
             (unsigned)((frame_cycles - remaining) * 312 / frame_cycles));
-        total += cpu_step_budget(&c->cpu, chunk);
-        remaining -= chunk;
-        cia_tick(&c->cia1, chunk);
-        cia_tick(&c->cia2, chunk);
-        if (drive_probe_active(c)) {
-            /* PAL frame = 1/50 s; VICE synchronizes a 1571 at 1 MHz, or
-             * 2 MHz when VIA1 PA5 selects double speed. The remainder and
-             * instruction overshoot survive raster-line boundaries. */
-            unsigned drive_hz_per_frame = c->integrated_drive.clock_2mhz
-                                        ? 40000u : 20000u;
-            unsigned scaled = c->drive_clock_fraction +
-                              (unsigned)chunk * drive_hz_per_frame;
-            int budget = (int)(scaled / (unsigned)frame_cycles);
-            c->drive_clock_fraction = scaled % (unsigned)frame_cycles;
-            drive1571cr_advance(&c->integrated_drive, budget);
-        } else c->drive_clock_fraction = 0;
-        /* Fast mode doubles CPU cycles per frame, not the SID's clock. */
-        int sid_cycles = chunk;
-        if (c->fast) {
-            sid_cycles += c->sid_fast_remainder;
-            c->sid_fast_remainder = sid_cycles & 1;
-            sid_cycles /= 2;
+        int target = c->drive_raw_iec ? chunk - cpu_debt : chunk;
+        int progressed = 0;
+        while (progressed < target) {
+            /* A full raster-line gap can swallow an IEC bit transition.
+             * In true-drive mode, alternate one 8502
+             * instruction with the corresponding 1571 clock slice. */
+            int ran = cpu_step_budget(&c->cpu, c->drive_raw_iec ? 1 : chunk);
+            if (ran <= 0 && c->drive_raw_iec) break;
+            int elapsed = c->drive_raw_iec ? ran : chunk;
+            if (ran > 0) total += ran;
+            progressed += elapsed;
+            cia_tick(&c->cia1, elapsed);
+            cia_tick(&c->cia2, elapsed);
+            if (drive_probe_active(c)) {
+                unsigned drive_hz_per_frame = c->integrated_drive.clock_2mhz
+                                            ? 40000u : 20000u;
+                unsigned scaled = c->drive_clock_fraction +
+                                  (unsigned)elapsed * drive_hz_per_frame;
+                int budget = (int)(scaled / (unsigned)frame_cycles);
+                c->drive_clock_fraction = scaled % (unsigned)frame_cycles;
+                drive1571cr_advance(&c->integrated_drive, budget);
+            } else c->drive_clock_fraction = 0;
+            /* Fast mode doubles CPU cycles per frame, not the SID clock. */
+            int sid_cycles = elapsed;
+            if (c->fast) {
+                sid_cycles += c->sid_fast_remainder;
+                c->sid_fast_remainder = sid_cycles & 1;
+                sid_cycles /= 2;
+            }
+            c->audio_count += sid_clock(&c->sid, sid_cycles,
+                c->audio_frame + c->audio_count,
+                C128_AUDIO_FRAME_CAPACITY - c->audio_count);
         }
-        c->audio_count += sid_clock(&c->sid, sid_cycles,
-            c->audio_frame + c->audio_count,
-            C128_AUDIO_FRAME_CAPACITY - c->audio_count);
+        cpu_debt = c->drive_raw_iec ? progressed - target : 0;
+        remaining -= chunk;
         bool vic_irq = vic_tick(&c->vic);
         cpu_irq(&c->cpu, cia_irq_line(&c->cia1) || vic_irq);
         cpu_nmi(&c->cpu, cia_irq_line(&c->cia2) || c->restore_down);
@@ -278,16 +289,30 @@ int c128_frame(C128 *c) {
     cia_tod_tick(&c->cia1);
     cia_tod_tick(&c->cia2);
     c->total_cycles += (u64)total;
+    if (c->drive_raw_iec && c->integrated_drive.gcr.led)
+        leds_ping(LED_FDC_A);
     c128_frame_count++;
     c->frames_since_reset++;
     if (drive_probe_active(c) && getenv("C128_1571_TRACE") &&
         c->frames_since_reset % 50 == 0) {
-        fprintf(stderr, "[1571] frame=%d pc=$%04x cycles=%llu via1=$%02x/$%02x IEC=%d%d%d GCR=m%d s%u h%u z%u p%u $%02x sync%d%s\n",
+        fprintf(stderr, "[1571] frame=%d pc=$%04x cycles=%llu via1=$%02x/$%02x pcr=$%02x ifr=$%02x ier=$%02x ca1=%d irq=%d CIA2=$%02x/$%02x IEC=%d%d%d host=%u drive=%u lines=%u ram79=$%02x ram7a=$%02x ram83=$%02x ram84=$%02x GCR=m%d s%u h%u z%u p%u $%02x sync%d%s\n",
                 c->frames_since_reset, c->integrated_drive.cpu.pc,
                 (unsigned long long)c->integrated_drive.cpu.cycles,
                 c->integrated_drive.via1.ora, c->integrated_drive.via1.orb,
+                c->integrated_drive.via1.pcr,
+                c->integrated_drive.via1.ifr,
+                c->integrated_drive.via1.ier,
+                c->integrated_drive.via1.ca1,
+                c->integrated_drive.cpu.irq,
+                c->cia2.pra, c->cia2.ddra,
                 c->iec_bus.atn_high, c->iec_bus.clock_high,
                 c->iec_bus.data_high,
+                c->iec_bus.host_changes, c->iec_bus.drive_changes,
+                c->iec_bus.line_changes,
+                c->integrated_drive.ram[0x79],
+                c->integrated_drive.ram[0x7a],
+                c->integrated_drive.ram[0x83],
+                c->integrated_drive.ram[0x84],
                 c->integrated_drive.gcr.motor,
                 c->integrated_drive.gcr.side,
                 c->integrated_drive.gcr.half_track,

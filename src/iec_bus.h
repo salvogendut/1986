@@ -12,11 +12,14 @@ typedef struct {
     Via6522 *drive_via;
     u8 host_pa;             /* effective CIA2 PA: PRA | ~DDRA */
     u8 drive_pb;            /* effective VIA1 PB: ORB | ~DDRB */
+    unsigned drive_unit;    /* hard-wired VIA1 PB5/PB6 address, 8-11 */
     bool atn_high, clock_high, data_high;
+    unsigned host_changes, drive_changes, line_changes;
 } IecBus;
 
 void iec_bus_init(IecBus *bus, Via6522 *drive_via);
 void iec_bus_reset(IecBus *bus);
+void iec_bus_set_unit(IecBus *bus, unsigned unit);
 void iec_bus_set_host(IecBus *bus, u8 pra, u8 ddra);
 void iec_bus_set_drive(IecBus *bus, u8 pins);
 /* Mask to OR into CIA2 PA after clearing bits 6-7. */

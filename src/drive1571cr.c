@@ -57,6 +57,14 @@ static void update_irq(Drive1571Cr *d) {
                  via6522_irq(&d->via2) || cia_irq_line(&d->mos5710);
 }
 
+static void update_via1_mechanism(Drive1571Cr *d) {
+    /* 1571CR PA0 is the active-low track-zero sensor; PA7 reports the
+     * inverse of the byte-ready level. The DOS ROM homes the head using PA0. */
+    via6522_set_input_a(&d->via1,
+        (u8)((d->gcr.byte_ready ? 0 : 0x80) |
+             (d->gcr.half_track == 2 ? 0 : 1)));
+}
+
 static u8 mos5710_read(Drive1571Cr *d, u16 addr) {
     u8 reg = addr & 0x1f;
     if (reg >= 0x10)
@@ -91,6 +99,8 @@ u8 drive1571cr_read(Drive1571Cr *d, u16 addr) {
         if (chip == DRIVE1571CR_VIA1 || chip == DRIVE1571CR_VIA2) {
             if (chip == DRIVE1571CR_VIA2)
                 gcr_drive_update_via(&d->gcr, &d->via2);
+            else
+                update_via1_mechanism(d);
             u8 value = via6522_read(chip == DRIVE1571CR_VIA1 ? &d->via1 :
                                     &d->via2, addr);
             if (chip == DRIVE1571CR_VIA2 &&
@@ -142,6 +152,7 @@ void drive1571cr_reset(Drive1571Cr *d) {
     cia_reset(&d->mos5710);
     gcr_drive_reset(&d->gcr);
     gcr_drive_update_via(&d->gcr, &d->via2);
+    update_via1_mechanism(d);
     d->external_irq = false;
     d->clock_debt = 0;
     d->clock_2mhz = false;
