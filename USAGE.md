@@ -160,8 +160,14 @@ BASIC `SAVE`; writes atomically replace the host disk image. Keep a backup of
 valuable disks. Read-only media and external host edits are protected, and
 Media refuses an eject/replacement while a write remains unsaved. The real
 drive does not yet support nonstandard raw tracks, burst serial, or the 1581
-hardware backend. Advanced has independent audio and visual drive monitors,
-both Off by default; the visual scope sits above the function-key footer.
+hardware backend. With Second Drive enabled and its Media hardware type also
+set to 1571CR, both ROM-backed drives share one IEC bus at separate addresses;
+each has its own D64/D71 image, LED, and write protection. If either selected
+hardware type is 1581, both drives use the fast virtual backend after restart;
+mixed physical and virtual IEC is not available. Advanced has independent audio
+and visual drive monitors, both Off by default; the visual
+scope sits above the function-key footer and shows Drive 2's track above
+Drive 1's. The audio monitor mixes both drives' mechanism sounds.
 If a write error appears, resolve it before quitting: the original image stays
 intact, but unsaved in-memory GCR data cannot survive exit.
 

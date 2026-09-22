@@ -31,15 +31,31 @@ static void drive_sync_to_cpu(C128 *c) {
     int budget = (int)(scaled / c->drive_clock_denominator);
     c->drive_clock_fraction = (unsigned)(scaled % c->drive_clock_denominator);
     drive1571cr_advance(&c->integrated_drive, budget);
+    if (c->drive2_raw_iec) {
+        unsigned hz2 = c->second_real_drive.clock_2mhz ? 40000u : 20000u;
+        u64 scaled2 = c->drive2_clock_fraction + elapsed * hz2;
+        int budget2 = (int)(scaled2 / c->drive_clock_denominator);
+        c->drive2_clock_fraction = (unsigned)(scaled2 % c->drive_clock_denominator);
+        drive1571cr_advance(&c->second_real_drive, budget2);
+    }
 }
 
 static void drive_via_port_change(void *ctx, unsigned port, u8 pins) {
     if (port == 1) iec_bus_set_drive(&((C128 *)ctx)->iec_bus, pins);
 }
 
+static void drive2_via_port_change(void *ctx, unsigned port, u8 pins) {
+    if (port == 1) iec_bus_set_drive2(&((C128 *)ctx)->iec_bus, pins);
+}
+
 static int flush_integrated_drive(void *ctx) {
     C128 *c = ctx;
     return gcr_drive_flush(&c->integrated_drive.gcr) == DISK_SAVE_OK ? 0 : -1;
+}
+
+static int flush_second_real_drive(void *ctx) {
+    C128 *c = ctx;
+    return gcr_drive_flush(&c->second_real_drive.gcr) == DISK_SAVE_OK ? 0 : -1;
 }
 
 /* --- CPU bus: route CPU reads/writes through memory + I/O. --- */
@@ -223,11 +239,17 @@ void c128_init(C128 *c, Config *cfg) {
     drive_init(&c->drive2, cfg);
     drive_set_slot(&c->drive2, 1);
     drive_set_unit(&c->drive2, cfg->drive2_unit);
+    drive_set_media_change_hook(&c->drive2, flush_second_real_drive, c);
     drive1571cr_init(&c->integrated_drive);
+    drive1571cr_init(&c->second_real_drive);
     iec_bus_init(&c->iec_bus, &c->integrated_drive.via1);
     iec_bus_set_unit(&c->iec_bus, cfg->drive_unit);
+    iec_bus_attach_second(&c->iec_bus, &c->second_real_drive.via1,
+                          cfg->drive2_unit);
     via6522_set_port_hook(&c->integrated_drive.via1,
                           drive_via_port_change, c);
+    via6522_set_port_hook(&c->second_real_drive.via1,
+                          drive2_via_port_change, c);
 
     /* Reset is deferred: the host loads machine ROMs after c128_init(), and
      * the reset vector must be read from the loaded KERNAL ROM. */
@@ -250,13 +272,17 @@ void c128_reset(C128 *c) {
     drive_reset(&c->drive);
     drive_reset(&c->drive2);
     drive1571cr_reset(&c->integrated_drive);
+    drive1571cr_reset(&c->second_real_drive);
     drive_monitor_reset(&c->drive_monitor);
+    drive_monitor_reset(&c->drive2_monitor);
     iec_bus_reset(&c->iec_bus);
     iec_bus_set_host(&c->iec_bus, c->cia2.pra, c->cia2.ddra);
     c->drive_clock_fraction = 0;
+    c->drive2_clock_fraction = 0;
     c->drive_clock_denominator = 0;
     c->drive_host_cycle_synced = cpu_cycles();
     c->drive_media_generation = (unsigned)-1;
+    c->drive2_media_generation = (unsigned)-1;
     drive_set_unit(&c->drive2, c->cfg->drive2_unit);
     c->paused = false;
     c->frames_since_reset = 0;
@@ -273,6 +299,13 @@ int c128_frame(C128 *c) {
         gcr_drive_update_via(&c->integrated_drive.gcr,
                              &c->integrated_drive.via2);
         c->drive_media_generation = c->drive.media_generation;
+    }
+    if (c->drive2_media_generation != c->drive2.media_generation) {
+        gcr_drive_attach(&c->second_real_drive.gcr,
+            c->drive2.disk_attached ? &c->drive2.image : NULL);
+        gcr_drive_update_via(&c->second_real_drive.gcr,
+                             &c->second_real_drive.via2);
+        c->drive2_media_generation = c->drive2.media_generation;
     }
     /* Run the 8502 in raster-line chunks (63 cycles each), ticking the VIC
      * between chunks so the raster IRQ fires when the raster crosses the
@@ -336,6 +369,14 @@ int c128_frame(C128 *c) {
             c->integrated_drive.gcr.read_events,
             c->integrated_drive.gcr.write_events))
         leds_ping(LED_FDC_A);
+    if (c->drive2_raw_iec && drive_monitor_update(&c->drive2_monitor,
+            c->second_real_drive.gcr.motor,
+            c->second_real_drive.gcr.led,
+            c->second_real_drive.gcr.half_track,
+            c->second_real_drive.gcr.step_events,
+            c->second_real_drive.gcr.read_events,
+            c->second_real_drive.gcr.write_events))
+        leds_ping(LED_FDC_B);
     GcrDrive *gcr = &c->integrated_drive.gcr;
     if (c->drive_raw_iec && gcr->write_error != DISK_SAVE_OK &&
         !gcr->write_error_reported) {
@@ -345,6 +386,16 @@ int c128_frame(C128 *c) {
         fprintf(stderr, "1986: 1571 GCR write not saved (error %d)\n",
                 (int)gcr->write_error);
         gcr->write_error_reported = true;
+    }
+    GcrDrive *gcr2 = &c->second_real_drive.gcr;
+    if (c->drive2_raw_iec && gcr2->write_error != DISK_SAVE_OK &&
+        !gcr2->write_error_reported) {
+        notify_post(gcr2->write_error == DISK_SAVE_WRITE_PROTECT
+                    ? "1571 DRIVE 2 DISK IS WRITE PROTECTED"
+                    : "1571 DRIVE 2 WRITE COULD NOT BE SAVED");
+        fprintf(stderr, "1986: drive 2 GCR write not saved (error %d)\n",
+                (int)gcr2->write_error);
+        gcr2->write_error_reported = true;
     }
     c128_frame_count++;
     c->frames_since_reset++;
