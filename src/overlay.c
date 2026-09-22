@@ -67,19 +67,21 @@ static const char *const keyboard_map_lines[] = {
 #define ADV_DISPLAY_CHANGE_RESET 4
 #define ADV_VDC_RAM             5
 #define ADV_REAL_DISK_DRIVE     6
-#define ADV_SECOND_DRIVE        7
-#define ADV_GIF_WIDTH           8
-#define ADV_GIF_FPS             9
-#define ADV_GIF_ENCODER         10
-#define ADV_TAPE_AUDIO          11
-#define ADV_TAPE_VIDEO          12
-#define ADV_NOTIFICATIONS       13
-#define ADV_DEBUG               14
-#define ADV_JOY_HIDAPI          15
-#define ADV_KEYBOARD_MAP        16
-#define ADV_RESET               17
-#define ADV_VERSION             18
-#define ADV_ROWS                19
+#define ADV_DRIVE_AUDIO         7
+#define ADV_DRIVE_VISUAL        8
+#define ADV_SECOND_DRIVE        9
+#define ADV_GIF_WIDTH           10
+#define ADV_GIF_FPS             11
+#define ADV_GIF_ENCODER         12
+#define ADV_TAPE_AUDIO          13
+#define ADV_TAPE_VIDEO          14
+#define ADV_NOTIFICATIONS       15
+#define ADV_DEBUG               16
+#define ADV_JOY_HIDAPI          17
+#define ADV_KEYBOARD_MAP        18
+#define ADV_RESET               19
+#define ADV_VERSION             20
+#define ADV_ROWS                21
 
 static int cycle_gif_width(int width) {
     switch (width) {
@@ -587,6 +589,18 @@ static void overlay_activate(Overlay *ov) {
                     ov->cfg->real_disk_drive = !ov->cfg->real_disk_drive;
                     notify_post("DRIVE MODE CHANGED - RESTART TO APPLY");
                     break;
+                case ADV_DRIVE_AUDIO:
+                    ov->cfg->drive_audio_monitor = !ov->cfg->drive_audio_monitor;
+                    notify_post(ov->cfg->drive_audio_monitor
+                        ? "1571 DRIVE AUDIO MONITOR ON"
+                        : "1571 DRIVE AUDIO MONITOR OFF");
+                    break;
+                case ADV_DRIVE_VISUAL:
+                    ov->cfg->drive_visual_monitor = !ov->cfg->drive_visual_monitor;
+                    notify_post(ov->cfg->drive_visual_monitor
+                        ? "1571 DRIVE VISUAL MONITOR ON"
+                        : "1571 DRIVE VISUAL MONITOR OFF");
+                    break;
                 case ADV_SECOND_DRIVE:
                     ov->cfg->second_drive = !ov->cfg->second_drive;
                     leds_set_enabled(LED_FDC_B, ov->cfg->second_drive);
@@ -799,6 +813,73 @@ static void draw_row(SDL_Renderer *r, int lw, float y,
     }
 }
 
+void overlay_render_drive_scope(const Overlay *ov, SDL_Renderer *r) {
+    if (!ov || !r || ov->visible || !ov->cfg->drive_visual_monitor ||
+        !ov->c128->drive_raw_iec) return;
+
+    int rw, rh;
+    if (!SDL_GetRenderOutputSize(r, &rw, &rh) || rw < 160 || rh < 160)
+        return;
+    const float margin = 10.0f;
+    const float panel_h = 64.0f;
+    const float panel_y = (float)rh - FUNCTION_KEY_BAR_HEIGHT -
+                          LED_BAR_HEIGHT - panel_h - margin;
+    const float plot_x = margin + 6.0f;
+    const float plot_y = panel_y + 23.0f;
+    const float plot_w = (float)rw - 2.0f * margin - 12.0f;
+    const float plot_h = 34.0f;
+    const float center_y = plot_y + plot_h * 0.5f;
+    if (panel_y < margin || plot_w < 80.0f) return;
+
+    SDL_SetRenderScale(r, 1.0f, 1.0f);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_FRect panel = { margin, panel_y, (float)rw - 2.0f * margin,
+                        panel_h };
+    SDL_SetRenderDrawColor(r, 0, 0, 0, 190);
+    SDL_RenderFillRect(r, &panel);
+    SDL_SetRenderDrawColor(r, 120, 225, 235, 130);
+    SDL_RenderRect(r, &panel);
+
+    const GcrDrive *g = &ov->c128->integrated_drive.gcr;
+    char status[96];
+    snprintf(status, sizeof(status),
+             "1571 #%d  MOTOR %s  TRACK %u.%c  SIDE %u  READ %u  STEP %u",
+             ov->cfg->drive_unit, g->motor ? "ON" : "OFF",
+             g->half_track / 2, (g->half_track & 1) ? '5' : '0',
+             g->side, g->read_events, g->step_events);
+    SDL_SetRenderDrawColor(r, 175, 240, 245, 255);
+    SDL_RenderDebugText(r, plot_x, panel_y + 6.0f, status);
+    SDL_SetRenderDrawColor(r, 105, 145, 155, 130);
+    SDL_RenderLine(r, plot_x, center_y, plot_x + plot_w, center_y);
+
+    s16 samples[DRIVE_MONITOR_WAVEFORM_SAMPLES];
+    size_t count = drive_monitor_waveform_copy(&ov->c128->drive_monitor,
+                    samples, DRIVE_MONITOR_WAVEFORM_SAMPLES);
+    int points_count = (int)plot_w;
+    if (points_count > 1024) points_count = 1024;
+    if ((size_t)points_count > count) points_count = (int)count;
+    if (points_count >= 2) {
+        SDL_FPoint points[1024];
+        for (int i = 0; i < points_count; ++i) {
+            size_t first = (size_t)i * count / (size_t)points_count;
+            size_t end = (size_t)(i + 1) * count / (size_t)points_count;
+            if (end <= first) end = first + 1;
+            long sum = 0;
+            for (size_t j = first; j < end; ++j) sum += samples[j];
+            float sample = (float)sum / (float)(end - first);
+            float y = center_y - sample * (plot_h * 0.5f) / 3500.0f;
+            if (y < plot_y) y = plot_y;
+            if (y > plot_y + plot_h) y = plot_y + plot_h;
+            points[i] = (SDL_FPoint){
+                plot_x + (float)i * plot_w / (float)(points_count - 1), y
+            };
+        }
+        SDL_SetRenderDrawColor(r, 120, 235, 245, 235);
+        SDL_RenderLines(r, points, points_count);
+    }
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+}
+
 void overlay_render(const Overlay *ov, SDL_Renderer *r) {
     if (!ov->visible) return;
 
@@ -807,7 +888,7 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         SDL_GetWindowSize(ov->c128->display.window, &rw, &rh);
     float scale = OV_SCALE;
     if ((float)rw / scale < 840.0f) scale = (float)rw / 840.0f;
-    if ((float)rh / scale < 470.0f) scale = (float)rh / 470.0f;
+    if ((float)rh / scale < 510.0f) scale = (float)rh / 510.0f;
     if (scale <= 0.0f) return;
     SDL_SetRenderScale(r, scale, scale);
     int lw = (int)(rw / scale);
@@ -933,6 +1014,12 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, panel_w, y, "Real Disk Drive",
                  ov->cfg->real_disk_drive ? "On" : "Off",
                  ov->row == ADV_REAL_DISK_DRIVE); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Drive Audio Monitor",
+                 ov->cfg->drive_audio_monitor ? "On" : "Off",
+                 ov->row == ADV_DRIVE_AUDIO); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Drive Visual Monitor",
+                 ov->cfg->drive_visual_monitor ? "On" : "Off",
+                 ov->row == ADV_DRIVE_VISUAL); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Second Drive",
                  ov->cfg->second_drive ? "On" : "Off",
                  ov->row == ADV_SECOND_DRIVE); y += OV_LINE_H;

@@ -15,6 +15,8 @@ int main(void) {
     CHECK(cfg.col_mode_80, "default display is 80 columns");
     CHECK(cfg.vdc_ram_kb == 64, "C128DCR defaults to 64K VDC RAM");
     CHECK(!cfg.real_disk_drive, "real drive defaults off");
+    CHECK(!cfg.drive_audio_monitor, "drive audio monitor defaults off");
+    CHECK(!cfg.drive_visual_monitor, "drive visual monitor defaults off");
     CHECK(cfg.drive_type == 1571 && cfg.drive2_type == 1571,
           "both hardware drive types default to 1571");
     CHECK(!cfg.second_drive && cfg.drive_unit == 8 && cfg.drive2_unit == 9,
@@ -45,6 +47,8 @@ int main(void) {
     cfg.col_mode_80 = false;
     cfg.vdc_ram_kb = 16;
     cfg.real_disk_drive = true;
+    cfg.drive_audio_monitor = true;
+    cfg.drive_visual_monitor = true;
     cfg.second_drive = true;
     cfg.drive_unit = 9;
     cfg.drive2_unit = 10;
@@ -70,6 +74,8 @@ int main(void) {
     CHECK(!back.col_mode_80, "40-column mode roundtrip");
     CHECK(back.vdc_ram_kb == 16, "16K VDC RAM setting roundtrip");
     CHECK(back.real_disk_drive, "real-drive preference roundtrip");
+    CHECK(back.drive_audio_monitor, "drive audio monitor roundtrip");
+    CHECK(back.drive_visual_monitor, "drive visual monitor roundtrip");
     CHECK(back.drive_type == 1581 && back.drive2_type == 1571,
           "hardware type selection roundtrip");
     CHECK(back.second_drive && back.drive_unit == 9 && back.drive2_unit == 10 &&
@@ -103,6 +109,10 @@ int main(void) {
           "mode-only save preserves U36 setting");
     CHECK(back.real_disk_drive,
           "mode-only save preserves real-drive preference");
+    CHECK(back.drive_audio_monitor,
+          "mode-only save preserves drive audio preference");
+    CHECK(back.drive_visual_monitor,
+          "mode-only save preserves drive visual preference");
     CHECK(back.main_input_port == 2 && back.joy_port_mode[0] == JOYPORT_MOUSE,
           "mode-only save preserves F1 input port and mouse mode");
     CHECK(back.second_drive && back.drive2_unit == 10 &&

@@ -213,6 +213,7 @@ void c128_reset(C128 *c) {
     drive_reset(&c->drive);
     drive_reset(&c->drive2);
     drive1571cr_reset(&c->integrated_drive);
+    drive_monitor_reset(&c->drive_monitor);
     iec_bus_reset(&c->iec_bus);
     iec_bus_set_host(&c->iec_bus, c->cia2.pra, c->cia2.ddra);
     c->drive_clock_fraction = 0;
@@ -289,7 +290,10 @@ int c128_frame(C128 *c) {
     cia_tod_tick(&c->cia1);
     cia_tod_tick(&c->cia2);
     c->total_cycles += (u64)total;
-    if (c->drive_raw_iec && c->integrated_drive.gcr.led)
+    if (c->drive_raw_iec && drive_monitor_update(&c->drive_monitor,
+            c->integrated_drive.gcr.motor,
+            c->integrated_drive.gcr.step_events,
+            c->integrated_drive.gcr.read_events))
         leds_ping(LED_FDC_A);
     c128_frame_count++;
     c->frames_since_reset++;

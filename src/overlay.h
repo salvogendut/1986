@@ -48,6 +48,8 @@ bool overlay_handle_event(Overlay *ov, SDL_Event *ev);
 
 /* Draw the overlay on top of the current renderer frame (before display_flip). */
 void overlay_render(const Overlay *ov, SDL_Renderer *r);
+/* Translucent drive-sound scope above the footer, independent of audio. */
+void overlay_render_drive_scope(const Overlay *ov, SDL_Renderer *r);
 
 /* Call once per frame to process any pending file-dialog result. */
 void overlay_tick(Overlay *ov);

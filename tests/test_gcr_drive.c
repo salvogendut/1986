@@ -96,7 +96,8 @@ int main(void) {
     CHECK(g.half_track == 4 && g.track_length == 7692,
           "second step reaches physical track 2");
     gcr_drive_set_port_b(&g, 0x65);
-    CHECK(g.half_track == 3, "reverse phase backs up one half-track");
+    CHECK(g.half_track == 3 && g.step_events == 3,
+          "reverse phase backs up one half-track and records step activity");
 
     gcr_drive_attach(&g, NULL);
     gcr_drive_update_via(&g, &via);
@@ -114,6 +115,9 @@ int main(void) {
           (via.ifr & 2), "data byte pulses CA1 and CPU SO request");
     CHECK(gcr_drive_read_byte(&g) != 0xff && !g.byte_ready,
           "port-A read acknowledges byte-ready");
+    CHECK(g.read_events == 1, "acknowledged GCR data is counted for activity");
+    gcr_drive_read_byte(&g);
+    CHECK(g.read_events == 1, "polling without byte-ready is not new activity");
     gcr_drive_set_port_b(&g, 0x60);
     CHECK(!gcr_drive_tick(&g, &via, 1000, false),
           "motor off stops byte stream");
