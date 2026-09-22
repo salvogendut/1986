@@ -16,6 +16,7 @@
 #include "leds.h"
 #include "compat_win.h"
 #include "startup_debug.h"
+#include "shutter_wav.h"
 
 /* notify.c forward-declares this debug master switch (defined in the
  * machine file in the reference tree); provide it here so the module links. */
@@ -118,7 +119,7 @@ static void usage(const char *argv0) {
         "  --fullscreen     start fullscreen\n"
         "  --fast           run the 8502 at 2 MHz\n"
         "  --rom DIR        directory holding the machine ROM images\n"
-        "  --disk PATH      attach a D64, D71, or D81 image at launch\n"
+        "  --disk PATH      attach a D64, D71, D81, or PRG at launch\n"
         "  --cart PATH      attach a generic C128 CRT or raw function ROM\n"
         "  --gif-out PATH   start recording a GIF at launch\n"
         "  --paste TEXT     inject text through the keyboard matrix\n"
@@ -199,7 +200,9 @@ int main(int argc, char **argv) {
     notify_init();
     notify_set_mode(cfg.notify_mode);
 
-    C128 c;
+    /* The framebuffers make C128 larger than Windows' default thread stack.
+     * This is the single machine instance for the lifetime of the process. */
+    static C128 c;
     c128_init(&c, &cfg);
 
     if (display_init(&c.display, "1986 — Commodore C128DCR", cfg.scale) != 0) {
@@ -227,8 +230,27 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* Disk-drive activity LED at the bottom of the window. */
+    /* Replay the same camera-shutter sample used by 1983 and 1984 on F4.
+     * Keep it on a separate SDL stream so it mixes with the SID. */
+    SDL_AudioStream *sfx_stream = NULL;
+    Uint8 *sfx_buf = NULL;
+    Uint32 sfx_buf_len = 0;
+    {
+        SDL_AudioSpec sfx_spec;
+        SDL_IOStream *io = SDL_IOFromConstMem(shutter_wav, shutter_wav_len);
+        if (io && SDL_LoadWAV_IO(io, true, &sfx_spec, &sfx_buf, &sfx_buf_len)) {
+            sfx_stream = SDL_OpenAudioDeviceStream(
+                SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &sfx_spec, NULL, NULL);
+            if (sfx_stream && !SDL_ResumeAudioStreamDevice(sfx_stream)) {
+                SDL_DestroyAudioStream(sfx_stream);
+                sfx_stream = NULL;
+            }
+        }
+    }
+
+    /* Per-drive activity LEDs in the bottom bar of either display window. */
     leds_set_enabled(LED_FDC_A, true);
+    leds_set_enabled(LED_FDC_B, cfg.second_drive);
 
     /* Load ROMs into the machine (optional at this stage). Default to the
      * executable's directory's "roms" subdirectory when no ROM dir is
@@ -241,10 +263,12 @@ int main(int argc, char **argv) {
             base = SDL_GetBasePath();
             if (base) {
                 snprintf(rom_default, sizeof(rom_default), "%s/roms", base);
-                dir = rom_default;
-            } else {
-                dir = ROM_INSTALL_DIR;
+                SDL_PathInfo info;
+                if (SDL_GetPathInfo(rom_default, &info) &&
+                    info.type == SDL_PATHTYPE_DIRECTORY)
+                    dir = rom_default;
             }
+            if (!dir) dir = ROM_INSTALL_DIR;
         }
         int n = mem_load_c128_roms(&c.mem, dir);
         if (n == 0) {
@@ -253,12 +277,20 @@ int main(int argc, char **argv) {
         } else {
             fprintf(stderr, "1986: loaded %d ROM image(s) from '%s'\n", n, dir);
         }
-        /* Virtual-drive mode reads the image directly and deliberately does
-         * not load a 1571 ROM. A future true-drive module will own that ROM. */
+        /* The independent 1571CR core owns the optional DOS ROM. */
+        char drive_rom_path[CONFIG_PATH_MAX];
+        int drive_rom_len = snprintf(drive_rom_path, sizeof(drive_rom_path),
+                                     "%s/dos1571cr.bin", dir);
+        if (drive_rom_len > 0 && (size_t)drive_rom_len < sizeof(drive_rom_path) &&
+            drive1571cr_load_rom(&c.integrated_drive, drive_rom_path)) {
+            fprintf(stderr, "1986: loaded 1571CR DOS ROM from '%s'\n", drive_rom_path);
+        } else if (cfg.real_disk_drive) {
+            fprintf(stderr, "1986: 1571CR DOS ROM missing/invalid in '%s' (32 KiB required)\n", dir);
+        }
         if (cfg.disk_path[0] && drive_attach_disk(&c.drive, cfg.disk_path) != 0)
-            fprintf(stderr, "1986: could not attach disk '%s'\n", cfg.disk_path);
+            fprintf(stderr, "1986: could not attach drive media '%s'\n", cfg.disk_path);
         if (cfg.disk2_path[0] && drive_attach_disk(&c.drive2, cfg.disk2_path) != 0)
-            fprintf(stderr, "1986: could not attach second disk '%s'\n",
+            fprintf(stderr, "1986: could not attach second-drive media '%s'\n",
                     cfg.disk2_path);
         if (cfg.cart_path[0]) {
             CartridgeResult result = cartridge_attach(&c.mem.cart, cfg.cart_path);
@@ -297,7 +329,15 @@ int main(int argc, char **argv) {
         .receive = c128_iec_receive,
         .take_status = c128_iec_take_status,
     };
-    cpu_install_iec_traps(c.mem.kernal, &iec);
+    c.drive_raw_iec = cfg.real_disk_drive && cfg.drive_type == 1571 &&
+                      c.integrated_drive.rom_loaded;
+    if (c.drive_raw_iec)
+        fprintf(stderr, "1986: 1571CR DOS ROM and line-level IEC active\n");
+    else {
+        if (cfg.real_disk_drive)
+            fprintf(stderr, "1986: real-drive backend unavailable; using fast virtual drive\n");
+        cpu_install_iec_traps(c.mem.kernal, &iec);
+    }
 
     Overlay overlay;
     overlay_init(&overlay, &cfg, &c);
@@ -319,6 +359,7 @@ int main(int argc, char **argv) {
     SDL_Window *mouse_captured = NULL;
     SDL_Gamepad *gamepad = open_first_gamepad();
     bool pc_shift_held = false;
+    bool startup_focus_placed = false;
     uint64_t next_frame = 0;
 
     while (running) {
@@ -378,6 +419,38 @@ int main(int argc, char **argv) {
 
             if (monitor_handle_event(monitor, &ev)) continue;
 
+            if (ev.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
+                (ev.window.windowID == SDL_GetWindowID(c.display.window) ||
+                 (c.display.vdc_window &&
+                  ev.window.windowID == SDL_GetWindowID(c.display.vdc_window)))) {
+                running = false;
+                continue;
+            }
+
+            /* In two-window mode, clicking or Alt-Tabbing to either display
+             * makes that display the selected 40/80 output. Ignore the focus
+             * events generated while the initial windows are being shown. */
+            if (ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED &&
+                startup_focus_placed && !c.display.one_display &&
+                SDL_GetKeyboardFocus() &&
+                ev.window.windowID == SDL_GetWindowID(SDL_GetKeyboardFocus())) {
+                bool col80;
+                if (ev.window.windowID == SDL_GetWindowID(c.display.window))
+                    col80 = false;
+                else if (c.display.vdc_window &&
+                         ev.window.windowID == SDL_GetWindowID(c.display.vdc_window))
+                    col80 = true;
+                else
+                    continue;
+                if (col80 != c.col_mode_80) {
+                    c128_set_4080(&c, col80);
+                    cfg.col_mode_80 = col80;
+                    if (!config_save_column_mode(cfg_path, col80))
+                        fprintf(stderr, "1986: could not save display mode to '%s'\n",
+                                cfg_path);
+                }
+            }
+
             /* F9 opens overlay — release mouse capture first. */
             if (mouse_captured && ev.type == SDL_EVENT_KEY_DOWN &&
                 (ev.key.scancode == SDL_SCANCODE_F9 ||
@@ -410,9 +483,7 @@ int main(int argc, char **argv) {
                     cfg.scale += key_plus ? 1 : -1;
                     if (cfg.scale < 1) cfg.scale = 1;
                     if (cfg.scale > 4) cfg.scale = 4;
-                    SDL_SetWindowSize(c.display.window,
-                                      WINDOW_W * cfg.scale,
-                                      WINDOW_H * cfg.scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT);
+                    display_set_scale(&c.display, cfg.scale);
                     continue;
                 }
                 /* Shift+PrintScreen toggles the 40/80 column key. */
@@ -464,6 +535,11 @@ int main(int argc, char **argv) {
                     snprintf(path, sizeof(path), "%s_%ld.ppm",
                              basename(tmp), (long)time(NULL));
                     display_save_ppm_active(&c.display, path);
+                    if (sfx_stream && sfx_buf) {
+                        SDL_ClearAudioStream(sfx_stream);
+                        SDL_PutAudioStreamData(sfx_stream, sfx_buf,
+                                               (int)sfx_buf_len);
+                    }
                 } else if (ev.key.scancode == SDL_SCANCODE_F5) {
                     c128_reset(&c);
                     if (audio_stream) SDL_ClearAudioStream(audio_stream);
@@ -489,11 +565,14 @@ int main(int argc, char **argv) {
                     if (mouse_captured) release_mouse(&mouse_captured, &c.joyports);
                     c128_switch_4080(&c);   /* toggle 40-col VIC <-> 80-col VDC */
                     cfg.col_mode_80 = c.col_mode_80;
-                    display_focus_active(&c.display);
                     if (cfg.display_change_reset) {
                         c128_reset(&c);
                         if (audio_stream) SDL_ClearAudioStream(audio_stream);
                     }
+                    display_focus_active(&c.display);
+                    if (!config_save_column_mode(cfg_path, c.col_mode_80))
+                        fprintf(stderr, "1986: could not save display mode to '%s'\n",
+                                cfg_path);
                 } else if (ev.key.scancode == SDL_SCANCODE_V &&
                            (SDL_GetModState() & SDL_KMOD_CTRL)) {
                     char *text = SDL_GetClipboardText();
@@ -548,6 +627,8 @@ int main(int argc, char **argv) {
         if (!paused) {
             int cycles = c128_frame(&c);
             uint64_t emulated_frame_ns = c128_cycles_to_ns(&c, cycles);
+            drive_monitor_mix(&c.drive_monitor, c.audio_frame, c.audio_count,
+                              cfg.drive_audio_monitor && c.drive_raw_iec);
             /* Keep only a few frames queued if the host stalls. The SID core
              * keeps clocking even without an available audio device. */
             if (audio_stream && c.audio_count > 0 &&
@@ -602,7 +683,8 @@ int main(int argc, char **argv) {
 
         /* --- Frame present --- */
         display_upload(&c.display);
-        overlay_render(&overlay, c.display.renderer);
+        overlay_render_drive_scope(&overlay, display_active_renderer(&c.display));
+        overlay_render(&overlay, display_active_renderer(&c.display));
         display_render_function_keys(&c.display);
         if (paused) display_draw_paused_label(&c.display);
         notify_render(c.display.renderer);
@@ -610,19 +692,27 @@ int main(int argc, char **argv) {
             notify_render(c.display.vdc_renderer);
         display_flip(&c.display);
         if (monitor_is_open(monitor)) monitor_render(monitor);
+        if (!startup_focus_placed) {
+            display_focus_active(&c.display);
+            startup_focus_placed = true;
+        }
     }
 
     release_mouse(&mouse_captured, &c.joyports);
     if (gamepad) SDL_CloseGamepad(gamepad);
     if (videocap_active()) videocap_stop();
+    if (sfx_stream) SDL_DestroyAudioStream(sfx_stream);
+    if (sfx_buf) SDL_free(sfx_buf);
     if (audio_stream) SDL_DestroyAudioStream(audio_stream);
     if (!config_save_column_mode(cfg_path, c.col_mode_80))
         fprintf(stderr, "1986: could not save display mode to '%s'\n", cfg_path);
     paste_free(&paste);
     monitor_destroy(monitor);
     overlay_quit(&overlay);
-    drive_attach_disk(&c.drive, NULL);
+    int drive_exit_status = drive_attach_disk(&c.drive, NULL);
+    if (drive_exit_status == -2)
+        fprintf(stderr, "1986: unsaved 1571 GCR write at exit; original disk image was not overwritten\n");
     drive_attach_disk(&c.drive2, NULL);
     display_destroy(&c.display);
-    return 0;
+    return drive_exit_status == -2 ? 1 : 0;
 }

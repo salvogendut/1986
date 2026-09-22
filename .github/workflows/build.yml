@@ -1,0 +1,216 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  fedora:
+    name: Fedora RPM (x86_64)
+    runs-on: ubuntu-latest
+    container: fedora:44
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            gcc make autoconf automake pkgconf-pkg-config SDL3-devel git \
+            rpm-build rpmdevtools desktop-file-utils libappstream-glib
+      - uses: actions/checkout@v4
+      - name: Mark workspace as safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Configure, build, and test
+        run: |
+          autoreconf -iv
+          ./configure --prefix=/usr
+          make -j$(nproc)
+          make -C tests check
+      - name: Build RPM from source archive
+        run: |
+          rpmdev-setuptree
+          make dist
+          cp 1986-*.tar.gz ~/rpmbuild/SOURCES/
+          rpmbuild -bb 1986.spec
+          mkdir -p dist/rpm
+          find ~/rpmbuild/RPMS -name '1986-[0-9]*.rpm' -exec cp {} dist/rpm/ \;
+          test -n "$(find dist/rpm -name '1986-[0-9]*.rpm' -print -quit)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 1986-fedora-x86_64-rpm
+          path: dist/rpm/*.rpm
+          if-no-files-found: error
+
+  debian:
+    name: Debian DEB (amd64)
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            gcc make autoconf automake pkg-config libsdl3-dev dpkg-dev \
+            desktop-file-utils appstream-util git ca-certificates
+      - uses: actions/checkout@v4
+      - name: Mark workspace as safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Configure, build, and test
+        run: |
+          autoreconf -iv
+          ./configure --prefix=/usr
+          make -j$(nproc)
+          make -C tests check
+          desktop-file-validate io.github.salvogendut.Emulator1986.desktop
+          appstream-util validate-relax --nonet io.github.salvogendut.Emulator1986.metainfo.xml
+      - name: Build and inspect DEB
+        run: |
+          sh packaging/debian/build-deb.sh dist/deb
+          dpkg-deb --contents dist/deb/*.deb
+          dpkg-deb --field dist/deb/*.deb Depends
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 1986-debian-amd64-deb
+          path: dist/deb/*.deb
+          if-no-files-found: error
+
+  windows:
+    name: Windows (MinGW x86_64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up MSYS2 and SDL3
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          cache: true
+          install: >-
+            base-devel
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-sdl3
+            autoconf
+            automake
+      - name: Configure and build
+        run: |
+          autoreconf -iv
+          ./configure
+          make -j$(nproc)
+      - name: Stage portable bundle
+        run: |
+          mkdir -p dist/windows/roms
+          cp 1986.exe LICENSE README.md INSTALL.md 1986.conf.example dist/windows/
+          cp roms/README dist/windows/roms/
+          ldd dist/windows/1986.exe
+          for dll in $(ldd dist/windows/1986.exe | awk '/mingw64/ {print $3}'); do
+            cp "$dll" dist/windows/
+          done
+          ls -la dist/windows/
+          powershell.exe -NoProfile -Command \
+            '$exe = Join-Path $env:GITHUB_WORKSPACE "dist\windows\1986.exe"; $process = Start-Process -FilePath $exe -ArgumentList "--help" -Wait -PassThru; Write-Host "Windows exit code: $($process.ExitCode)"; exit $process.ExitCode'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 1986-windows-x86_64
+          path: dist/windows/
+          if-no-files-found: error
+
+  macos:
+    name: macOS (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: brew install autoconf automake pkg-config sdl3 dylibbundler
+      - name: Configure, build, and test
+        run: |
+          autoreconf -iv
+          ./configure
+          make -j$(sysctl -n hw.logicalcpu)
+          SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy make -C tests check
+      - name: Package app bundle
+        run: |
+          version="$(sed -n 's/^PACKAGE_VERSION = //p' Makefile)"
+          sh packaging/macos/package.sh ./1986 dist/1986.app "$version"
+          dist/1986.app/Contents/MacOS/1986 --help
+          ditto -c -k --sequesterRsrc --keepParent \
+            dist/1986.app "dist/1986-macos-${{ matrix.arch }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 1986-macos-${{ matrix.arch }}
+          path: dist/1986-macos-${{ matrix.arch }}.zip
+          if-no-files-found: error
+
+  flatpak:
+    name: Flatpak (x86_64)
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Flatpak from this checkout
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: 1986.flatpak
+          manifest-path: packaging/io.github.salvogendut.Emulator1986.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+          upload-artifact: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 1986-flatpak-x86_64
+          path: 1986.flatpak
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [fedora, debian, windows, macos, flatpak]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify release version
+        run: |
+          set -eu
+          source_version=$(sed -n 's/^AC_INIT(\[1986\], \[\([^]]*\)\].*/\1/p' configure.ac)
+          rpm_version=$(sed -n 's/^Version:[[:space:]]*//p' 1986.spec)
+          test -n "$source_version"
+          test "$source_version" = "$rpm_version"
+          test "$GITHUB_REF_NAME" = "v$source_version"
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Prepare release assets
+        run: |
+          set -eu
+          mkdir assets
+          cp artifacts/1986-fedora-x86_64-rpm/*.rpm assets/
+          cp artifacts/1986-debian-amd64-deb/*.deb assets/
+          cp artifacts/1986-macos-arm64/*.zip assets/
+          cp artifacts/1986-macos-x86_64/*.zip assets/
+          cp artifacts/1986-flatpak-x86_64/1986.flatpak \
+            "assets/1986-${GITHUB_REF_NAME}-x86_64.flatpak"
+          (cd artifacts/1986-windows-x86_64 && \
+            zip -r "../../assets/1986-${GITHUB_REF_NAME}-windows-x86_64.zip" .)
+          ls -la assets/
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          generate_release_notes: true

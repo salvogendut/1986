@@ -162,10 +162,32 @@ The C128 KERNAL's burst-mode flag is cleared while this command-level backend
 is active, keeping transfers on the trapped byte routines. A true 1571 will
 instead provide the CIA shift-register endpoint needed by fast serial.
 
-A future true `Drive1571` is a separate machine: it will run its own 6502 and
-DOS ROM and connect through line-level IEC signals. It must not be placed
-behind the command-level `VirtualDrive` interface. The two modes share only
-neutral disk-image/media code.
+The independent `Drive1571Cr` core now owns a 2K mirrored RAM, 32K DOS ROM,
+reset/interrupt vectors, an NMOS 6502 instruction executor, and two 6522 VIAs.
+The VIAs have port direction/readback, T1/T2 counters, control-line edges, and
+IRQ propagation to the drive CPU. Their timing is at instruction boundaries;
+shift-register and sub-instruction bus timing are still absent. The MOS5710's
+limited CIA-like SDR/ICR/CRA registers use the existing CIA model, following
+VICE's partial 1571CR handling. Its extra FDC2 registers and the WD1770 have
+decoded hooks only; MFM is not yet connected. With the Advanced
+gate on, a present 1571CR ROM executes in raster-line slices at the drive's
+1 MHz clock (or 2 MHz when VIA1 PA5 selects it), with instruction overshoot
+carried between slices. CIA2 PA3-PA7 and VIA1 PB0-PB4/PB7 now exchange slow
+IEC ATN/CLOCK/DATA and ATNA signals through an open-collector bus, including
+the VIA1 CA1 ATN edge. `C128_1571_TRACE=1` reports ROM PC, cycles, VIA ports,
+and IEC levels every 50 frames. The opt-in true-drive path runs its DOS ROM and
+slow IEC directly rather than KERNAL traps. VIA2 presents decoded D64/D71 GCR
+sectors and accepts standard sector writes through its CB2 write gate and PA
+byte latch. On gate close, head/side change, or eject, checksum-valid sectors
+are decoded and atomically persisted. An unsuccessful flush leaves old media
+attached; arbitrary raw/protection tracks cannot be stored in D64/D71.
+True-drive mode currently represents only the integrated Drive 1; the optional
+second drive is not on the physical IEC bus yet.
+The core is a sibling of the command-level `VirtualDrive`, never behind its
+interface; the modes will share only neutral disk-image/media code. The
+Advanced real-drive gate selects this backend after restart when its DOS ROM
+is present. Media stores 1571/1581
+hardware type independently for each drive; 1581 is only a future selection.
 
 Visual check (saves a PPM at frame 60):
 ```bash

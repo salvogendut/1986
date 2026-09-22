@@ -3,8 +3,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/* Raw, decoded Commodore disk images. D64, D71, and D81 share file chains and
- * directory-slot encoding but have distinct geometry, BAMs, and headers. */
+/* Raw, decoded Commodore disk images and a read-only single-PRG medium.
+ * D64, D71, and D81 share file chains and directory-slot encoding but have
+ * distinct geometry, BAMs, and headers. */
 
 #define DISK_MAX_TRACKS   80
 #define DISK_MAX_SECTORS  40
@@ -14,6 +15,7 @@ typedef enum {
     DISK_FORMAT_D64,
     DISK_FORMAT_D71,
     DISK_FORMAT_D81,
+    DISK_FORMAT_PRG,
 } DiskFormat;
 
 typedef struct {
@@ -24,6 +26,7 @@ typedef struct {
     bool has_errors;  /* one trailing error byte per image sector */
     char *path;       /* source path for atomic write-back */
     bool writable;    /* regular, writable image (not a symlink) */
+    char prg_name[17];/* single-file PRG directory name (without extension) */
 } DiskImage;
 
 typedef enum {
@@ -59,8 +62,8 @@ int disk_image_track_sectors(const DiskImage *d, int track);
 int disk_image_track_offset(const DiskImage *d, int track);
 const char *disk_image_format_name(const DiskImage *d);
 
-/* Detect format from exact image size; an optional error-byte trailer is
- * accepted. Returns 0 on success, -1 on unsupported size or I/O error. */
+/* Detect D64/D71/D81 from exact size, or a .prg file from its extension.
+ * Returns 0 on success, -1 on unsupported size or I/O error. */
 int  disk_image_open(DiskImage *d, const char *path);
 
 /* Free the image. */
@@ -68,6 +71,14 @@ void disk_image_close(DiskImage *d);
 
 /* Read one sector into buf[256]. Returns 0 on success, -1 if out of range. */
 int  disk_image_read_sector(const DiskImage *d, int track, int sector, u8 *buf);
+
+/* Persist selected decoded sectors of one D64/D71 GCR track in one atomic
+ * image replacement. sector_data contains all track sectors consecutively;
+ * bit N of sector_mask selects sector N. The live image stays unchanged on
+ * failure. */
+DiskSaveResult disk_image_write_gcr_track(DiskImage *d, int track,
+                                          const u8 *sector_data,
+                                          unsigned sector_mask);
 
 /* Read the directory into an array of decoded entries (up to cap). Returns
  * the number of entries read. */

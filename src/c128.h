@@ -11,6 +11,9 @@
 #include "kbd.h"
 #include "joyport.h"
 #include "drive.h"
+#include "drive1571cr.h"
+#include "iec_bus.h"
+#include "drive_monitor.h"
 #include "config.h"
 #include <stdbool.h>
 
@@ -40,11 +43,19 @@ typedef struct {
     JoyPorts joyports;
     Drive   drive;
     Drive   drive2;
+    Drive1571Cr integrated_drive; /* independent ROM-backed 1571CR machine */
+    IecBus  iec_bus;     /* physical slow IEC pins, separate from VirtualDrive */
+    DriveMonitor drive_monitor; /* host-only LED and audio presentation */
+    unsigned drive_clock_fraction;
+    u64 drive_host_cycle_synced;
+    unsigned drive_clock_denominator;
+    unsigned drive_media_generation;
+    bool drive_raw_iec; /* opt-in diagnostic: KERNAL serial ROM is unpatched */
     Config *cfg;
     bool    paused;
     bool    fast;        /* 8502 at 2 MHz (C128 fast mode) */
     bool    col_mode_80; /* persistent 40/80 mode: true = 80-col (survives reset) */
-    bool    vdc_chargen_loaded; /* the 80-col VDC chargen has been loaded */
+    bool    restore_down; /* RESTORE is an NMI pin, not a keyboard-matrix key */
     int     frames_since_reset; /* frames elapsed since the last reset */
     u64     total_cycles;
 } C128;

@@ -35,6 +35,7 @@ static const LedPalette palette_m4_disk  = { 70, 18, 18,  255,  70,  70 };
 static const LedPalette palette_m4_net   = { 70, 70, 70,  240, 240, 240 };
 
 static bool   g_enabled  [LED_COUNT];
+static int    g_drive_unit[2] = { 8, 9 };
 static Uint64 g_last_ms  [LED_COUNT];   /* Generic, also used for LED_USIFAC RX half */
 static Uint64 g_last_ms_b[LED_COUNT];   /* Only used for split LEDs (TX half) */
 static bool   g_mouse_inside;
@@ -47,8 +48,8 @@ static float  g_hover_bar_y;
 
 static const char *led_label(LedId id) {
     switch (id) {
-    case LED_FDC_A:   return "Disk A";
-    case LED_FDC_B:   return "Disk B";
+    case LED_FDC_A:   return "Drive 1";
+    case LED_FDC_B:   return "Drive 2";
     case LED_IDE:     return "IDE disk";
     case LED_USB:     return "Albireo USB";
     case LED_SD:      return "SD card";
@@ -63,6 +64,7 @@ static const char *led_label(LedId id) {
 
 static int led_width(LedId id) {
     const int led_w = 24;
+    if (id == LED_FDC_A || id == LED_FDC_B) return 104;
     return id == LED_M4 ? led_w * 3 / 2 : led_w;
 }
 
@@ -132,6 +134,11 @@ void leds_set_enabled(LedId id, bool enabled) {
     if ((unsigned)id < LED_COUNT) g_enabled[id] = enabled;
 }
 
+void leds_set_drive_unit(LedId id, int unit) {
+    if ((id == LED_FDC_A || id == LED_FDC_B) && unit >= 8 && unit <= 11)
+        g_drive_unit[id == LED_FDC_B] = unit;
+}
+
 void leds_ping(LedId id) {
     if ((unsigned)id < LED_COUNT) g_last_ms[id] = SDL_GetTicks();
 }
@@ -163,17 +170,15 @@ void leds_render(SDL_Renderer *r, int x, int y, int w, int h) {
     SDL_FRect line = { (float)x, (float)y, (float)w, 1.0f };
     SDL_RenderFillRect(r, &line);
 
-    const int led_w    = 24;
     const int led_w_m4 = led_width(LED_M4); /* M4 is 1.5× wide */
     const int led_h    = 10;
     const int pad      = 8;
 
-    /* Sum widths + padding for centring. LED_M4 contributes the wider
-     * footprint; everything else uses led_w. */
+    /* Centre the full footprint, including the visible drive labels. */
     int n = 0, total_w = 0;
     for (int i = 0; i < LED_COUNT; i++) {
         if (!g_enabled[i]) continue;
-        total_w += (i == LED_M4) ? led_w_m4 : led_w;
+        total_w += led_width((LedId)i);
         n++;
     }
     if (n == 0) {
@@ -239,6 +244,23 @@ void leds_render(SDL_Renderer *r, int x, int y, int w, int h) {
             /* Single outline around the whole footprint */
             SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
             SDL_RenderRect(r, &led);
+        } else if (i == LED_FDC_A || i == LED_FDC_B) {
+            const LedPalette *p = &palette[i];
+            Uint64 dt = now - g_last_ms[i];
+            bool active = g_last_ms[i] != 0 && dt < LED_GLOW_MS;
+            SDL_FRect lamp = { (float)cx, (float)cy, 16.0f, (float)led_h };
+            SDL_SetRenderDrawColor(r,
+                active ? p->br : p->dr,
+                active ? p->bg : p->dg,
+                active ? p->bb : p->db, 255);
+            SDL_RenderFillRect(r, &lamp);
+            SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+            SDL_RenderRect(r, &lamp);
+            char label[32];
+            snprintf(label, sizeof(label), "DRIVE %d #%d",
+                     i == LED_FDC_A ? 1 : 2, g_drive_unit[i == LED_FDC_B]);
+            SDL_SetRenderDrawColor(r, 205, 205, 205, 255);
+            SDL_RenderDebugText(r, (float)(cx + 20), (float)(cy + 1), label);
         } else {
             const LedPalette *p = &palette[i];
             Uint64 dt = now - g_last_ms[i];

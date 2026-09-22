@@ -26,12 +26,20 @@ joy_port_1_mode = 0
 joy_port_2_mode = 0
 joystick_hidapi = 0
 
-# Advanced: future hardware drive backend (currently pending; virtual remains active)
+# Advanced: ROM-backed 1571 drive if dos1571cr.bin is present (restart to apply)
 real_disk_drive = 0
+# Original, quiet motor/step audio for the real 1571 (live toggle, default off)
+drive_audio_monitor = 0
+# Independent translucent motor/head waveform panel, default off
+drive_visual_monitor = 0
 # Optional second fast virtual drive (IEC units must differ)
 second_drive = 0
 drive_unit = 8
 drive2_unit = 9
+# Hardware models selected in Media when Real Disk Drive is On.
+# 1571CR supports normal GCR sector reads/writes on D64/D71; 1581 hardware is future.
+drive_type = 1571
+drive2_type = 1571
 disk =
 disk2 =
 
@@ -47,3 +55,11 @@ gif_ffmpeg = 0
 
 # Directory holding the machine ROM images (kernal.rom, basic.rom, chargen.rom)
 rom_dir =
+
+# Last directories visited in the Overlay pickers. These are independent of
+# inserted media, so ejecting an image does not reset its picker location.
+last_disk_dir =
+last_disk2_dir =
+last_tape_dir =
+last_cart_dir =
+last_u36_dir =

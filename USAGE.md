@@ -21,7 +21,7 @@ CP/M is a separate C128 operating mode and remains planned.
 | `--fullscreen` | Start fullscreen. |
 | `--fast` | Run the 8502 at 2 MHz (C128 fast mode). |
 | `--rom DIR` | Directory holding the machine ROM images. |
-| `--disk PATH` | Attach a D64, D71, or D81 image to Drive 1 at launch. |
+| `--disk PATH` | Attach a D64, D71, D81, or standalone PRG to Drive 1 at launch. |
 | `--cart PATH` | Attach a generic C128 `.crt` or raw external function-ROM `.bin`/`.rom` at launch. |
 | `--gif-out PATH` | Start recording a GIF at launch. |
 | `--paste TEXT` | Inject text through the emulated keyboard. |
@@ -46,13 +46,37 @@ to the 80-column VDC display. With Unified Display enabled, the shared window
 shows the selected output. With Unified Display disabled, both output windows
 open and the selected output receives window focus.
 
+To switch between the C128 upper/graphics and upper/lowercase character sets,
+press host Shift+Alt (the C128 Shift+C= chord). If the desktop intercepts that
+combination, press Caps Lock once as a shortcut for the same C128 chord. This
+works on both the VIC 40-column and VDC 80-column displays. Escape is C128
+RUN/STOP; Page Up is RESTORE, and Escape+Page Up sends RUN/STOP+RESTORE. To
+see the rest of the host-key mappings, enable **General > Tinker**, then open
+**Advanced > Keyboard map** with Enter. Enter or Esc closes the map.
+
 ## Media overlay
 
 Open the options overlay with F9 and select **Media > Drive 1 image** to insert
-a D64, D71, or D81 image. Choosing another image immediately ejects the current
-disk and inserts the new one, so the next `DIRECTORY` reads the new disk
-without an application restart. Press Del on a populated image row to eject
-that drive's disk. Press F9 or Esc to close the overlay.
+a D64, D71, D81, or standalone `.prg` file. Choosing another file immediately
+ejects the current medium and inserts the new one, so the next `DIRECTORY`
+reads the new content without an application restart. Press Del on a populated
+image row to eject that drive's medium. Press F9 or Esc to close the overlay.
+For a standalone PRG, the drive presents a single read-only directory entry
+named after the host file (without `.prg`, uppercased and limited to 16
+characters). For BASIC PRGs, use `DIRECTORY`, then `DLOAD "NAME"` or
+`LOAD "NAME",8`, followed by `RUN`;
+`LOAD "*",8` selects that single entry too. The PRG's two-byte load address is
+preserved. `SAVE`, `SCRATCH`, and `RENAME` report write protection, leaving the
+host file untouched. The same behavior applies to Drive 2 and `--disk`.
+
+Each Media file picker reopens in its own last-used directory, including after
+ejecting its media or restarting the app. Drive 1, Drive 2, tape, cartridge,
+and U36 have separate remembered directories. Existing configurations use the
+directory of the selected file until a new choice is made. If a remembered
+directory no longer exists, the picker falls back to a valid selected-file
+directory or the system default. The General machine-ROM folder picker
+reopens at the configured ROM directory when it exists. Cancelling a picker
+does not change its remembered location.
 
 Enable **Advanced > Second Drive** to show **Drive 2** and **Drive 2 image** in
 Media. The two drives have independent images and IEC device numbers #8-#11;
@@ -120,18 +144,23 @@ matching files, and `OPEN 15,8,15,"R:NEW=OLD":CLOSE 15` renames one.
 The commands write the host image atomically. Locked files, REL files, D81
 partitions, and malformed chains are not modified.
 
-With Tinker enabled in General, Advanced > Real Disk Drive stores a future
-backend preference. It defaults to Off. On currently displays `On (pending)`:
-the hardware drive emulator is not yet implemented, so the fast virtual drive
-remains active. It does not emulate 1571/1581 hardware or D81 partition and
-REL-file operations.
+Advanced > Real Disk Drive defaults to Off. With it On, Media set to 1571CR,
+and `dos1571cr.bin` installed, restart to use the ROM-backed integrated 1571
+over slow IEC. Normal D64/D71 GCR sector reads and writes work, including
+BASIC `SAVE`; writes atomically replace the host disk image. Keep a backup of
+valuable disks. Read-only media and external host edits are protected, and
+Media refuses an eject/replacement while a write remains unsaved. The real
+drive does not yet support nonstandard raw tracks, burst serial, or the 1581
+hardware backend. Advanced has independent audio and visual drive monitors,
+both Off by default; the visual scope sits above the function-key footer.
+If a write error appears, resolve it before quitting: the original image stays
+intact, but unsaved in-memory GCR data cannot survive exit.
 
-GEOS 128 from `GEOS128.D64` is not yet a mouse test for 1986. Its loader
-successfully reads `GEOS128` and `GEOBOOT128`, then sends `M-W`/`M-E` commands
-to upload and execute code in the drive. The fast virtual drive has no drive
-CPU or RAM and cannot execute those commands; turning Real Disk Drive On does
-not change that until the true-drive backend is implemented. Use a BASIC 8
-mouse program to test the 1351 input in the meantime.
+GEOS 128 from `GEOS128.D64` reaches the Desktop with Real Disk Drive On and
+the 1571CR selected. At the BASIC prompt, use `DLOAD"GEOS128"` and then `RUN`.
+Its loader uploads drive code with `M-W`/`M-E`, so the fast virtual drive cannot
+boot it. Set the desired joy port to Mouse (1351) and click the emulator window
+to capture the pointer. GEOS may write to its disk; keep a backup of the image.
 
 The F9 overlay uses a compact top panel with smaller text; the running screen
 remains visible below it.

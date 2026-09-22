@@ -1,9 +1,11 @@
 #include "overlay.h"
+#include "leds.h"
 #include "notify.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <sys/stat.h>
 
 #define OV_SCALE      1.25f
 #define OV_LINE_H     20
@@ -24,15 +26,38 @@ static const char *const about_lines[] = {
 };
 #define ABOUT_LINE_COUNT ((int)(sizeof(about_lines) / sizeof(about_lines[0])))
 
+static const char *const keyboard_map_lines[] = {
+    "HOST KEY                         C128 KEY / ACTION",
+    "Left/Right Shift                SHIFT",
+    "Left/Right Alt                  C= (Commodore)",
+    "Shift + Alt                     switch character sets",
+    "Caps Lock                       Shift+C= shortcut",
+    "Escape                          RUN/STOP",
+    "Page Up                         RESTORE (NMI)",
+    "Escape + Page Up                RUN/STOP + RESTORE",
+    "Left/Right Ctrl                 CONTROL",
+    "Backspace                       DEL",
+    "Home                            CLR/HOME",
+    "Arrow keys                      C128 cursor keys",
+    "F10                             toggle 40/80 display",
+    "Shift + Print Screen            hold 40/80 key",
+    "Shift + F1..F8                  C128 function keys",
+    "F1, F4..F12                    emulator shortcuts",
+    "Enter or Escape                 close this map"
+};
+#define KEYBOARD_MAP_LINE_COUNT ((int)(sizeof(keyboard_map_lines) / sizeof(keyboard_map_lines[0])))
+
 /* Logical Media rows; Drive 2 rows collapse away when disabled. */
 #define MEDIA_DRIVE1   0
-#define MEDIA_DISK1    1
-#define MEDIA_DRIVE2   2
-#define MEDIA_DISK2    3
-#define MEDIA_TAPE     4
-#define MEDIA_CART     5
-#define MEDIA_U36      6
-#define MEDIA_ITEM_COUNT 7
+#define MEDIA_TYPE1    1
+#define MEDIA_DISK1    2
+#define MEDIA_DRIVE2   3
+#define MEDIA_TYPE2    4
+#define MEDIA_DISK2    5
+#define MEDIA_TAPE     6
+#define MEDIA_CART     7
+#define MEDIA_U36      8
+#define MEDIA_ITEM_COUNT 9
 
 /* Advanced section rows. */
 #define ADV_SMOOTHING           0
@@ -40,19 +65,23 @@ static const char *const about_lines[] = {
 #define ADV_CRT_SCANLINES       2
 #define ADV_ONE_DISPLAY         3
 #define ADV_DISPLAY_CHANGE_RESET 4
-#define ADV_REAL_DISK_DRIVE     5
-#define ADV_SECOND_DRIVE        6
-#define ADV_GIF_WIDTH           7
-#define ADV_GIF_FPS             8
-#define ADV_GIF_ENCODER         9
-#define ADV_TAPE_AUDIO          10
-#define ADV_TAPE_VIDEO          11
-#define ADV_NOTIFICATIONS       12
-#define ADV_DEBUG               13
-#define ADV_JOY_HIDAPI          14
-#define ADV_RESET               15
-#define ADV_VERSION             16
-#define ADV_ROWS                17
+#define ADV_VDC_RAM             5
+#define ADV_REAL_DISK_DRIVE     6
+#define ADV_DRIVE_AUDIO         7
+#define ADV_DRIVE_VISUAL        8
+#define ADV_SECOND_DRIVE        9
+#define ADV_GIF_WIDTH           10
+#define ADV_GIF_FPS             11
+#define ADV_GIF_ENCODER         12
+#define ADV_TAPE_AUDIO          13
+#define ADV_TAPE_VIDEO          14
+#define ADV_NOTIFICATIONS       15
+#define ADV_DEBUG               16
+#define ADV_JOY_HIDAPI          17
+#define ADV_KEYBOARD_MAP        18
+#define ADV_RESET               19
+#define ADV_VERSION             20
+#define ADV_ROWS                21
 
 static int cycle_gif_width(int width) {
     switch (width) {
@@ -100,6 +129,7 @@ static void save_config(const Overlay *ov) {
 static void overlay_close(Overlay *ov) {
     save_config(ov);
     ov->about_visible = false;
+    ov->keyboard_map_visible = false;
     ov->visible = false;
 }
 
@@ -109,9 +139,13 @@ static void overlay_close(Overlay *ov) {
 static bool replace_disk_image(Overlay *ov, int which, const char *path) {
     Drive *drive = which == 2 ? &ov->c128->drive2 : &ov->c128->drive;
     char *configured = which == 2 ? ov->cfg->disk2_path : ov->cfg->disk_path;
+    int result = drive_attach_disk(drive, path);
+    if (result == -2) {
+        notify_post("DRIVE WRITE COULD NOT BE SAVED - DISK KEPT");
+        return false;
+    }
     configured[0] = '\0';
-
-    if (drive_attach_disk(drive, path) != 0) {
+    if (result != 0) {
         fprintf(stderr, "1986: could not attach disk '%s'\n", path);
         notify_post("COULD NOT INSERT DISK IMAGE");
         save_config(ov);
@@ -121,12 +155,12 @@ static bool replace_disk_image(Overlay *ov, int which, const char *path) {
     if (path && path[0]) {
         snprintf(configured, CONFIG_PATH_MAX, "%s", path);
         char message[64];
-        snprintf(message, sizeof(message), "DRIVE %d: %s IMAGE INSERTED",
+        snprintf(message, sizeof(message), "DRIVE %d: %s MEDIA INSERTED",
                  which, disk_image_format_name(&drive->image));
-        notify_post(message);
+        notify_post("%s", message);
     } else {
-        notify_post(which == 2 ? "DRIVE 2 IMAGE EJECTED" :
-                                 "DRIVE 1 IMAGE EJECTED");
+        notify_post(which == 2 ? "DRIVE 2 MEDIA EJECTED" :
+                                 "DRIVE 1 MEDIA EJECTED");
     }
     save_config(ov);
     return true;
@@ -198,7 +232,9 @@ bool overlay_set_u36(Overlay *ov, const char *path) {
 static int media_item(const Overlay *ov, int row) {
     for (int item = 0; item < MEDIA_ITEM_COUNT; item++) {
         if (!ov->cfg->second_drive &&
-            (item == MEDIA_DRIVE2 || item == MEDIA_DISK2)) continue;
+            (item == MEDIA_DRIVE2 || item == MEDIA_TYPE2 || item == MEDIA_DISK2)) continue;
+        if (!ov->cfg->real_disk_drive &&
+            (item == MEDIA_TYPE1 || item == MEDIA_TYPE2)) continue;
         if (!ov->cfg->tinker && item == MEDIA_U36) continue;
         if (row-- == 0) return item;
     }
@@ -252,7 +288,8 @@ static const char *const MODELS[] = { "C128DCR", "C128", "C128D" };
 
 static const char *media_label(int row) {
     static const char *const labels[MEDIA_ITEM_COUNT] = {
-        "Drive 1", "Drive 1 image", "Drive 2", "Drive 2 image",
+        "Drive 1", "Drive 1 type", "Drive 1 image",
+        "Drive 2", "Drive 2 type", "Drive 2 image",
         "Tape", "Cartridge", "U36 internal ROM"
     };
     return labels[row];
@@ -260,7 +297,7 @@ static const char *media_label(int row) {
 
 static const char *media_extension(int row) {
     static const char *const exts[MEDIA_ITEM_COUNT] = {
-        "", ".d64/.d71/.d81", "", ".d64/.d71/.d81", ".tap",
+        "", "", ".d64/.d71/.d81/.prg", "", "", ".d64/.d71/.d81/.prg", ".tap",
         ".crt/.bin/.rom", ".bin/.rom"
     };
     return exts[row];
@@ -301,9 +338,76 @@ static void rom_path_display(const Overlay *ov, char *out, size_t sz) {
     abbrev_home(path, out, sz);
 }
 
+static bool existing_directory(const char *path) {
+    struct stat info;
+    return path && path[0] && stat(path, &info) == 0 && S_ISDIR(info.st_mode);
+}
+
+static bool file_parent_directory(const char *path, char *out, size_t size) {
+    const char *slash = path ? strrchr(path, '/') : NULL;
+    if (!slash) return false;
+    size_t length = slash == path ? 1 : (size_t)(slash - path);
+    if (length >= size) return false;
+    memcpy(out, path, length);
+    out[length] = '\0';
+    return true;
+}
+
+static char *recent_dialog_directory(Config *cfg, OvDialogKind kind) {
+    switch (kind) {
+        case OV_DIALOG_DISK:  return cfg->last_disk_dir;
+        case OV_DIALOG_DISK2: return cfg->last_disk2_dir;
+        case OV_DIALOG_TAPE:  return cfg->last_tape_dir;
+        case OV_DIALOG_CART:  return cfg->last_cart_dir;
+        case OV_DIALOG_U36:   return cfg->last_u36_dir;
+        default:              return NULL;
+    }
+}
+
+static const char *selected_dialog_path(const Config *cfg, OvDialogKind kind) {
+    switch (kind) {
+        case OV_DIALOG_DISK:  return cfg->disk_path;
+        case OV_DIALOG_DISK2: return cfg->disk2_path;
+        case OV_DIALOG_TAPE:  return cfg->tape_path;
+        case OV_DIALOG_CART:  return cfg->cart_path;
+        case OV_DIALOG_U36:   return cfg->u36_path;
+        default:              return NULL;
+    }
+}
+
+static void set_dialog_start_location(Overlay *ov) {
+    ov->dialog_location[0] = '\0';
+    if (ov->dialog_kind == OV_DIALOG_ROM) {
+        if (existing_directory(ov->cfg->rom_dir))
+            snprintf(ov->dialog_location, sizeof(ov->dialog_location), "%s",
+                     ov->cfg->rom_dir);
+        return;
+    }
+
+    char *recent = recent_dialog_directory(ov->cfg, ov->dialog_kind);
+    if (existing_directory(recent)) {
+        snprintf(ov->dialog_location, sizeof(ov->dialog_location), "%s", recent);
+        return;
+    }
+    const char *selected = selected_dialog_path(ov->cfg, ov->dialog_kind);
+    char parent[CONFIG_PATH_MAX];
+    if (file_parent_directory(selected, parent, sizeof(parent)) &&
+        existing_directory(parent))
+        snprintf(ov->dialog_location, sizeof(ov->dialog_location), "%s", parent);
+}
+
+static void remember_dialog_directory(Overlay *ov, OvDialogKind kind,
+                                      const char *selected) {
+    char *recent = recent_dialog_directory(ov->cfg, kind);
+    char parent[CONFIG_PATH_MAX];
+    if (recent && file_parent_directory(selected, parent, sizeof(parent)) &&
+        existing_directory(parent))
+        snprintf(recent, CONFIG_PATH_MAX, "%s", parent);
+}
+
 static void open_media_dialog(Overlay *ov, int row) {
     static const SDL_DialogFileFilter disk_filters[] = {
-        { "D64/D71/D81 disk images", "d64;D64;d71;D71;d81;D81" },
+        { "D64/D71/D81 disk images or PRG", "d64;D64;d71;D71;d81;D81;prg;PRG" },
         { "All files",       "*"       },
     };
     static const SDL_DialogFileFilter tape_filters[] = {
@@ -335,9 +439,12 @@ static void open_media_dialog(Overlay *ov, int row) {
     ov->dialog_ready = false;
     ov->dialog_failed = false;
     ov->dialog_error[0] = '\0';
+    set_dialog_start_location(ov);
     SDL_ShowOpenFileDialog(overlay_file_callback, ov,
                            ov->c128 ? ov->c128->display.window : NULL,
-                           filters, 2, NULL, false);
+                           filters, 2,
+                           ov->dialog_location[0] ? ov->dialog_location : NULL,
+                           false);
 }
 
 /* Folder picker for the ROM directory (General section). */
@@ -346,9 +453,10 @@ static void open_rom_dialog(Overlay *ov) {
     ov->dialog_ready  = false;
     ov->dialog_failed = false;
     ov->dialog_error[0] = '\0';
+    set_dialog_start_location(ov);
     SDL_ShowOpenFolderDialog(overlay_file_callback, ov,
                              ov->c128 ? ov->c128->display.window : NULL,
-                             ov->cfg->rom_dir[0] ? ov->cfg->rom_dir : NULL,
+                             ov->dialog_location[0] ? ov->dialog_location : NULL,
                              false);
 }
 
@@ -370,6 +478,7 @@ static int section_rows(const Overlay *ov, OvSection s) {
     switch (s) {
         case OV_GENERAL:  return 7;   /* display, input ports, Tinker, ROMs, About */
         case OV_MEDIA:    return 4 + (ov->cfg->second_drive ? 2 : 0) +
+                                 (ov->cfg->real_disk_drive ? 1 + (ov->cfg->second_drive ? 1 : 0) : 0) +
                                  (ov->cfg->tinker ? 1 : 0);
         case OV_ADVANCED: return ADV_ROWS;
         default:          return 0;
@@ -429,11 +538,22 @@ static void overlay_activate(Overlay *ov) {
                 ov->cfg->drive_unit = next_drive_unit(
                     ov->cfg->drive_unit, ov->cfg->drive2_unit);
                 drive_reset(&ov->c128->drive); /* abandon the old IEC address */
+                if (ov->c128->drive_raw_iec)
+                    notify_post("REAL DRIVE ADDRESS CHANGED - RESTART TO APPLY");
             } else if (media_item(ov, ov->row) == MEDIA_DRIVE2) {
                 ov->cfg->drive2_unit = next_drive_unit(
                     ov->cfg->drive2_unit, ov->cfg->drive_unit);
                 drive_reset(&ov->c128->drive2);
                 drive_set_unit(&ov->c128->drive2, ov->cfg->drive2_unit);
+            } else if (media_item(ov, ov->row) == MEDIA_TYPE1 ||
+                       media_item(ov, ov->row) == MEDIA_TYPE2) {
+                int *type = media_item(ov, ov->row) == MEDIA_TYPE1
+                          ? &ov->cfg->drive_type : &ov->cfg->drive2_type;
+                *type = *type == 1571 ? 1581 : 1571;
+                notify_post(*type == 1571
+                    ? "1571CR TYPE SELECTED - RESTART TO APPLY"
+                    : "1581 HARDWARE UNAVAILABLE - RESTART TO APPLY");
+                save_config(ov);
             } else {
                 open_media_dialog(ov, media_item(ov, ov->row));
             }
@@ -457,18 +577,37 @@ static void overlay_activate(Overlay *ov) {
                     ov->cfg->one_display = !ov->cfg->one_display;
                     display_set_one_display(&ov->c128->display,
                                             ov->cfg->one_display);
+                    display_focus_active(&ov->c128->display);
                     break;
                 case ADV_DISPLAY_CHANGE_RESET:
                     ov->cfg->display_change_reset = !ov->cfg->display_change_reset;
                     break;
+                case ADV_VDC_RAM:
+                    ov->cfg->vdc_ram_kb = ov->cfg->vdc_ram_kb == 64 ? 16 : 64;
+                    vdc_set_ram_size_kb(&ov->c128->vdc, ov->cfg->vdc_ram_kb);
+                    notify_post("VDC RAM: %dK - RESET FOR SOFTWARE TO REDETECT",
+                                ov->cfg->vdc_ram_kb);
+                    save_config(ov);
+                    break;
                 case ADV_REAL_DISK_DRIVE:
                     ov->cfg->real_disk_drive = !ov->cfg->real_disk_drive;
-                    notify_post(ov->cfg->real_disk_drive
-                        ? "REAL DRIVE EMULATOR PENDING - USING VIRTUAL DRIVE"
-                        : "FAST VIRTUAL DRIVE ACTIVE");
+                    notify_post("DRIVE MODE CHANGED - RESTART TO APPLY");
+                    break;
+                case ADV_DRIVE_AUDIO:
+                    ov->cfg->drive_audio_monitor = !ov->cfg->drive_audio_monitor;
+                    notify_post(ov->cfg->drive_audio_monitor
+                        ? "1571 DRIVE AUDIO MONITOR ON"
+                        : "1571 DRIVE AUDIO MONITOR OFF");
+                    break;
+                case ADV_DRIVE_VISUAL:
+                    ov->cfg->drive_visual_monitor = !ov->cfg->drive_visual_monitor;
+                    notify_post(ov->cfg->drive_visual_monitor
+                        ? "1571 DRIVE VISUAL MONITOR ON"
+                        : "1571 DRIVE VISUAL MONITOR OFF");
                     break;
                 case ADV_SECOND_DRIVE:
                     ov->cfg->second_drive = !ov->cfg->second_drive;
+                    leds_set_enabled(LED_FDC_B, ov->cfg->second_drive);
                     drive_reset(&ov->c128->drive2);
                     drive_set_unit(&ov->c128->drive2, ov->cfg->drive2_unit);
                     notify_post(ov->cfg->second_drive
@@ -500,10 +639,17 @@ static void overlay_activate(Overlay *ov) {
                     ov->cfg->joystick_hidapi = !ov->cfg->joystick_hidapi;
                     notify_post("JOYSTICK HIDAPI CHANGE APPLIES AFTER RESTART");
                     break;
+                case ADV_KEYBOARD_MAP:
+                    ov->keyboard_map_visible = true;
+                    break;
                 case ADV_RESET:
-                    config_set_defaults(ov->cfg);
-                    drive_attach_disk(&ov->c128->drive, NULL);
+                    if (drive_attach_disk(&ov->c128->drive, NULL) == -2) {
+                        notify_post("DRIVE WRITE COULD NOT BE SAVED - RESET CANCELLED");
+                        break;
+                    }
                     drive_attach_disk(&ov->c128->drive2, NULL);
+                    config_set_defaults(ov->cfg);
+                    vdc_set_ram_size_kb(&ov->c128->vdc, ov->cfg->vdc_ram_kb);
                     drive_set_unit(&ov->c128->drive, ov->cfg->drive_unit);
                     drive_set_unit(&ov->c128->drive2, ov->cfg->drive2_unit);
                     apply_display(ov);
@@ -557,6 +703,11 @@ bool overlay_handle_event(Overlay *ov, SDL_Event *ev) {
             ov->about_visible = false;
         return true;
     }
+    if (ov->keyboard_map_visible) {
+        if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_ESCAPE)
+            ov->keyboard_map_visible = false;
+        return true;
+    }
 
     switch (sc) {
         case SDL_SCANCODE_LEFT:
@@ -599,6 +750,7 @@ void overlay_tick(Overlay *ov) {
     ov->dialog_ready = false;
     OvDialogKind kind = ov->dialog_kind;
     ov->dialog_kind = OV_DIALOG_NONE;
+    remember_dialog_directory(ov, kind, ov->dialog_path);
 
     if (kind == OV_DIALOG_DISK || kind == OV_DIALOG_DISK2) {
         replace_disk_image(ov, kind == OV_DIALOG_DISK2 ? 2 : 1,
@@ -668,6 +820,73 @@ static void draw_row(SDL_Renderer *r, int lw, float y,
     }
 }
 
+void overlay_render_drive_scope(const Overlay *ov, SDL_Renderer *r) {
+    if (!ov || !r || ov->visible || !ov->cfg->drive_visual_monitor ||
+        !ov->c128->drive_raw_iec) return;
+
+    int rw, rh;
+    if (!SDL_GetRenderOutputSize(r, &rw, &rh) || rw < 160 || rh < 160)
+        return;
+    const float margin = 10.0f;
+    const float panel_h = 64.0f;
+    const float panel_y = (float)rh - FUNCTION_KEY_BAR_HEIGHT -
+                          LED_BAR_HEIGHT - panel_h - margin;
+    const float plot_x = margin + 6.0f;
+    const float plot_y = panel_y + 23.0f;
+    const float plot_w = (float)rw - 2.0f * margin - 12.0f;
+    const float plot_h = 34.0f;
+    const float center_y = plot_y + plot_h * 0.5f;
+    if (panel_y < margin || plot_w < 80.0f) return;
+
+    SDL_SetRenderScale(r, 1.0f, 1.0f);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_FRect panel = { margin, panel_y, (float)rw - 2.0f * margin,
+                        panel_h };
+    SDL_SetRenderDrawColor(r, 0, 0, 0, 190);
+    SDL_RenderFillRect(r, &panel);
+    SDL_SetRenderDrawColor(r, 120, 225, 235, 130);
+    SDL_RenderRect(r, &panel);
+
+    const GcrDrive *g = &ov->c128->integrated_drive.gcr;
+    char status[96];
+    snprintf(status, sizeof(status),
+             "1571 #%d  MOTOR %s  TRACK %u.%c  SIDE %u  R %u  W %u  STEP %u",
+             ov->cfg->drive_unit, g->motor ? "ON" : "OFF",
+             g->half_track / 2, (g->half_track & 1) ? '5' : '0',
+             g->side, g->read_events, g->write_events, g->step_events);
+    SDL_SetRenderDrawColor(r, 175, 240, 245, 255);
+    SDL_RenderDebugText(r, plot_x, panel_y + 6.0f, status);
+    SDL_SetRenderDrawColor(r, 105, 145, 155, 130);
+    SDL_RenderLine(r, plot_x, center_y, plot_x + plot_w, center_y);
+
+    DriveActivity frames[DRIVE_MONITOR_HISTORY_FRAMES];
+    size_t count = drive_monitor_history_copy(&ov->c128->drive_monitor,
+                    frames, DRIVE_MONITOR_HISTORY_FRAMES);
+    float cell_w = plot_w / DRIVE_MONITOR_HISTORY_FRAMES;
+    for (size_t i = 0; i < count; ++i) {
+        const DriveActivity *a = &frames[i];
+        float x = plot_x + (float)(DRIVE_MONITOR_HISTORY_FRAMES - count + i) *
+                            cell_w;
+        if (a->reads) {
+            unsigned capped = a->reads > 24 ? 24 : a->reads;
+            float h = 2.0f + (float)capped * 0.55f;
+            SDL_SetRenderDrawColor(r, 100, 235, 245, 230);
+            SDL_RenderLine(r, x, center_y, x, center_y - h);
+        }
+        if (a->writes) {
+            unsigned capped = a->writes > 24 ? 24 : a->writes;
+            float h = 2.0f + (float)capped * 0.55f;
+            SDL_SetRenderDrawColor(r, 250, 175, 90, 230);
+            SDL_RenderLine(r, x, center_y, x, center_y + h);
+        }
+        if (a->steps) {
+            SDL_SetRenderDrawColor(r, 245, 120, 215, 230);
+            SDL_RenderLine(r, x, plot_y, x, plot_y + plot_h);
+        }
+    }
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+}
+
 void overlay_render(const Overlay *ov, SDL_Renderer *r) {
     if (!ov->visible) return;
 
@@ -676,7 +895,7 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         SDL_GetWindowSize(ov->c128->display.window, &rw, &rh);
     float scale = OV_SCALE;
     if ((float)rw / scale < 840.0f) scale = (float)rw / 840.0f;
-    if ((float)rh / scale < 450.0f) scale = (float)rh / 450.0f;
+    if ((float)rh / scale < 510.0f) scale = (float)rh / 510.0f;
     if (scale <= 0.0f) return;
     SDL_SetRenderScale(r, scale, scale);
     int lw = (int)(rw / scale);
@@ -757,6 +976,11 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
                 int unit = item == MEDIA_DRIVE2 ? ov->cfg->drive2_unit :
                                                  ov->cfg->drive_unit;
                 snprintf(vbuf, sizeof(vbuf), "#%d", unit);
+            } else if (item == MEDIA_TYPE1 || item == MEDIA_TYPE2) {
+                int type = item == MEDIA_TYPE2 ? ov->cfg->drive2_type :
+                                                  ov->cfg->drive_type;
+                snprintf(vbuf, sizeof(vbuf), "%s", type == 1571
+                         ? "1571CR (ROM required)" : "1581 (not implemented)");
             } else {
                 const char *path = media_path(ov, item);
                 if (path && path[0])
@@ -791,9 +1015,18 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, panel_w, y, "Display Change reset",
                  ov->cfg->display_change_reset ? "On" : "Off",
                  ov->row == ADV_DISPLAY_CHANGE_RESET); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "VDC RAM",
+                 ov->cfg->vdc_ram_kb == 16 ? "16K" : "64K",
+                 ov->row == ADV_VDC_RAM); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Real Disk Drive",
-                 ov->cfg->real_disk_drive ? "On (pending)" : "Off",
+                 ov->cfg->real_disk_drive ? "On" : "Off",
                  ov->row == ADV_REAL_DISK_DRIVE); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Drive Audio Monitor",
+                 ov->cfg->drive_audio_monitor ? "On" : "Off",
+                 ov->row == ADV_DRIVE_AUDIO); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Drive Visual Monitor",
+                 ov->cfg->drive_visual_monitor ? "On" : "Off",
+                 ov->row == ADV_DRIVE_VISUAL); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Second Drive",
                  ov->cfg->second_drive ? "On" : "Off",
                  ov->row == ADV_SECOND_DRIVE); y += OV_LINE_H;
@@ -822,6 +1055,8 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, panel_w, y, "Joystick HIDAPI",
                  ov->cfg->joystick_hidapi ? "On" : "Off",
                  ov->row == ADV_JOY_HIDAPI); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Keyboard map", "[Enter]",
+                 ov->row == ADV_KEYBOARD_MAP); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Reset defaults", NULL,
                  ov->row == ADV_RESET); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Version", version, ov->row == ADV_VERSION);
@@ -862,6 +1097,28 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         SDL_SetRenderDrawColor(r, 0xFF, 0xDA, 0x79, 255);
         SDL_RenderDebugText(r, bx + (box_w - 16) * 0.5f,
                             by + box_h - 20, "OK");
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    }
+
+    if (ov->keyboard_map_visible) {
+        int lh = (int)(rh / scale);
+        int box_w = 640;
+        int box_h = 24 + KEYBOARD_MAP_LINE_COUNT * 16 + 20;
+        float bx = (float)(lw - box_w) * 0.5f;
+        float by = (float)(lh - box_h) * 0.5f;
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(r, 0, 0, 0, 180);
+        SDL_FRect dim = { 0, 0, (float)lw, (float)lh };
+        SDL_RenderFillRect(r, &dim);
+        SDL_SetRenderDrawColor(r, 0x19, 0x20, 0x34, 255);
+        SDL_FRect box = { bx, by, (float)box_w, (float)box_h };
+        SDL_RenderFillRect(r, &box);
+        SDL_SetRenderDrawColor(r, 0x89, 0xA3, 0xCB, 255);
+        SDL_RenderRect(r, &box);
+        SDL_SetRenderDrawColor(r, 0xF0, 0xF0, 0xF0, 255);
+        for (int i = 0; i < KEYBOARD_MAP_LINE_COUNT; ++i)
+            SDL_RenderDebugText(r, bx + 16, by + 16 + i * 16,
+                                keyboard_map_lines[i]);
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
     }
 

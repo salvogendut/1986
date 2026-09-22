@@ -68,6 +68,9 @@ at `READY.` without the former stack overflow.
 - [x] Matrix positions verified sufficiently for interactive BASIC programs.
 - [x] Cursor keys and emulator function-key conventions.
 - [x] Clipboard paste and deterministic `--paste`/`--paste-at` input.
+- [x] Shift+C= upper/graphics versus upper/lowercase switching on VIC and VDC,
+  with a Caps Lock host shortcut, RUN/STOP and RESTORE mappings, and an
+  Advanced keyboard-map dialog.
 - [ ] Add the C128-specific keys (40/80 column toggle, `HELP`, `CAPS`, `ALT`,
   `ESC`, `TAB`, `-`, `=`, `@`, `£`, etc.).
 - [ ] Complete host-layout translation and keyboard auto-repeat behavior.
@@ -147,15 +150,22 @@ and more accurate VDC behavior.
 
 - [x] VDC register file, update-address counter, block fill/copy, and 64K
   internal video RAM for the C128DCR.
+- [x] Persistent Advanced 16K/64K VDC RAM selection (64K default), including
+  physical address mapping. Register 28 selects an independent addressing mode,
+  rather than reporting the fitted RAM size.
 - [x] 80x25 text rendering, attribute colours/reverse, and cursor blink.
+- [x] Programmable text row stride and raster/row geometry, plus flash,
+  underline, and semigraphics character effects.
 - [x] Alternative VIC/VDC output in unified and dual-window display modes.
 - [x] F10 display switching with the last active 40/80 mode persisted across
   application restarts and focused correctly in dual-window mode.
-- [ ] Remaining attribute effects: flash, underline, and alternate charset.
+- [x] Alternate-charset text attribute for upper/lowercase switching.
 - [x] Standard 640x200 VDC bitmap mode with register and attribute colours,
   reverse video, and C128DCR 16-byte character slots.
+- [x] 8568 revision status, approximate ready/busy and VBLANK, and read-only
+  light-pen position registers.
 - [ ] 640x400 VDC interlace and extended bitmap modes.
-- [ ] VDC timing, ready/busy status, and scan timing accuracy.
+- [ ] Accurate VDC borders, smooth scrolling, address latching, and scan timing.
 - [ ] Investigate BASIC 8 selecting 16K VRAM despite the 64K C128DCR model.
 
 **Done when.** Native VDC text, bitmap, and interlace software renders with
@@ -187,6 +197,8 @@ cycle-level 1571 implementation without conflating their interfaces.
 - [x] Virtual-drive `LOAD`/`DLOAD` and DOS error handling (#31).
 - [x] Live D64 eject/insert from the Media Overlay, including persisted media
   state and immediate `DIRECTORY` visibility after a swap (#44).
+- [x] Read-only standalone PRG loading from either Drive picker or `--disk`,
+  with single-file directory listing and normal IEC `LOAD`/`DLOAD` (#80).
 - [x] Virtual-drive `SAVE`/`DSAVE` to D64 with BAM/directory updates and
   atomic write-back (#53).
 - [x] SCRATCH and RENAME command-channel operations on D64/D71/D81 root
@@ -196,11 +208,34 @@ cycle-level 1571 implementation without conflating their interfaces.
   read/write support (#55).
 - [ ] D81 partition navigation and REL-file operations.
 - [ ] True integrated 1571: drive CPU, 2K RAM, DOS ROM, CIA/VIA/FDC,
-  mechanism timing, line-level IEC, and fast serial (#30). GEOS 128 is a
-  compatibility target: its loader uses drive-RAM `M-W`/`M-E` commands that
-  the virtual drive cannot execute (#74).
-- [x] Persisted Advanced > Real Disk Drive preference, default Off; On is
-  marked pending and retains the virtual backend until true-drive support (#57).
+  mechanism timing, line-level IEC, and fast serial (#30).
+- [x] First 1571CR slice: independent ROM-backed 6502 core, mirrored 2K RAM,
+  hardware address decoder, reset/interrupt vectors, and CPU/bus tests (#92).
+- [x] Two 6522 VIAs with port direction, timers, control-line IRQs and drive-CPU
+  IRQ propagation; shift-register and cycle-exact timing remain open (#92).
+- [x] Partial MOS5710 CIA serial/interrupt registers and shared drive IRQ line
+  (following VICE's limited 1571CR handling; extra FDC2 registers remain open).
+- [x] Clock the 1571CR ROM alongside the C128 at 1/2 MHz and connect slow IEC
+  ATN/CLOCK/DATA/ATNA between CIA2 and VIA1, with bus and ROM-probe tests (#94).
+- [x] D64/D71 GCR tracks through VIA2: motor, stepper, side, speed, sync,
+  write-protect and byte-ready signals, with deterministic read tests (#96).
+- [x] VIA2 GCR write gate and data latch; checksum-valid D64/D71 sector writes
+  persist atomically, with write protection and media-change flush tests (#102).
+- [x] Opt-in unpatched KERNAL/1571CR ROM slow IEC path: interleaved host/drive
+  execution, ATN interrupt and address straps, track-zero sensing; `DIRECTORY`
+  and `LOAD` work on D64 through the drive ROM (#98).
+- [x] GEOS 128 drive-RAM `M-W`/`M-E` loader reaches the Desktop through the
+  true-drive path with CIA2 bus-cycle synchronization for fast IEC reads (#74).
+- [ ] Complete true-drive mode: WD1770/FDC2, fast serial, accurate
+  mechanism timing, second-drive bus sharing, and broader D71 validation.
+- [x] Media persists a per-drive hardware type when real-drive mode is selected;
+  1581 is shown as future hardware rather than confused with D81 image support.
+- [x] Separate, live Drive 1/Drive 2 activity LEDs in both display windows
+  (#92); real-drive pulses follow motor, seek, and GCR reads (#100).
+- [x] Independent saved, default-off sample-based audio and activity waveform
+  monitors for the real 1571 in Advanced (#100, #104).
+- [x] Persisted Advanced > Real Disk Drive preference, default Off; On selects
+  the 1571CR ROM backend on the next launch when its ROM is available (#57, #98).
 - [x] Optional second fast virtual drive with independent image and a distinct
   IEC unit; compact, legible F9 overlay (#59).
 

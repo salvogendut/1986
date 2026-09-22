@@ -13,7 +13,12 @@ int main(void) {
     CHECK(cfg.scale == 2, "default scale");
     CHECK(cfg.model == C128_MODEL_DCR, "default model DCR");
     CHECK(cfg.col_mode_80, "default display is 80 columns");
+    CHECK(cfg.vdc_ram_kb == 64, "C128DCR defaults to 64K VDC RAM");
     CHECK(!cfg.real_disk_drive, "real drive defaults off");
+    CHECK(!cfg.drive_audio_monitor, "drive audio monitor defaults off");
+    CHECK(!cfg.drive_visual_monitor, "drive visual monitor defaults off");
+    CHECK(cfg.drive_type == 1571 && cfg.drive2_type == 1571,
+          "both hardware drive types default to 1571");
     CHECK(!cfg.second_drive && cfg.drive_unit == 8 && cfg.drive2_unit == 9,
           "second drive defaults off with a distinct unit");
     CHECK(cfg.main_input_port == 2 && cfg.joy_port_mode[0] == JOYPORT_JOYSTICK &&
@@ -40,15 +45,25 @@ int main(void) {
     cfg.fast = true;
     cfg.crt_enabled = true;
     cfg.col_mode_80 = false;
+    cfg.vdc_ram_kb = 16;
     cfg.real_disk_drive = true;
+    cfg.drive_audio_monitor = true;
+    cfg.drive_visual_monitor = true;
     cfg.second_drive = true;
     cfg.drive_unit = 9;
     cfg.drive2_unit = 10;
+    cfg.drive_type = 1581;
+    cfg.drive2_type = 1571;
     cfg.main_input_port = 1;
     cfg.joy_port_mode[0] = JOYPORT_MOUSE;
     snprintf(cfg.disk_path, sizeof(cfg.disk_path), "%s", "keep-me.d64");
     snprintf(cfg.disk2_path, sizeof(cfg.disk2_path), "%s", "second.d81");
     snprintf(cfg.u36_path, sizeof(cfg.u36_path), "%s", "utility.rom");
+    snprintf(cfg.last_disk_dir, sizeof(cfg.last_disk_dir), "%s", "/media/drive1");
+    snprintf(cfg.last_disk2_dir, sizeof(cfg.last_disk2_dir), "%s", "/media/drive2");
+    snprintf(cfg.last_tape_dir, sizeof(cfg.last_tape_dir), "%s", "/media/tapes");
+    snprintf(cfg.last_cart_dir, sizeof(cfg.last_cart_dir), "%s", "/media/carts");
+    snprintf(cfg.last_u36_dir, sizeof(cfg.last_u36_dir), "%s", "/media/roms");
     CHECK(config_save(&cfg, path), "config_save");
 
     Config back;
@@ -57,7 +72,12 @@ int main(void) {
     CHECK(back.fast, "fast roundtrip");
     CHECK(back.crt_enabled, "crt roundtrip");
     CHECK(!back.col_mode_80, "40-column mode roundtrip");
+    CHECK(back.vdc_ram_kb == 16, "16K VDC RAM setting roundtrip");
     CHECK(back.real_disk_drive, "real-drive preference roundtrip");
+    CHECK(back.drive_audio_monitor, "drive audio monitor roundtrip");
+    CHECK(back.drive_visual_monitor, "drive visual monitor roundtrip");
+    CHECK(back.drive_type == 1581 && back.drive2_type == 1571,
+          "hardware type selection roundtrip");
     CHECK(back.second_drive && back.drive_unit == 9 && back.drive2_unit == 10 &&
           strcmp(back.disk2_path, "second.d81") == 0,
           "second-drive toggle, unit, and image roundtrip");
@@ -71,10 +91,17 @@ int main(void) {
     CHECK(!config_save_input_port(path, 3), "invalid host port is rejected");
     CHECK(strcmp(back.u36_path, "utility.rom") == 0,
           "U36 ROM path roundtrip");
+    CHECK(strcmp(back.last_disk_dir, "/media/drive1") == 0 &&
+          strcmp(back.last_disk2_dir, "/media/drive2") == 0 &&
+          strcmp(back.last_tape_dir, "/media/tapes") == 0 &&
+          strcmp(back.last_cart_dir, "/media/carts") == 0 &&
+          strcmp(back.last_u36_dir, "/media/roms") == 0,
+          "each file dialog's recent directory roundtrips independently");
 
     CHECK(config_save_column_mode(path, true), "save 80-column mode only");
     CHECK(config_load(&back, path), "reload 80-column mode");
     CHECK(back.col_mode_80, "80-column mode persisted");
+    CHECK(back.vdc_ram_kb == 16, "mode-only save preserves VDC RAM size");
     CHECK(back.scale == 3, "mode-only save preserves other settings");
     CHECK(strcmp(back.disk_path, "keep-me.d64") == 0,
           "mode-only save preserves media settings");
@@ -82,6 +109,10 @@ int main(void) {
           "mode-only save preserves U36 setting");
     CHECK(back.real_disk_drive,
           "mode-only save preserves real-drive preference");
+    CHECK(back.drive_audio_monitor,
+          "mode-only save preserves drive audio preference");
+    CHECK(back.drive_visual_monitor,
+          "mode-only save preserves drive visual preference");
     CHECK(back.main_input_port == 2 && back.joy_port_mode[0] == JOYPORT_MOUSE,
           "mode-only save preserves F1 input port and mouse mode");
     CHECK(back.second_drive && back.drive2_unit == 10 &&
@@ -95,12 +126,16 @@ int main(void) {
     FILE *collision = fopen(path, "w");
     CHECK(collision != NULL, "create unit-collision config");
     if (collision) {
-        fputs("drive_unit = 10\ndrive2_unit = 10\nsecond_drive = 1\n", collision);
+        fputs("drive_unit = 10\ndrive2_unit = 10\nsecond_drive = 1\n"
+              "vdc_ram_kb = 32\ndrive_type = 999\ndrive2_type = 0\n", collision);
         fclose(collision);
     }
     CHECK(config_load(&back, path) && back.drive_unit == 10 &&
           back.drive2_unit == 8,
           "loading a colliding unit assignment chooses a distinct unit");
+    CHECK(back.vdc_ram_kb == 64, "invalid VDC RAM size falls back to DCR default");
+    CHECK(back.drive_type == 1571 && back.drive2_type == 1571,
+          "invalid hardware drive types fall back to 1571");
 
     remove(path);
 

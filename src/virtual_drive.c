@@ -239,8 +239,10 @@ static void prepare_channel(VirtualDrive *v, unsigned channel) {
         v->bus_status |= 0x02;
         return;
     }
-    size_t max_bytes = (size_t)disk_image_track_offset(
-        v->disk, v->disk->tracks + 1) / DISK_SECTOR_BYTES * 254u;
+    size_t max_bytes = v->disk->format == DISK_FORMAT_PRG
+        ? v->disk->size
+        : (size_t)disk_image_track_offset(
+            v->disk, v->disk->tracks + 1) / DISK_SECTOR_BYTES * 254u;
     int length = reserve_response(v, max_bytes)
         ? disk_image_read_file(v->disk, &entry, v->response, v->response_cap)
         : -1;

@@ -1,3 +1,4 @@
+#include "compat_win.h"
 #include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,6 +22,7 @@ void config_set_defaults(Config *cfg) {
     cfg->model = C128_MODEL_DCR;
     cfg->fast = false;
     cfg->col_mode_80 = true;
+    cfg->vdc_ram_kb = 64;
     cfg->gif_width = 320;
     cfg->gif_fps = 25;
     cfg->gif_ffmpeg = false;
@@ -33,7 +35,10 @@ void config_set_defaults(Config *cfg) {
     cfg->drive_unit = 8;
     cfg->drive2_unit = 9;
     cfg->drive_type = 1571;   /* Commodore 1571 */
+    cfg->drive2_type = 1571;
     cfg->real_disk_drive = false;
+    cfg->drive_audio_monitor = false;
+    cfg->drive_visual_monitor = false;
     cfg->second_drive = false;
     cfg->tinker = false;
     cfg->one_display = false;
@@ -107,6 +112,7 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "model"))         cfg->model = (C128Model)atoi(value);
     else if (!strcasecmp(key, "fast"))          cfg->fast = atoi(value) != 0;
     else if (!strcasecmp(key, "display_columns")) cfg->col_mode_80 = atoi(value) != 40;
+    else if (!strcasecmp(key, "vdc_ram_kb")) cfg->vdc_ram_kb = atoi(value);
     else if (!strcasecmp(key, "gif_width"))     cfg->gif_width = atoi(value);
     else if (!strcasecmp(key, "gif_fps"))       cfg->gif_fps = atoi(value);
     else if (!strcasecmp(key, "gif_ffmpeg"))    cfg->gif_ffmpeg = atoi(value) != 0;
@@ -128,10 +134,28 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "u36")) {
         snprintf(cfg->u36_path, sizeof(cfg->u36_path), "%s", value);
     }
+    else if (!strcasecmp(key, "last_disk_dir")) {
+        snprintf(cfg->last_disk_dir, sizeof(cfg->last_disk_dir), "%s", value);
+    }
+    else if (!strcasecmp(key, "last_disk2_dir")) {
+        snprintf(cfg->last_disk2_dir, sizeof(cfg->last_disk2_dir), "%s", value);
+    }
+    else if (!strcasecmp(key, "last_tape_dir")) {
+        snprintf(cfg->last_tape_dir, sizeof(cfg->last_tape_dir), "%s", value);
+    }
+    else if (!strcasecmp(key, "last_cart_dir")) {
+        snprintf(cfg->last_cart_dir, sizeof(cfg->last_cart_dir), "%s", value);
+    }
+    else if (!strcasecmp(key, "last_u36_dir")) {
+        snprintf(cfg->last_u36_dir, sizeof(cfg->last_u36_dir), "%s", value);
+    }
     else if (!strcasecmp(key, "drive_unit")) cfg->drive_unit = atoi(value);
     else if (!strcasecmp(key, "drive2_unit")) cfg->drive2_unit = atoi(value);
     else if (!strcasecmp(key, "drive_type")) cfg->drive_type = atoi(value);
+    else if (!strcasecmp(key, "drive2_type")) cfg->drive2_type = atoi(value);
     else if (!strcasecmp(key, "real_disk_drive")) cfg->real_disk_drive = atoi(value) != 0;
+    else if (!strcasecmp(key, "drive_audio_monitor")) cfg->drive_audio_monitor = atoi(value) != 0;
+    else if (!strcasecmp(key, "drive_visual_monitor")) cfg->drive_visual_monitor = atoi(value) != 0;
     else if (!strcasecmp(key, "second_drive")) cfg->second_drive = atoi(value) != 0;
     else if (!strcasecmp(key, "tinker"))      cfg->tinker = atoi(value) != 0;
     else if (!strcasecmp(key, "one_display")) cfg->one_display = atoi(value) != 0;
@@ -155,6 +179,9 @@ bool config_load(Config *cfg, const char *path) {
     while (fgets(line, sizeof(line), f)) parse_line(cfg, line);
     fclose(f);
     config_normalize_drive_units(cfg);
+    if (cfg->drive_type != 1571 && cfg->drive_type != 1581) cfg->drive_type = 1571;
+    if (cfg->drive2_type != 1571 && cfg->drive2_type != 1581) cfg->drive2_type = 1571;
+    if (cfg->vdc_ram_kb != 16 && cfg->vdc_ram_kb != 64) cfg->vdc_ram_kb = 64;
     if (cfg->main_input_port != 1 && cfg->main_input_port != 2) cfg->main_input_port = 2;
     for (int i = 0; i < 2; ++i)
         if (cfg->joy_port_mode[i] != JOYPORT_JOYSTICK &&
@@ -182,6 +209,7 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "model = %d\n", (int)cfg->model);
     fprintf(f, "fast = %d\n", cfg->fast ? 1 : 0);
     fprintf(f, "display_columns = %d\n", cfg->col_mode_80 ? 80 : 40);
+    fprintf(f, "vdc_ram_kb = %d\n", cfg->vdc_ram_kb);
     fprintf(f, "gif_width = %d\n", cfg->gif_width);
     fprintf(f, "gif_fps = %d\n", cfg->gif_fps);
     fprintf(f, "gif_ffmpeg = %d\n", cfg->gif_ffmpeg ? 1 : 0);
@@ -191,10 +219,18 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "tape = %s\n", cfg->tape_path);
     fprintf(f, "cart = %s\n", cfg->cart_path);
     fprintf(f, "u36 = %s\n", cfg->u36_path);
+    fprintf(f, "last_disk_dir = %s\n", cfg->last_disk_dir);
+    fprintf(f, "last_disk2_dir = %s\n", cfg->last_disk2_dir);
+    fprintf(f, "last_tape_dir = %s\n", cfg->last_tape_dir);
+    fprintf(f, "last_cart_dir = %s\n", cfg->last_cart_dir);
+    fprintf(f, "last_u36_dir = %s\n", cfg->last_u36_dir);
     fprintf(f, "drive_unit = %d\n", cfg->drive_unit);
     fprintf(f, "drive2_unit = %d\n", cfg->drive2_unit);
     fprintf(f, "drive_type = %d\n", cfg->drive_type);
+    fprintf(f, "drive2_type = %d\n", cfg->drive2_type);
     fprintf(f, "real_disk_drive = %d\n", cfg->real_disk_drive ? 1 : 0);
+    fprintf(f, "drive_audio_monitor = %d\n", cfg->drive_audio_monitor ? 1 : 0);
+    fprintf(f, "drive_visual_monitor = %d\n", cfg->drive_visual_monitor ? 1 : 0);
     fprintf(f, "second_drive = %d\n", cfg->second_drive ? 1 : 0);
     fprintf(f, "tinker = %d\n", cfg->tinker ? 1 : 0);
     fprintf(f, "one_display = %d\n", cfg->one_display ? 1 : 0);

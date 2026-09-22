@@ -11,8 +11,13 @@ static int failures = 0;
     if (!(cond)) { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, msg); failures++; } \
 } while (0)
 
-/* drive.c only uses the UI LED when bytes are received. */
-void leds_ping(LedId id) { (void)id; }
+static unsigned led_pings[LED_COUNT];
+static int led_unit[2];
+void leds_ping(LedId id) { led_pings[id]++; }
+void leds_set_drive_unit(LedId id, int unit) {
+    if (id == LED_FDC_A || id == LED_FDC_B)
+        led_unit[id == LED_FDC_B] = unit;
+}
 
 static int make_image(char *path, DiskFormat format, u8 marker,
                       const char *disk_name, const char *file_name) {
@@ -119,6 +124,12 @@ static bool pair_directory_contains(Drive *first, Drive *second,
     return false;
 }
 
+static int block_media_change(void *ctx) {
+    int *calls = ctx;
+    ++*calls;
+    return -1;
+}
+
 int main(void) {
     char first[] = "/tmp/1986-drive-first-XXXXXX";
     char second[] = "/tmp/1986-drive-second-XXXXXX";
@@ -140,6 +151,8 @@ int main(void) {
     Drive drive;
     drive_init(&drive, &cfg);
     CHECK(drive_attach_disk(&drive, first) == 0, "insert first DiskImage");
+    CHECK(drive.media_generation == 1,
+          "initial insert advances hardware media generation");
     CHECK(drive.disk_attached, "first DiskImage is attached");
     CHECK(drive.virtual_drive.disk == &drive.image,
           "virtual drive sees first DiskImage");
@@ -147,12 +160,21 @@ int main(void) {
           "first DiskImage contents are live");
     CHECK(directory_contains(&drive.virtual_drive, "FIRSTFILE"),
           "DIRECTORY reads first DiskImage");
+    int blocked_calls = 0;
+    drive_set_media_change_hook(&drive, block_media_change, &blocked_calls);
+    CHECK(drive_attach_disk(&drive, second) == -2 &&
+          blocked_calls == 1 && drive.media_generation == 1 &&
+          drive.image.data && drive.image.data[0] == 0x11,
+          "failed physical write flush keeps old media and generation");
+    drive_set_media_change_hook(&drive, NULL, NULL);
     cfg.real_disk_drive = true;
     drive_reset(&drive);
     CHECK(directory_contains(&drive.virtual_drive, "FIRSTFILE"),
           "pending real-drive preference keeps virtual backend available");
 
     CHECK(drive_attach_disk(&drive, second) == 0, "replace DiskImage");
+    CHECK(drive.media_generation == 2,
+          "replacement advances hardware media generation");
     CHECK(drive.disk_attached, "replacement DiskImage is attached");
     CHECK(drive.virtual_drive.disk == &drive.image,
           "virtual drive sees replacement DiskImage");
@@ -181,10 +203,21 @@ int main(void) {
     Drive pair_first, pair_second;
     drive_init(&pair_first, &cfg);
     drive_init(&pair_second, &cfg);
+    drive_set_slot(&pair_second, 1);
     drive_set_unit(&pair_second, 9);
+    CHECK(led_unit[0] == 8 && led_unit[1] == 9,
+          "each LED shows its drive's IEC unit");
     CHECK(drive_attach_disk(&pair_first, first) == 0 &&
           drive_attach_disk(&pair_second, second) == 0,
           "attach independent images to both drives");
+    memset(led_pings, 0, sizeof(led_pings));
+    CHECK(pair_directory_contains(&pair_first, &pair_second, true, 8, "FIRSTFILE") &&
+          led_pings[LED_FDC_A] > 0 && led_pings[LED_FDC_B] == 0,
+          "Drive 1 traffic lights only Drive 1 LED");
+    memset(led_pings, 0, sizeof(led_pings));
+    CHECK(pair_directory_contains(&pair_first, &pair_second, true, 9, "SECONDFILE") &&
+          led_pings[LED_FDC_B] > 0 && led_pings[LED_FDC_A] == 0,
+          "Drive 2 traffic lights only Drive 2 LED");
     CHECK(pair_directory_contains(&pair_first, &pair_second, true, 8, "FIRSTFILE") &&
           !pair_directory_contains(&pair_first, &pair_second, true, 8, "SECONDFILE") &&
           pair_directory_contains(&pair_first, &pair_second, true, 9, "SECONDFILE"),
@@ -193,6 +226,7 @@ int main(void) {
           pair_directory_contains(&pair_first, &pair_second, false, 8, "FIRSTFILE"),
           "disabling the second drive removes only its IEC response");
     drive_set_unit(&pair_second, 10);
+    CHECK(led_unit[1] == 10, "Drive 2 LED tracks Media device number");
     CHECK(!pair_directory_contains(&pair_first, &pair_second, true, 9, "SECONDFILE") &&
           pair_directory_contains(&pair_first, &pair_second, true, 10, "SECONDFILE"),
           "changing Drive 2 unit takes effect immediately");
@@ -203,7 +237,10 @@ int main(void) {
     drive_attach_disk(&pair_first, NULL);
     drive_attach_disk(&pair_second, NULL);
 
+    unsigned before_eject = drive.media_generation;
     CHECK(drive_attach_disk(&drive, NULL) == 0, "eject DiskImage");
+    CHECK(drive.media_generation == before_eject + 1,
+          "eject advances hardware media generation");
     CHECK(!drive.disk_attached, "eject clears attached state");
     CHECK(drive.virtual_drive.disk == NULL, "eject clears virtual media");
 

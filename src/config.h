@@ -30,23 +30,33 @@ typedef struct {
     C128Model  model;              /* which C128 variant to emulate */
     bool       fast;               /* run the 8502 at 2 MHz (C128 fast mode) */
     bool       col_mode_80;        /* latched 40/80 key: VDC vs VIC-II */
+    int        vdc_ram_kb;         /* fitted VDC RAM: 16 or 64 (DCR default) */
     int        gif_width;          /* F6 GIF capture width */
     int        gif_fps;            /* F6 GIF capture fps */
     bool       gif_ffmpeg;         /* optimize GIF via ffmpeg if present */
     char       rom_dir[CONFIG_PATH_MAX];  /* directory holding machine ROMs */
 
     /* Media files chosen in the overlay. Tape remains a placeholder. */
-    char       disk_path[CONFIG_PATH_MAX];  /* D64/D71/D81 disk image */
-    char       disk2_path[CONFIG_PATH_MAX]; /* second drive disk image */
+    char       disk_path[CONFIG_PATH_MAX];  /* D64/D71/D81 image or PRG */
+    char       disk2_path[CONFIG_PATH_MAX]; /* second drive image or PRG */
     char       tape_path[CONFIG_PATH_MAX];  /* Tape .tap image */
     char       cart_path[CONFIG_PATH_MAX];  /* native C128 CRT/raw function ROM */
     char       u36_path[CONFIG_PATH_MAX];   /* internal function ROM socket */
+    /* Per-picker directories survive ejection; empty uses selected media. */
+    char       last_disk_dir[CONFIG_PATH_MAX];
+    char       last_disk2_dir[CONFIG_PATH_MAX];
+    char       last_tape_dir[CONFIG_PATH_MAX];
+    char       last_cart_dir[CONFIG_PATH_MAX];
+    char       last_u36_dir[CONFIG_PATH_MAX];
 
     /* Disk drive (Commodore 1571). */
     int        drive_unit;        /* IEC device number (8-11) */
     int        drive2_unit;       /* distinct IEC device number (8-11) */
-    int        drive_type;        /* DRIVE_TYPE_* (1571) */
-    bool       real_disk_drive;   /* future hardware backend preference */
+    int        drive_type;        /* drive 1 hardware: 1571 or 1581 */
+    int        drive2_type;       /* drive 2 hardware: 1571 or 1581 */
+    bool       real_disk_drive;   /* select ROM-backed 1571 when available */
+    bool       drive_audio_monitor; /* synthetic motor/head audio for real 1571 */
+    bool       drive_visual_monitor; /* on-screen real-1571 waveform */
     bool       second_drive;      /* expose the second virtual IEC drive */
 
     /* Tinker-gated Advanced overlay section. */
