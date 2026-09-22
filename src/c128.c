@@ -13,6 +13,26 @@ static bool drive_probe_active(const C128 *c) {
     return c->drive_raw_iec;
 }
 
+/* The 8502 core calls I/O handlers during an instruction, at the bus cycle
+ * of the access. Synchronize the 1571 before sampling or changing IEC lines:
+ * advancing only after the instruction can miss GEOS fast-serial edges. */
+static void drive_sync_to_cpu(C128 *c) {
+    if (!c->drive_clock_denominator) return;
+    u64 now = cpu_cycles();
+    if (now <= c->drive_host_cycle_synced) return;
+    u64 elapsed = now - c->drive_host_cycle_synced;
+    c->drive_host_cycle_synced = now;
+    if (!drive_probe_active(c)) {
+        c->drive_clock_fraction = 0;
+        return;
+    }
+    unsigned drive_hz_per_frame = c->integrated_drive.clock_2mhz ? 40000u : 20000u;
+    u64 scaled = c->drive_clock_fraction + elapsed * drive_hz_per_frame;
+    int budget = (int)(scaled / c->drive_clock_denominator);
+    c->drive_clock_fraction = (unsigned)(scaled % c->drive_clock_denominator);
+    drive1571cr_advance(&c->integrated_drive, budget);
+}
+
 static void drive_via_port_change(void *ctx, unsigned port, u8 pins) {
     if (port == 1) iec_bus_set_drive(&((C128 *)ctx)->iec_bus, pins);
 }
@@ -76,6 +96,7 @@ static u8 io_read(C128 *c, u16 addr) {
         }
     }
     else if (addr >= 0xDD00 && addr < 0xDE00) {
+        drive_sync_to_cpu(c);
         if ((addr & 15) == 0 && drive_probe_active(c)) {
             /* CIA2 PA6/PA7 are serial CLOCK/DATA inputs regardless of DDR. */
             v = (u8)((cia_read(&c->cia2, addr) & 0x3f) |
@@ -109,6 +130,7 @@ static void io_write(C128 *c, u16 addr, u8 val) {
     }
     if (addr >= 0xDC00 && addr < 0xDD00) { cia_write(&c->cia1, addr, val); return; }
     if (addr >= 0xDD00 && addr < 0xDE00) {
+        drive_sync_to_cpu(c);
         cia_write(&c->cia2, addr, val);
         if ((addr & 15) == 0 || (addr & 15) == 2)
             iec_bus_set_host(&c->iec_bus, c->cia2.pra, c->cia2.ddra);
@@ -223,6 +245,8 @@ void c128_reset(C128 *c) {
     iec_bus_reset(&c->iec_bus);
     iec_bus_set_host(&c->iec_bus, c->cia2.pra, c->cia2.ddra);
     c->drive_clock_fraction = 0;
+    c->drive_clock_denominator = 0;
+    c->drive_host_cycle_synced = cpu_cycles();
     c->drive_media_generation = (unsigned)-1;
     drive_set_unit(&c->drive2, c->cfg->drive2_unit);
     c->paused = false;
@@ -244,6 +268,8 @@ int c128_frame(C128 *c) {
      * between chunks so the raster IRQ fires when the raster crosses the
      * compare line (VICE's alarm-based timing). */
     int frame_cycles = c->fast ? 2 * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
+    c->drive_clock_denominator = (unsigned)frame_cycles;
+    c->drive_host_cycle_synced = cpu_cycles();
     int remaining = frame_cycles;
     int total = 0;
     int cpu_debt = 0;
@@ -265,15 +291,7 @@ int c128_frame(C128 *c) {
             progressed += elapsed;
             cia_tick(&c->cia1, elapsed);
             cia_tick(&c->cia2, elapsed);
-            if (drive_probe_active(c)) {
-                unsigned drive_hz_per_frame = c->integrated_drive.clock_2mhz
-                                            ? 40000u : 20000u;
-                unsigned scaled = c->drive_clock_fraction +
-                                  (unsigned)elapsed * drive_hz_per_frame;
-                int budget = (int)(scaled / (unsigned)frame_cycles);
-                c->drive_clock_fraction = scaled % (unsigned)frame_cycles;
-                drive1571cr_advance(&c->integrated_drive, budget);
-            } else c->drive_clock_fraction = 0;
+            drive_sync_to_cpu(c);
             /* Fast mode doubles CPU cycles per frame, not the SID clock. */
             int sid_cycles = elapsed;
             if (c->fast) {
