@@ -73,6 +73,24 @@ int main(void) {
     CHECK(mem->ram[0x10250] == 0x34 && mem->ram[0x0250] == 0,
           "RAM above stack page follows bank 1 when common RAM is disabled");
 
+    mmu_write(&mem->mmu, 0xD508, 0x01);
+    mmu_write(&mem->mmu, 0xD507, 0xE0);
+    mmu_write(&mem->mmu, 0xD50A, 0x01);
+    mmu_write(&mem->mmu, 0xD509, 0x4F);
+    mem_write(mem, 0x00E8, 0xA6);
+    mem_write(mem, 0x01FC, 0xB7);
+    CHECK(mem->ram[0x1E0E8] == 0xA6 && mem_read(mem, 0x00E8) == 0xA6,
+          "relocated zero page accesses selected RAM bank");
+    CHECK(mem->ram[0x14FFC] == 0xB7 && mem_read(mem, 0x01FC) == 0xB7 &&
+          mem_cpu_page_offset(mem, 1) == 0x14F00,
+          "relocated stack page uses committed page and bank");
+    mmu_write(&mem->mmu, 0xD507, 0x00);
+    mmu_write(&mem->mmu, 0xD509, 0x01);
+    mmu_write(&mem->mmu, 0xD508, 0x00);
+    mmu_write(&mem->mmu, 0xD507, 0x00);
+    mmu_write(&mem->mmu, 0xD50A, 0x00);
+    mmu_write(&mem->mmu, 0xD509, 0x01);
+
     static const unsigned common_sizes[] = { 0x400, 0x1000, 0x2000, 0x4000 };
     for (unsigned code = 0; code < 4; code++) {
         unsigned size = common_sizes[code];

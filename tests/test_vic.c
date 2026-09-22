@@ -11,7 +11,8 @@ static int failures = 0;
 
 /* vic.c uses the CPU cycle count only for raster-register reads. Rendering
  * tests do not advance the raster, so a fixed value is sufficient here. */
-u64 cpu_cycles(void) { return 0; }
+static u64 test_cpu_cycles;
+u64 cpu_cycles(void) { return test_cpu_cycles; }
 
 static u32 pixel(const Display *d, int x, int y) {
     return d->pixels[(VIC_TEXT_Y + y) * C128_SCREEN_W + VIC_TEXT_X + x];
@@ -51,7 +52,30 @@ int main(void) {
     vic_write_rmw(&vic, 0xD019, 0x40);
     CHECK(vic.irq_status == 0,
           "LSR $D019 acknowledges the read byte through its RMW bus write");
-    vic_write(&vic, 0xD01A, 0x00);
+    vic_reset(&vic);
+    vic_write(&vic, 0xD01A, 0x01);
+    vic_write(&vic, 0xD012, 100);
+    test_cpu_cycles = 100 * 63;
+    CHECK(vic_tick(&vic) && (vic_read(&vic, 0xD019) & 0x01),
+          "first raster compare asserts its IRQ");
+    vic_write(&vic, 0xD019, 0x01);
+    vic_write(&vic, 0xD012, 120);
+    test_cpu_cycles = 120 * 63;
+    CHECK(vic_tick(&vic) && (vic_read(&vic, 0xD019) & 0x01),
+          "a new compare can assert another raster IRQ in the same frame");
+    vic_write(&vic, 0xD019, 0x01);
+    CHECK(!vic_tick(&vic), "one compare does not repeatedly fire on one raster");
+    vic_write(&vic, 0xD011, 0x80);
+    vic_write(&vic, 0xD012, 44); /* 256 + 44 = raster 300 */
+    CHECK(vic.raster_irq_line == 300,
+          "D011 bit 7 supplies the ninth raster compare bit");
+    test_cpu_cycles = 300 * 63;
+    CHECK(vic_tick(&vic), "raster compare can match above line 255");
+    test_cpu_cycles = 100 * 63;
+    CHECK(!(vic_read(&vic, 0xD011) & 0x80),
+          "D011 read bit 7 reports the current raster, not the compare latch");
+    test_cpu_cycles = 0;
+    vic_reset(&vic);
     vic_write(&vic, 0xD011, 0x3B); /* display on, bitmap mode */
     vic_write(&vic, 0xD018, 0x18); /* screen $0400, bitmap $2000 */
     vic.bg_color[0] = 0x02;        /* must not replace hires cell background */

@@ -13,6 +13,7 @@ extern read_func_ptr_t *_mem_read_tab_ptr;
 extern store_func_ptr_t *_mem_write_tab_ptr;
 
 extern BYTE *mem_ram;
+extern BYTE *mem_page_one;
 extern void mem_mmu_translate(unsigned int addr, BYTE **base, int *start, int *limit);
 extern void mem_powerup(void);
 extern int mem_rom_trap_allowed(unsigned int addr);

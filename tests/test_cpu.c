@@ -61,6 +61,23 @@ int main(void) {
      * frame boundary lands, so assert the stable memory result. */
     CHECK(ram[0x0200] == 0x08, "STA stored result");
 
+    /* The 8502 core pushes/pulls directly through PAGE_ONE. Relocating the
+     * MMU stack page must move those accesses, not just bus reads/writes. */
+    memset(&ram[0x0400], 0, 0x100);
+    ram[0x01FC] = 0;
+    ram[0x01FD] = 0;
+    load(0x0200, (u8[]){ 0x20, 0x06, 0x02, 0x4C, 0x00, 0x02,
+                        0xEE, 0x00, 0x05, 0x60 }, 10);
+    ram[0xFFFC] = 0x00; ram[0xFFFD] = 0x02;
+    cpu_set_stack_page(&ram[0x0400]);
+    cpu_reset(&cpu);
+    cpu_step_budget(&cpu, 100);
+    CHECK(ram[0x0500] != 0, "subroutine returns from relocated stack");
+    CHECK(ram[0x04FC] == 0x02 && ram[0x04FD] == 0x02 &&
+          ram[0x01FC] == 0 && ram[0x01FD] == 0,
+          "JSR writes relocated stack page, not physical page one");
+    cpu_set_stack_page(&ram[0x0100]);
+
     /* C128 KERNAL IEC traps exchange bytes through BSOUR ($95) and the serial
      * input temporary ($A4), rather than assuming the accumulator is the
      * transport. */

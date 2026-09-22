@@ -129,6 +129,8 @@ static void io_write(C128 *c, u16 addr, u8 val) {
     if (addr >= 0xD500 && addr < 0xD510) {
         if (c->mem.mmu.mmio) {
             mmu_write(&c->mem.mmu, addr, val);
+            if ((addr & 0xff) == 0x06 || (addr & 0xff) == 0x09)
+                cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
             if (mmu_take_c64_request(&c->mem.mmu))
                 notify_post("C64 MODE IS NOT SUPPORTED - USING NATIVE C128 MODE");
             return;
@@ -233,6 +235,7 @@ void c128_init(C128 *c, Config *cfg) {
 
 void c128_reset(C128 *c) {
     mem_reset(&c->mem);
+    cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
     cpu_reset(&c->cpu);
     vic_reset(&c->vic);
     vdc_reset(&c->vdc);

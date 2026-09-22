@@ -56,6 +56,12 @@ static void vic_irq_line_update(Vic *v) {
         v->irq_status &= 0x7F;
 }
 
+static void vic_set_raster_irq_line(Vic *v, u16 line) {
+    if (line != v->raster_irq_line)
+        v->raster_irq_fired = 0;
+    v->raster_irq_line = line;
+}
+
 void vic_write(Vic *v, u16 addr, u8 val) {
     unsigned reg = addr & 0x3F;
     if (reg <= 0x0F) {
@@ -67,8 +73,16 @@ void vic_write(Vic *v, u16 addr, u8 val) {
 
     switch (reg) {
         case 0x10: v->sprite_x_msb = val; break;
-        case 0x11: v->vmode = val; break;
-        case 0x12: v->raster = val; v->raster_irq_line = (u8)(v->raster_irq_line & 0x100) | val; break;
+        case 0x11:
+            v->vmode = val;
+            vic_set_raster_irq_line(v,
+                (u16)((v->raster_irq_line & 0xFF) | ((val & 0x80) << 1)));
+            break;
+        case 0x12:
+            v->raster = val;
+            vic_set_raster_irq_line(v,
+                (u16)((v->raster_irq_line & 0x100) | val));
+            break;
         case 0x15: v->sprite_enable = val; break;
         case 0x16: v->ctrl1 = val; break;
         case 0x17: v->sprite_y_expand = val; break;
@@ -124,7 +138,7 @@ u8 vic_read(Vic *v, u16 addr) {
 
     switch (reg) {
         case 0x10: return v->sprite_x_msb;
-        case 0x11: return (u8)(v->vmode | ((raster & 0x100) ? 0x80 : 0));
+        case 0x11: return (u8)((v->vmode & 0x7F) | ((raster & 0x100) ? 0x80 : 0));
         case 0x12: return (u8)(raster & 0xFF);
         case 0x15: return v->sprite_enable;
         case 0x16: return v->ctrl1;
@@ -173,7 +187,7 @@ bool vic_tick(Vic *v) {
     if (raster < v->prev_raster)
         v->raster_irq_fired = 0;
 
-    if ((raster & 0xFF) == (v->raster_irq_line & 0xFF) && !v->raster_irq_fired) {
+    if (raster == v->raster_irq_line && !v->raster_irq_fired) {
         v->irq_status |= 0x01;   /* raster IRQ flag */
         v->raster_irq_fired = 1;
     }

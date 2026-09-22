@@ -10,7 +10,12 @@ void mmu_reset(Mmu *mmu) {
     mmu->pcr3 = 0x00;
     mmu->pcr4 = 0x00;
     mmu->rcr = 0x00;
-    mmu->mode = 0x00;     /* 1 MHz, 8502 active */
+    mmu->page0 = 0x00;
+    mmu->page0_bank = 0x00;
+    mmu->page0_bank_latch = 0x00;
+    mmu->page1 = 0x01;
+    mmu->page1_bank = 0x00;
+    mmu->page1_bank_latch = 0x00;
     mmu->vdc_bank = 0x00;
     mmu->vdc_ctrl = 0x00;
     mmu->mcr5 = 0x00;
@@ -41,7 +46,16 @@ void mmu_write(Mmu *mmu, u16 addr, u8 val) {
             mmu->mcr5 = (val & 0x3F) | 0x30;
             break;
         case 0x06: mmu->rcr = val; break;
-        case 0x07: mmu->mode = val; break;
+        case 0x07:
+            mmu->page0 = val;
+            mmu->page0_bank = mmu->page0_bank_latch & 1;
+            break;
+        case 0x08: mmu->page0_bank_latch = val; break;
+        case 0x09:
+            mmu->page1 = val;
+            mmu->page1_bank = mmu->page1_bank_latch & 1;
+            break;
+        case 0x0A: mmu->page1_bank_latch = val; break;
         case 0x0D: mmu->vdc_bank = val & 0x03; break;
         case 0x0E: mmu->vdc_ctrl = val; break;
         default: break;
@@ -58,7 +72,10 @@ u8 mmu_read(const Mmu *mmu, u16 addr) {
         case 0x05: /* MCR: bit 7 = 40/80 key, bits 4-5 = GAME/EXROM, low nibble = mode */
             return (u8)((mmu->mcr5 & 0x0F) | (mmu->col4080 ? 0x80 : 0) | 0x10 | 0x20);
         case 0x06: return mmu->rcr;
-        case 0x07: return mmu->mode;
+        case 0x07: return mmu->page0;
+        case 0x08: return mmu->page0_bank | 0xF0;
+        case 0x09: return mmu->page1;
+        case 0x0A: return mmu->page1_bank | 0xF0;
         case 0x0D: return mmu->vdc_bank;
         case 0x0E: return mmu->vdc_ctrl;
         default:   return 0xFF;

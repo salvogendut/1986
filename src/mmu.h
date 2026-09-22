@@ -13,7 +13,8 @@
  *   $D500   — memory configuration register (MCR)
  *   $D501   — pre-configuration register
  *   $D506   — RAM configuration register (VIC bank and common-RAM layout)
- *   $D507   — mode register (bit 6: 2 MHz, bit 7: Z80 enable)
+ *   $D507/8 — relocated zero-page address (page number / bank latch)
+ *   $D509/A — relocated stack-page address (page number / bank latch)
  *   $D50D   — VDC bank (bits 1..0 select 16K VDC bank)
  *   $D50E   — VDC access control (bit 6: IRQ mask, bit 7: register select)
  */
@@ -24,7 +25,12 @@ typedef struct {
     u8  pcr3;     /* preconfiguration register $D503 */
     u8  pcr4;     /* preconfiguration register $D504 */
     u8  rcr;      /* $D506 RAM configuration register */
-    u8  mode;     /* $D507 */
+    u8  page0;    /* $D507, physical page for CPU $0000-$00FF */
+    u8  page0_bank; /* $D508, committed by a write to $D507 */
+    u8  page0_bank_latch;
+    u8  page1;    /* $D509, physical page for CPU $0100-$01FF */
+    u8  page1_bank; /* $D50A, committed by a write to $D509 */
+    u8  page1_bank_latch;
     u8  vdc_bank; /* $D50D */
     u8  vdc_ctrl; /* $D50E */
     u8  mcr5;     /* $D505 mode configuration register (low nibble) */

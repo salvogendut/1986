@@ -30,8 +30,8 @@ typedef struct {
     u16 char_addr;     /* $D018 character-data base within the 16K VIC window */
     u8  irq_status;    /* $D019 (bit 0 = raster, bit 7 = IRQ line) */
     u8  irq_mask;      /* $D01A (bit 0 = raster IRQ enable) */
-    u8  raster_irq_line; /* raster line for the IRQ compare */
-    u8  raster_irq_fired; /* raster IRQ already asserted this frame */
+    u16 raster_irq_line; /* 9-bit raster line for the IRQ compare */
+    u8  raster_irq_fired; /* current compare has already matched */
     u8  sprite_x[VIC_SPRITES];
     u8  sprite_y[VIC_SPRITES];
     u8  sprite_x_msb;       /* $D010 */
@@ -57,7 +57,7 @@ u8   vic_read(Vic *v, u16 addr);
 /* Select one of the eight 16K VIC windows in the C128's 128K RAM. */
 void vic_set_bank(Vic *v, unsigned bank);
 /* Advance raster/IRQ state and return true if the raster IRQ line is now
- * asserted. Called once per frame. */
+ * asserted. Called once per raster-line chunk. */
 bool vic_tick(Vic *v);
 /* Render one full frame (raster 0..199) into the display buffer. */
 void vic_render(Vic *v, Mem *m, Display *d);
