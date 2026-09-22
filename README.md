@@ -124,21 +124,26 @@ reset/interrupt vectors, a standalone NMOS 6502 instruction core, two
 serial/interrupt registers. With Advanced > Real Disk Drive enabled, 1571CR
 selected in Media, and a valid `dos1571cr.bin` in the ROM directory, the next
 launch uses the drive DOS ROM and line-level IEC instead of KERNAL traps.
-The drive CPU clocks alongside the C128, and a read-only GCR mechanism presents
-D64/D71 sector tracks to the
-drive ROM through VIA2, including motor, head step, side, speed, sync, and
-write-protect and track-zero sensing. BASIC `DIRECTORY` and `LOAD` work through
-the real 1571CR ROM's slow IEC path with D64 media. This mode remains
-experimental and read-only: write-side GCR, WD1770/FDC2, accurate mechanism
-timing, and burst serial are missing. The second drive is not yet reachable in
-true-drive mode; use the fast virtual mode for two drives or disk writes.
+The drive CPU clocks alongside the C128, and its GCR mechanism presents D64/D71
+tracks through VIA2, including motor, head step, side, speed, sync, write-protect,
+and track-zero sensing. BASIC `DIRECTORY`, `LOAD`, and `SAVE` work through the
+real 1571CR ROM's slow IEC path. Normal checksum-valid sector writes are decoded
+back into D64/D71 and atomically saved to the host image. A read-only or
+externally changed image is never overwritten; an unsaved write prevents Media
+ejection/replacement and displays an error. Resolve that error before quitting;
+the original image remains intact, but an unrepresentable pending write cannot
+survive process exit. Keep backups of important images.
+This mode is still experimental: nonstandard raw/protection tracks cannot be
+represented in D64/D71, while WD1770/FDC2 MFM, precise mechanism timing, and
+burst serial remain missing. The second drive is not yet reachable in true-drive
+mode; use the fast virtual mode for two drives.
 Changing the Real Disk Drive setting, drive hardware type, or true-drive IEC
 address requires restarting the application. If the drive ROM is missing or
 the hardware type is 1581, the fast virtual backend remains active. Selecting
 1581 hardware does not imply that its hardware is emulated.
 The bottom bar shows a separately labeled activity LED for each enabled drive,
 in both the 40-column and 80-column windows. In true-drive mode, Drive 1's LED
-flashes on motor and head changes and pulses during disk-byte transfers.
+flashes on motor and head changes and pulses during disk-byte reads and writes.
 Advanced > Drive Audio Monitor (default Off) adds quiet, synthesized motor hum
 and head-step clicks to the SID output while the real 1571 runs. The independent
 Drive Visual Monitor toggle (also default Off) shows a translucent waveform

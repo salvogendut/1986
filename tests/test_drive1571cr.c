@@ -64,6 +64,13 @@ int main(void) {
     drive1571cr_write(&drive, 0x1c02, 0x34);
     CHECK(drive.via2.ddrb == 0x34 && probe.writes == 0,
           "VIA2 register bank decoded at $1c00 mirror");
+    drive1571cr_write(&drive, 0x1c0c, 0x02);
+    CHECK(drive.gcr.write_mode, "VIA2 PCR selects GCR write gate");
+    drive1571cr_write(&drive, 0x1c01, 0xa5);
+    CHECK(drive.gcr.write_value == 0xa5,
+          "VIA2 port A loads the GCR write latch");
+    drive1571cr_write(&drive, 0x1c0c, 0x22);
+    CHECK(!drive.gcr.write_mode, "VIA2 PCR restores GCR read gate");
     drive1571cr_write(&drive, 0x2f07, 0x56);
     CHECK(probe.chip == DRIVE1571CR_FDC && probe.reg == 0x2f07 && probe.value == 0x56,
           "WD1770 region decoded at $2000-$2fff");

@@ -710,8 +710,10 @@ int main(int argc, char **argv) {
     paste_free(&paste);
     monitor_destroy(monitor);
     overlay_quit(&overlay);
-    drive_attach_disk(&c.drive, NULL);
+    int drive_exit_status = drive_attach_disk(&c.drive, NULL);
+    if (drive_exit_status == -2)
+        fprintf(stderr, "1986: unsaved 1571 GCR write at exit; original disk image was not overwritten\n");
     drive_attach_disk(&c.drive2, NULL);
     display_destroy(&c.display);
-    return 0;
+    return drive_exit_status == -2 ? 1 : 0;
 }

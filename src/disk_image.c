@@ -697,6 +697,47 @@ static int persist_image(const DiskImage *d, const u8 *image) {
 #endif
 }
 
+DiskSaveResult disk_image_write_gcr_track(DiskImage *d, int track,
+                                          const u8 *sector_data,
+                                          unsigned sector_mask) {
+    if (!d || !d->data || !d->writable ||
+        (d->format != DISK_FORMAT_D64 && d->format != DISK_FORMAT_D71))
+        return DISK_SAVE_WRITE_PROTECT;
+    int sectors = disk_image_track_sectors(d, track);
+    if (!sector_data || sectors <= 0 || sectors > 32 ||
+        (sector_mask >> sectors) != 0)
+        return DISK_SAVE_IO_ERROR;
+    if (!sector_mask) return DISK_SAVE_OK;
+
+    u8 *next = malloc(d->size);
+    if (!next) return DISK_SAVE_IO_ERROR;
+    memcpy(next, d->data, d->size);
+    bool changed = false;
+    int track_offset = disk_image_track_offset(d, track);
+    size_t error_offset = (size_t)disk_image_track_offset(d, d->tracks + 1);
+    for (int sector = 0; sector < sectors; ++sector) {
+        if (!(sector_mask & (1u << sector))) continue;
+        size_t offset = (size_t)track_offset + (size_t)sector * 256u;
+        if (offset + 256u > d->size) { free(next); return DISK_SAVE_IO_ERROR; }
+        if (memcmp(next + offset, sector_data + (size_t)sector * 256u, 256u)) {
+            memcpy(next + offset, sector_data + (size_t)sector * 256u, 256u);
+            changed = true;
+        }
+        if (d->has_errors) {
+            size_t error_byte = error_offset + offset / 256u;
+            if (error_byte >= d->size) { free(next); return DISK_SAVE_IO_ERROR; }
+            if (next[error_byte] != 1) { next[error_byte] = 1; changed = true; }
+        }
+    }
+    if (changed && persist_image(d, next) != 0) {
+        free(next);
+        return DISK_SAVE_IO_ERROR;
+    }
+    if (changed) memcpy(d->data, next, d->size);
+    free(next);
+    return DISK_SAVE_OK;
+}
+
 DiskSaveResult disk_image_save_prg(DiskImage *d, const char *name, const u8 *data,
                           size_t length, bool replace) {
     if (!d || !d->data || !d->writable)

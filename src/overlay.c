@@ -139,9 +139,13 @@ static void overlay_close(Overlay *ov) {
 static bool replace_disk_image(Overlay *ov, int which, const char *path) {
     Drive *drive = which == 2 ? &ov->c128->drive2 : &ov->c128->drive;
     char *configured = which == 2 ? ov->cfg->disk2_path : ov->cfg->disk_path;
+    int result = drive_attach_disk(drive, path);
+    if (result == -2) {
+        notify_post("DRIVE WRITE COULD NOT BE SAVED - DISK KEPT");
+        return false;
+    }
     configured[0] = '\0';
-
-    if (drive_attach_disk(drive, path) != 0) {
+    if (result != 0) {
         fprintf(stderr, "1986: could not attach disk '%s'\n", path);
         notify_post("COULD NOT INSERT DISK IMAGE");
         save_config(ov);
@@ -639,10 +643,13 @@ static void overlay_activate(Overlay *ov) {
                     ov->keyboard_map_visible = true;
                     break;
                 case ADV_RESET:
+                    if (drive_attach_disk(&ov->c128->drive, NULL) == -2) {
+                        notify_post("DRIVE WRITE COULD NOT BE SAVED - RESET CANCELLED");
+                        break;
+                    }
+                    drive_attach_disk(&ov->c128->drive2, NULL);
                     config_set_defaults(ov->cfg);
                     vdc_set_ram_size_kb(&ov->c128->vdc, ov->cfg->vdc_ram_kb);
-                    drive_attach_disk(&ov->c128->drive, NULL);
-                    drive_attach_disk(&ov->c128->drive2, NULL);
                     drive_set_unit(&ov->c128->drive, ov->cfg->drive_unit);
                     drive_set_unit(&ov->c128->drive2, ov->cfg->drive2_unit);
                     apply_display(ov);
@@ -843,10 +850,10 @@ void overlay_render_drive_scope(const Overlay *ov, SDL_Renderer *r) {
     const GcrDrive *g = &ov->c128->integrated_drive.gcr;
     char status[96];
     snprintf(status, sizeof(status),
-             "1571 #%d  MOTOR %s  TRACK %u.%c  SIDE %u  READ %u  STEP %u",
+             "1571 #%d  MOTOR %s  TRACK %u.%c  SIDE %u  R %u  W %u  STEP %u",
              ov->cfg->drive_unit, g->motor ? "ON" : "OFF",
              g->half_track / 2, (g->half_track & 1) ? '5' : '0',
-             g->side, g->read_events, g->step_events);
+             g->side, g->read_events, g->write_events, g->step_events);
     SDL_SetRenderDrawColor(r, 175, 240, 245, 255);
     SDL_RenderDebugText(r, plot_x, panel_y + 6.0f, status);
     SDL_SetRenderDrawColor(r, 105, 145, 155, 130);

@@ -217,12 +217,14 @@ cycle-level 1571 implementation without conflating their interfaces.
   (following VICE's limited 1571CR handling; extra FDC2 registers remain open).
 - [x] Clock the 1571CR ROM alongside the C128 at 1/2 MHz and connect slow IEC
   ATN/CLOCK/DATA/ATNA between CIA2 and VIA1, with bus and ROM-probe tests (#94).
-- [x] Read-only D64/D71 GCR tracks through VIA2: motor, stepper, side, speed,
-  sync, write-protect and byte-ready signals, with deterministic tests (#96).
+- [x] D64/D71 GCR tracks through VIA2: motor, stepper, side, speed, sync,
+  write-protect and byte-ready signals, with deterministic read tests (#96).
+- [x] VIA2 GCR write gate and data latch; checksum-valid D64/D71 sector writes
+  persist atomically, with write protection and media-change flush tests (#102).
 - [x] Opt-in unpatched KERNAL/1571CR ROM slow IEC path: interleaved host/drive
   execution, ATN interrupt and address straps, track-zero sensing; `DIRECTORY`
   and `LOAD` work on D64 through the drive ROM (#98).
-- [ ] Complete true-drive mode: disk writes, WD1770/FDC2, fast serial, accurate
+- [ ] Complete true-drive mode: WD1770/FDC2, fast serial, accurate
   mechanism timing, second-drive bus sharing, and broader D71 validation.
 - [x] Media persists a per-drive hardware type when real-drive mode is selected;
   1581 is shown as future hardware rather than confused with D81 image support.
