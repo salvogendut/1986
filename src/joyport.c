@@ -11,9 +11,11 @@ void joyports_set_joystick(JoyPorts *ports, unsigned port, u8 pressed) {
 
 void joyports_mouse_motion(JoyPorts *ports, unsigned port, int dx, int dy) {
     if (port >= 2) return;
-    /* 1351 POT values wrap through a seven-bit position counter. */
+    /* 1351 POT values wrap through a seven-bit position counter. Host SDL
+     * coordinates grow downward; the Commodore mouse Y counter runs upward
+     * (VICE's SDL mouse driver likewise subtracts relative Y motion). */
     ports->mouse_x[port] = (u8)((ports->mouse_x[port] + dx) & 0x7f);
-    ports->mouse_y[port] = (u8)((ports->mouse_y[port] + dy) & 0x7f);
+    ports->mouse_y[port] = (u8)((ports->mouse_y[port] - dy) & 0x7f);
 }
 
 void joyports_mouse_button(JoyPorts *ports, unsigned port, bool right, bool down) {

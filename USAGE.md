@@ -156,6 +156,12 @@ both Off by default; the visual scope sits above the function-key footer.
 If a write error appears, resolve it before quitting: the original image stays
 intact, but unsaved in-memory GCR data cannot survive exit.
 
+GEOS 128 from `GEOS128.D64` reaches the Desktop with Real Disk Drive On and
+the 1571CR selected. At the BASIC prompt, use `DLOAD"GEOS128"` and then `RUN`.
+Its loader uploads drive code with `M-W`/`M-E`, so the fast virtual drive cannot
+boot it. Set the desired joy port to Mouse (1351) and click the emulator window
+to capture the pointer. GEOS may write to its disk; keep a backup of the image.
+
 The F9 overlay uses a compact top panel with smaller text; the running screen
 remains visible below it.
 

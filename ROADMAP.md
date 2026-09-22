@@ -224,14 +224,16 @@ cycle-level 1571 implementation without conflating their interfaces.
 - [x] Opt-in unpatched KERNAL/1571CR ROM slow IEC path: interleaved host/drive
   execution, ATN interrupt and address straps, track-zero sensing; `DIRECTORY`
   and `LOAD` work on D64 through the drive ROM (#98).
+- [x] GEOS 128 drive-RAM `M-W`/`M-E` loader reaches the Desktop through the
+  true-drive path with CIA2 bus-cycle synchronization for fast IEC reads (#74).
 - [ ] Complete true-drive mode: WD1770/FDC2, fast serial, accurate
   mechanism timing, second-drive bus sharing, and broader D71 validation.
 - [x] Media persists a per-drive hardware type when real-drive mode is selected;
   1581 is shown as future hardware rather than confused with D81 image support.
 - [x] Separate, live Drive 1/Drive 2 activity LEDs in both display windows
   (#92); real-drive pulses follow motor, seek, and GCR reads (#100).
-- [x] Independent saved, default-off synthetic audio and visual waveform
-  monitors for the real 1571 in Advanced (#100).
+- [x] Independent saved, default-off sample-based audio and activity waveform
+  monitors for the real 1571 in Advanced (#100, #104).
 - [x] Persisted Advanced > Real Disk Drive preference, default Off; On selects
   the 1571CR ROM backend on the next launch when its ROM is available (#57, #98).
 - [x] Optional second fast virtual drive with independent image and a distinct
