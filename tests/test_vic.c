@@ -43,6 +43,15 @@ int main(void) {
     mem_set_processor_port(mem, 0x07, 0x00); /* VIC colour banks 0, ROM on */
 
     vic_init(&vic);
+    vic_write(&vic, 0xD01A, 0x01);
+    vic.irq_status = 0x81;
+    vic_write(&vic, 0xD019, 0x40); /* final value of LSR $D019 */
+    CHECK(vic.irq_status == 0x81,
+          "ordinary write only acknowledges IRQ bits in its value");
+    vic_write_rmw(&vic, 0xD019, 0x40);
+    CHECK(vic.irq_status == 0,
+          "LSR $D019 acknowledges the read byte through its RMW bus write");
+    vic_write(&vic, 0xD01A, 0x00);
     vic_write(&vic, 0xD011, 0x3B); /* display on, bitmap mode */
     vic_write(&vic, 0xD018, 0x18); /* screen $0400, bitmap $2000 */
     vic.bg_color[0] = 0x02;        /* must not replace hires cell background */

@@ -71,23 +71,7 @@ static void vdc_busy(Vdc *v, unsigned nominal_cycles) {
 }
 
 static bool vdc_display_active(const Vdc *v) {
-    int rasters_per_row = (v->regs[9] & 0x1F) + 1;
-    unsigned frame_lines = ((unsigned)v->regs[4] + 1u) * (unsigned)rasters_per_row;
-    if (v->regs[4] == 0xFF) {
-        /* With R4=$ff the VDC row counter rolls independently of the PAL
-         * frame, even when R9 makes its own frame shorter than 312 lines. */
-        unsigned line = (unsigned)(((u64)v->frame_counter * 312u + v->raster_line)
-                                   % frame_lines);
-        unsigned row = line / (unsigned)rasters_per_row;
-        return row >= 1u && row <= v->regs[6];
-    }
-    int border = ((int)v->regs[4] + 1 - (int)v->regs[7]) * rasters_per_row
-               - (v->regs[3] >> 4);
-    if (border < 0) border = 0;
-    border += v->regs[9] & 0x1F;
-    int display_end = border + (int)v->regs[6] * rasters_per_row;
-    return v->raster_line > (unsigned)border &&
-           v->raster_line <= (unsigned)display_end;
+    return v->row_counter >= 1u && v->row_counter <= v->regs[6];
 }
 
 static void vdc_busy_data(Vdc *v) {
@@ -113,6 +97,9 @@ void vdc_reset(Vdc *v) {
     v->bytes_per_char = 16;
     v->frame_counter = 0;
     v->raster_line = 0;
+    v->row_counter = 0;
+    v->raster_in_row = 0;
+    v->row_advance_latched = false;
     v->bus_clock = 1;
     v->ready_clock = 0;
     v->clock_scale = 1;
@@ -217,6 +204,23 @@ u8 vdc_read_status(const Vdc *v) {
 }
 
 void vdc_set_raster_line(Vdc *v, unsigned line) {
+    /* VDC vertical timing is not reset by the VIC-II's PAL frame boundary.
+     * R9 may even change mid-frame, so advance its row counter line by line. */
+    unsigned elapsed = line >= v->raster_line
+        ? line - v->raster_line : 312u - v->raster_line + line;
+    for (unsigned i = 0; i < elapsed; ++i) {
+        if (v->row_advance_latched) {
+            v->row_advance_latched = false;
+            v->raster_in_row = 0;
+            if (++v->row_counter > v->regs[4]) v->row_counter = 0;
+        } else {
+            v->raster_in_row = (v->raster_in_row + 1u) & 0x1Fu;
+        }
+        /* R9 changes in the middle of a row are compared for equality, not
+         * treated as an immediate row end (VICE's row-counter latch). */
+        if (v->raster_in_row == (v->regs[9] & 0x1F))
+            v->row_advance_latched = true;
+    }
     v->raster_line = line;
 }
 
@@ -325,10 +329,13 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
 
     v->frame_counter++;
 
+    bool bitmap_mode = (v->regs[25] & 0x80) != 0;
     int cols = (int)v->screen_text_cols;
-    int rows = (int)v->screen_textlines;
+    /* Bitmap mode may display one raster per character row (R9=0), with
+     * more than 50 rows. Amaurote uses R6=$FE for a 254-raster picture. */
+    int rows = bitmap_mode ? (int)v->regs[6] : (int)v->screen_textlines;
     if (cols > VDC_MAX_COLS) cols = VDC_MAX_COLS;
-    if (rows > VDC_MAX_LINES) rows = VDC_MAX_LINES;
+    if (!bitmap_mode && rows > VDC_MAX_LINES) rows = VDC_MAX_LINES;
     if (cols < 1) cols = 1;
     if (rows < 1) rows = 1;
 
@@ -342,7 +349,7 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
     bool attr_mode = (v->regs[25] & 0x40) != 0;
     bool reverse_screen = (v->regs[24] & 0x40) != 0;
 
-    if (v->regs[25] & 0x80) {
+    if (bitmap_mode) {
         render_bitmap(v, pixels, fbw, fbh, cols, rows, attr_mode,
                       reverse_screen, fg, bg);
         v->dirty = false;

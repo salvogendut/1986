@@ -97,6 +97,16 @@ void vic_write(Vic *v, u16 addr, u8 val) {
     }
 }
 
+void vic_write_rmw(Vic *v, u16 addr, u8 val) {
+    /* 6502 read-modify-write instructions put the unmodified byte on the
+     * bus before writing the result. VICE's core reports this as one write
+     * with maincpu_rmw_flag, so reproduce the first bus write here. On
+     * $D019 this acknowledges pending VIC IRQ bits even when LSR's final
+     * value no longer has those bits set. */
+    vic_write(v, addr, vic_read(v, addr));
+    vic_write(v, addr, val);
+}
+
 /* Current raster line, derived from the CPU cycle counter so it advances as
  * the CPU executes (one raster line per 63 cycles). */
 static unsigned vic_raster(const Vic *v) {

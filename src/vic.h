@@ -52,6 +52,7 @@ typedef struct {
 void vic_init(Vic *v);
 void vic_reset(Vic *v);
 void vic_write(Vic *v, u16 addr, u8 val);
+void vic_write_rmw(Vic *v, u16 addr, u8 val);
 u8   vic_read(Vic *v, u16 addr);
 /* Select one of the eight 16K VIC windows in the C128's 128K RAM. */
 void vic_set_bank(Vic *v, unsigned bank);

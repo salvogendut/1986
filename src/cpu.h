@@ -59,6 +59,7 @@ void cpu_irq(Cpu8502 *cpu, bool level);
 void cpu_nmi(Cpu8502 *cpu, bool level);
 void cpu_pc(Cpu8502 *cpu, u16 pc);
 u64  cpu_cycles(void);                /* total cycles executed (for raster sync) */
+bool cpu_rmw_active(void);            /* current instruction has an RMW bus write */
 void cpu_install_serial_traps(u8 *kernal); /* patch the KERNAL ROM with IEC traps */
 
 /* IEC (serial-bus) trap callbacks, invoked by the KERNAL's patched routines.

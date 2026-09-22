@@ -347,3 +347,7 @@ void cpu_pc(Cpu8502 *cpu, u16 pc) {
 u64 cpu_cycles(void) {
     return (u64)maincpu_clk;
 }
+
+bool cpu_rmw_active(void) {
+    return maincpu_rmw_flag != 0;
+}

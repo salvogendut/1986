@@ -113,7 +113,13 @@ static u8 io_read(C128 *c, u16 addr) {
 }
 
 static void io_write(C128 *c, u16 addr, u8 val) {
-    if (addr >= 0xD000 && addr < 0xD400) { vic_write(&c->vic, addr, val); return; }
+    if (addr >= 0xD000 && addr < 0xD400) {
+        if ((addr & 0x3F) == 0x19 && cpu_rmw_active())
+            vic_write_rmw(&c->vic, addr, val);
+        else
+            vic_write(&c->vic, addr, val);
+        return;
+    }
     if (addr >= 0xD400 && addr < 0xD500) { sid_write(&c->sid, addr, val); return; }
     if (addr >= 0xD800 && addr < 0xDC00) {
         unsigned bank = c->mem.pla_data & 0x01;   /* CPU colour-RAM bank */
