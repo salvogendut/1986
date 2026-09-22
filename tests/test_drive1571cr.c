@@ -106,6 +106,18 @@ int main(void) {
     CHECK(drive.cpu.cycles >= 55 && !drive.cpu.jammed,
           "drive CPU tracks elapsed cycles without jamming");
 
+    static const u8 loop[] = { 0x4c, 0x00, 0x80 }; /* JMP $8000, 3 cycles */
+    install_program(&drive, loop, sizeof(loop));
+    for (int i = 0; i < 1000; ++i) drive1571cr_advance(&drive, 1);
+    CHECK(drive.cpu.cycles >= 1000 && drive.cpu.cycles <= 1002 &&
+          drive.clock_debt >= 0 && drive.clock_debt <= 2,
+          "short scheduler slices retain instruction overshoot without drift");
+    drive1571cr_write(&drive, 0x1003, 0x20); /* VIA1 DDRA bit 5 output */
+    drive1571cr_write(&drive, 0x1001, 0x20); /* select 2 MHz */
+    CHECK(drive.clock_2mhz, "VIA1 PA5 selects 1571 double-speed clock");
+    drive1571cr_write(&drive, 0x1001, 0x00);
+    CHECK(!drive.clock_2mhz, "VIA1 PA5 restores 1 MHz clock");
+
     static const u8 arithmetic[] = {
         0xf8,             /* SED */
         0x18,             /* CLC */

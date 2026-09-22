@@ -169,7 +169,17 @@ IRQ propagation to the drive CPU. Their timing is at instruction boundaries;
 shift-register and sub-instruction bus timing are still absent. The MOS5710's
 limited CIA-like SDR/ICR/CRA registers use the existing CIA model, following
 VICE's partial 1571CR handling. Its extra FDC2 registers and the WD1770 have
-decoded hooks only; the mechanism and physical IEC bus are not yet connected.
+decoded hooks only; the mechanism is not yet connected. With the Advanced
+gate on, a present 1571CR ROM executes in raster-line slices at the drive's
+1 MHz clock (or 2 MHz when VIA1 PA5 selects it), with instruction overshoot
+carried between slices. CIA2 PA3-PA7 and VIA1 PB0-PB4/PB7 now exchange slow
+IEC ATN/CLOCK/DATA and ATNA signals through an open-collector bus, including
+the VIA1 CA1 ATN edge. `C128_1571_TRACE=1` reports ROM PC, cycles, VIA ports,
+and IEC levels every 50 frames. This remains a probe: virtual-drive KERNAL
+traps still handle disk commands until FDC, mechanism, fast serial, and
+hardware validation are ready.
+The hardware probe currently represents only the integrated Drive 1; the
+optional second drive stays on the independent virtual path.
 The core is a sibling of the command-level `VirtualDrive`, never behind its
 interface; the modes will share only neutral disk-image/media code. The
 Advanced real-drive gate remains pending until a real IEC backend can replace

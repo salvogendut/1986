@@ -34,6 +34,8 @@ typedef struct {
     Drive1571CrCpu cpu;
     Via6522 via1, via2;
     Cia mos5710; /* partial CIA portion; FDC2 registers remain external */
+    int clock_debt; /* instruction overshoot carried into the next bus slice */
+    bool clock_2mhz; /* VIA1 PA5 selects the 1571's 2 MHz sync mode */
     bool external_irq;
     Drive1571CrIoRead io_read;
     Drive1571CrIoWrite io_write;
@@ -52,3 +54,5 @@ void drive1571cr_nmi(Drive1571Cr *drive);
 /* One NMOS 6502 instruction; returns cycles used, or zero if stopped/jammed. */
 int drive1571cr_step(Drive1571Cr *drive);
 int drive1571cr_run(Drive1571Cr *drive, int cycle_budget);
+/* Clock a bounded slice without accumulating instruction overshoot. */
+int drive1571cr_advance(Drive1571Cr *drive, int cycle_budget);
