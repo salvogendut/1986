@@ -75,6 +75,14 @@ typedef struct {
     u8   (*take_status)(void *ctx);        /* consume pending IEC status bits */
 } IecCallbacks;
 
+typedef struct {
+    void *ctx;
+    bool (*next_header)(void *ctx, u8 header[21]);
+    int (*read_byte)(void *ctx);
+} TapeCallbacks;
+
 /* Patch the KERNAL's IEC routines and install the callbacks. Pass cb=NULL to
  * just patch the serial-ready routines (boot). */
 void cpu_install_iec_traps(u8 *kernal, const IecCallbacks *cb);
+/* T64 file-container traps only; pass NULL to restore real TAP handling. */
+void cpu_set_tape_traps(u8 *kernal, const TapeCallbacks *cb);

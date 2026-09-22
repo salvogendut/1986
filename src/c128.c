@@ -58,6 +58,44 @@ static int flush_second_real_drive(void *ctx) {
     return gcr_drive_flush(&c->second_real_drive.gcr) == DISK_SAVE_OK ? 0 : -1;
 }
 
+static void tape_read_pulse(void *ctx) {
+    Cia *cia = ctx;
+    cia_set_flag(cia, false);
+    cia_set_flag(cia, true);
+}
+
+static void tape_motor_update(C128 *c) {
+    tape_set_motor(&c->tape, (c->cpu.io_ddr & 0x20) &&
+                   !(c->cpu.io_port & 0x20));
+}
+
+static bool t64_header_callback(void *ctx, u8 header[21]) {
+    return tape_t64_next_header(&((C128 *)ctx)->tape, header);
+}
+
+static int t64_byte_callback(void *ctx) {
+    return tape_t64_read_byte(&((C128 *)ctx)->tape);
+}
+
+void c128_eject_tape(C128 *c) {
+    cpu_set_tape_traps(c->mem.kernal, NULL);
+    tape_eject(&c->tape);
+}
+
+bool c128_mount_tape(C128 *c, const char *path) {
+    c128_eject_tape(c);
+    if (!tape_mount(&c->tape, path)) return false;
+    if (c->tape.kind == TAPE_T64) {
+        TapeCallbacks cb = {
+            .ctx = c,
+            .next_header = t64_header_callback,
+            .read_byte = t64_byte_callback,
+        };
+        cpu_set_tape_traps(c->mem.kernal, &cb);
+    }
+    return true;
+}
+
 /* --- CPU bus: route CPU reads/writes through memory + I/O. --- */
 
 static u8 io_read(C128 *c, u16 addr) {
@@ -179,7 +217,14 @@ u8 c128_mem_read(void *ctx, u16 addr) {
     C128 *c = ctx;
     /* 8502 on-chip I/O port at $0000 (DDR) and $0001 (port) drives the MMU. */
     if (addr == 0x0000) return c->cpu.io_ddr;
-    if (addr == 0x0001) return c->cpu.io_port;
+    if (addr == 0x0001) {
+        u8 value = c->cpu.io_port;
+        if (!(c->cpu.io_ddr & 0x10)) {
+            value |= 0x10; /* unpressed cassette switch is pulled high */
+            if (c->tape.play_button) value &= (u8)~0x10;
+        }
+        return value;
+    }
     if (addr >= 0xFF00 && addr <= 0xFF04) return mmu_ffxx_read(&c->mem.mmu, addr);
     if (addr >= 0xD000 && addr < 0xE000 && mem_io_visible(&c->mem))
         return io_read(c, addr);
@@ -188,8 +233,8 @@ u8 c128_mem_read(void *ctx, u16 addr) {
 
 void c128_mem_write(void *ctx, u16 addr, u8 val) {
     C128 *c = ctx;
-    if (addr == 0x0000) { c->cpu.io_ddr = val; pla_update(c); return; }
-    if (addr == 0x0001) { c->cpu.io_port = val; pla_update(c); return; }
+    if (addr == 0x0000) { c->cpu.io_ddr = val; pla_update(c); tape_motor_update(c); return; }
+    if (addr == 0x0001) { c->cpu.io_port = val; pla_update(c); tape_motor_update(c); return; }
     if (addr >= 0xFF00 && addr <= 0xFF04) { mmu_ffxx_write(&c->mem.mmu, addr, val); return; }
     if (addr >= 0xD000 && addr < 0xE000 && mem_io_visible(&c->mem)) {
         io_write(c, addr, val);
@@ -233,6 +278,7 @@ void c128_init(C128 *c, Config *cfg) {
     sid_init(&c->sid);
     kbd_init(&c->kbd);
     joyports_reset(&c->joyports);
+    tape_init(&c->tape);
     config_normalize_drive_units(cfg);
     drive_init(&c->drive, cfg);
     drive_set_media_change_hook(&c->drive, flush_integrated_drive, c);
@@ -269,6 +315,7 @@ void c128_reset(C128 *c) {
     kbd_reset(&c->kbd);
     c->restore_down = false;
     joyports_reset(&c->joyports);
+    tape_set_motor(&c->tape, false);
     drive_reset(&c->drive);
     drive_reset(&c->drive2);
     drive1571cr_reset(&c->integrated_drive);
@@ -293,6 +340,7 @@ void c128_reset(C128 *c) {
 }
 
 int c128_frame(C128 *c) {
+    c->tape.frame_edges = 0;
     if (c->drive_media_generation != c->drive.media_generation) {
         gcr_drive_attach(&c->integrated_drive.gcr,
             c->drive.disk_attached ? &c->drive.image : NULL);
@@ -328,7 +376,9 @@ int c128_frame(C128 *c) {
              * In true-drive mode, alternate one 8502
              * instruction with the corresponding 1571 clock slice. */
             int ran = cpu_step_budget(&c->cpu,
-                c->drive_raw_iec ? 1 : target - progressed);
+                (c->drive_raw_iec ||
+                 (c->tape.kind == TAPE_TAP && c->tape.play_button))
+                    ? 1 : target - progressed);
             if (ran <= 0) break;
             int elapsed = ran;
             total += ran;
@@ -343,9 +393,17 @@ int c128_frame(C128 *c) {
                 c->sid_fast_remainder = sid_cycles & 1;
                 sid_cycles /= 2;
             }
-            c->audio_count += sid_clock(&c->sid, sid_cycles,
+            tape_advance(&c->tape, (unsigned)sid_cycles,
+                         tape_read_pulse, &c->cia1);
+            if (c->tape.play_button)
+                cpu_irq(&c->cpu, cia_irq_line(&c->cia1) ||
+                        (c->vic.irq_status & 0x80));
+            int produced = sid_clock(&c->sid, sid_cycles,
                 c->audio_frame + c->audio_count,
                 C128_AUDIO_FRAME_CAPACITY - c->audio_count);
+            tape_mix_audio(&c->tape, c->audio_frame + c->audio_count,
+                           produced, c->cfg->tape_audio_monitor);
+            c->audio_count += produced;
         }
         cpu_debt = progressed - target;
         remaining -= chunk;
@@ -399,6 +457,12 @@ int c128_frame(C128 *c) {
     }
     c128_frame_count++;
     c->frames_since_reset++;
+    if (c->tape.kind == TAPE_TAP && getenv("C128_TAPE_TRACE") &&
+        c128_frame_count % 100 == 0)
+        fprintf(stderr, "[tape] frame=%d play=%d motor=%d pos=%zu/%zu edges=%u pc=$%04x\n",
+                c128_frame_count, c->tape.play_button, c->tape.motor_on,
+                c->tape.position, c->tape.payload_end,
+                c->tape.frame_edges, c->cpu.pc);
     if (drive_probe_active(c) && getenv("C128_1571_TRACE") &&
         c->frames_since_reset % 50 == 0) {
         fprintf(stderr, "[1571] frame=%d pc=$%04x cycles=%llu via1=$%02x/$%02x pcr=$%02x ifr=$%02x ier=$%02x ca1=%d irq=%d CIA2=$%02x/$%02x IEC=%d%d%d host=%u drive=%u lines=%u ram79=$%02x ram7a=$%02x ram83=$%02x ram84=$%02x GCR=m%d led%d s%u h%u z%u p%u $%02x sync%d R%u W%u%s\n",

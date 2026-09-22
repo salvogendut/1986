@@ -114,11 +114,16 @@ Current working pieces include:
   bank-switched cartridges are not yet supported.
 - Optional U36 internal function-ROM slot for raw 8/16/32 KiB `.bin`/`.rom`
   images, selected from Media when Tinker is enabled and restored at launch.
+- Read-only TAP pulse playback through the C128 cassette motor/sense lines
+  and CIA1 FLAG input, plus T64 file-container loading through KERNAL tape
+  traps. Media supports live insert/eject; F2 controls Play/Stop and F3 rewinds.
+  Advanced has separate tape-signal audio and visual monitors. T64 has no
+  recorded waveform, so its audio monitor is silent.
 - Tests for the CPU, MMU, CIA/SID, VIC graphics and sprites, configuration,
   GIF encoder, disk formats, KERNAL IEC traps, virtual-drive channels, and
   atomic block-command writes.
 
-Tape playback, further write-side DOS commands, complete 1571 emulation,
+Tape recording, further write-side DOS commands, complete 1571 emulation,
 high-fidelity SID filter/combined-waveform emulation, CP/M mode, and several
 accuracy features remain unfinished. The virtual drive does not emulate 1571
 or 1581 hardware; it and the true 1571 share only the media/image layer.

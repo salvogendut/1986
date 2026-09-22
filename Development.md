@@ -195,6 +195,16 @@ Advanced real-drive gate selects this backend after restart when its DOS ROM
 is present. Media stores 1571/1581
 hardware type independently for each drive; 1581 is only a future selection.
 
+The cassette implementation in `tape.c` follows VICE 3.10's distinction
+between TAP and T64. TAP v0/v1/v2 stores timed flux gaps: the 8502 `$01`
+port controls motor and reads the Play switch, while each completed pulse
+drives CIA1 FLAG. The optional audio monitor mixes the TAP signal's
+positive/negative halfwaves into SID PCM; the visual monitor plots recent
+gap lengths and transport status. T64 instead contains file records, not a
+recorded signal: two C128 KERNAL tape routines are trapped only while a T64
+is mounted, then restored for TAP playback/ejection. T64 has no waveform or
+audio; recording to either format is not implemented.
+
 Visual check (saves a PPM at frame 60):
 ```bash
 SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms

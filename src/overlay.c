@@ -42,7 +42,7 @@ static const char *const keyboard_map_lines[] = {
     "F10                             toggle 40/80 display",
     "Shift + Print Screen            hold 40/80 key",
     "Shift + F1..F8                  C128 function keys",
-    "F1, F4..F12                    emulator shortcuts",
+    "F1..F12                         emulator shortcuts",
     "Enter or Escape                 close this map"
 };
 #define KEYBOARD_MAP_LINE_COUNT ((int)(sizeof(keyboard_map_lines) / sizeof(keyboard_map_lines[0])))
@@ -255,6 +255,15 @@ static void clear_media_entry(Overlay *ov) {
             overlay_set_u36(ov, NULL);
         return;
     }
+    if (item == MEDIA_TAPE) {
+        if (ov->cfg->tape_path[0] || ov->c128->tape.kind != TAPE_NONE) {
+            c128_eject_tape(ov->c128);
+            ov->cfg->tape_path[0] = '\0';
+            save_config(ov);
+            notify_post("TAPE EJECTED");
+        }
+        return;
+    }
     if (item == MEDIA_DISK1 || item == MEDIA_DISK2) {
         int which = item == MEDIA_DISK2 ? 2 : 1;
         Drive *drive = which == 2 ? &ov->c128->drive2 : &ov->c128->drive;
@@ -297,7 +306,7 @@ static const char *media_label(int row) {
 
 static const char *media_extension(int row) {
     static const char *const exts[MEDIA_ITEM_COUNT] = {
-        "", "", ".d64/.d71/.d81/.prg", "", "", ".d64/.d71/.d81/.prg", ".tap",
+        "", "", ".d64/.d71/.d81/.prg", "", "", ".d64/.d71/.d81/.prg", ".tap/.t64",
         ".crt/.bin/.rom", ".bin/.rom"
     };
     return exts[row];
@@ -411,7 +420,7 @@ static void open_media_dialog(Overlay *ov, int row) {
         { "All files",       "*"       },
     };
     static const SDL_DialogFileFilter tape_filters[] = {
-        { "TAP tapes", "tap;TAP" },
+        { "TAP/T64 tapes", "tap;TAP;t64;T64" },
         { "All files", "*"       },
     };
     static const SDL_DialogFileFilter cart_filters[] = {
@@ -793,10 +802,21 @@ void overlay_tick(Overlay *ov) {
         overlay_set_u36(ov, ov->dialog_path);
         return;
     }
+    if (kind == OV_DIALOG_TAPE) {
+        c128_eject_tape(ov->c128);
+        ov->cfg->tape_path[0] = '\0';
+        if (c128_mount_tape(ov->c128, ov->dialog_path)) {
+            snprintf(ov->cfg->tape_path, CONFIG_PATH_MAX, "%s", ov->dialog_path);
+            notify_post(ov->c128->tape.kind == TAPE_TAP
+                        ? "TAP INSERTED - F2 PLAY/STOP, F3 REWIND"
+                        : "T64 INSERTED - LOAD FROM DEVICE 1");
+        } else notify_post("INVALID TAP/T64 TAPE IMAGE");
+        save_config(ov);
+        return;
+    }
 
     char *dest = NULL;
-    if (kind == OV_DIALOG_TAPE)      dest = ov->cfg->tape_path;
-    else if (kind == OV_DIALOG_ROM)  dest = ov->cfg->rom_dir;
+    if (kind == OV_DIALOG_ROM) dest = ov->cfg->rom_dir;
     if (dest) {
         snprintf(dest, CONFIG_PATH_MAX, "%s", ov->dialog_path);
         save_config(ov);
@@ -933,6 +953,66 @@ void overlay_render_drive_scope(const Overlay *ov, SDL_Renderer *r) {
                            ov->cfg->drive_unit,
                            &ov->c128->integrated_drive.gcr,
                            &ov->c128->drive_monitor);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+}
+
+void overlay_render_tape_scope(const Overlay *ov, SDL_Renderer *r) {
+    if (!ov || !r || ov->visible || !ov->cfg->tape_video_monitor ||
+        ov->c128->tape.kind == TAPE_NONE) return;
+    const Tape *t = &ov->c128->tape;
+    int rw, rh;
+    if (!SDL_GetRenderOutputSize(r, &rw, &rh) || rw < 160 || rh < 160)
+        return;
+    const float margin = 10.0f, panel_h = 64.0f;
+    float drive_h = ov->cfg->drive_visual_monitor && ov->c128->drive_raw_iec
+        ? (ov->c128->drive2_raw_iec ? 128.0f : 64.0f) + margin : 0.0f;
+    float panel_y = (float)rh - FUNCTION_KEY_BAR_HEIGHT - LED_BAR_HEIGHT -
+                    panel_h - margin - drive_h;
+    if (panel_y < margin) return;
+    SDL_SetRenderScale(r, 1.0f, 1.0f);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_FRect panel = { margin, panel_y, (float)rw - 2.0f * margin, panel_h };
+    SDL_SetRenderDrawColor(r, 0, 0, 0, 190);
+    SDL_RenderFillRect(r, &panel);
+    SDL_SetRenderDrawColor(r, 240, 190, 100, 150);
+    SDL_RenderRect(r, &panel);
+
+    char status[128];
+    if (t->kind == TAPE_TAP) {
+        unsigned percent = t->payload_end > 20
+            ? (unsigned)((t->position - 20) * 100 / (t->payload_end - 20)) : 0;
+        snprintf(status, sizeof(status),
+                 "TAPE TAP  %s  MOTOR %s  %u%%  PULSES %u  AUDIO %s",
+                 t->play_button ? "PLAY" : "STOP", t->motor_on ? "ON" : "OFF",
+                 percent, t->frame_edges,
+                 ov->cfg->tape_audio_monitor ? "ON" : "OFF");
+    } else {
+        snprintf(status, sizeof(status),
+                 "TAPE T64  FILE %zu/%zu  %s  (NO RECORDED WAVEFORM)",
+                 t->current_file < t->file_count ? t->current_file + 1 : 0,
+                 t->file_count, t->play_button ? "READY" : "STOP");
+    }
+    SDL_SetRenderDrawColor(r, 255, 220, 150, 255);
+    SDL_RenderDebugText(r, margin + 6.0f, panel_y + 6.0f, status);
+    float x0 = margin + 6.0f;
+    float plot_w = (float)rw - 2.0f * margin - 12.0f;
+    float center = panel_y + 42.0f;
+    SDL_SetRenderDrawColor(r, 130, 145, 170, 100);
+    SDL_RenderLine(r, x0, center, x0 + plot_w, center);
+    if (t->kind == TAPE_TAP) {
+        float cell = plot_w / TAPE_SCOPE_SAMPLES;
+        for (size_t i = 0; i < t->scope_count; ++i) {
+            size_t idx = (t->scope_head + TAPE_SCOPE_SAMPLES -
+                          t->scope_count + i) % TAPE_SCOPE_SAMPLES;
+            unsigned gap = t->scope[idx];
+            float x = x0 + (float)(TAPE_SCOPE_SAMPLES - t->scope_count + i) * cell;
+            float height = (float)gap / 45.0f;
+            if (height > 14.0f) height = 14.0f;
+            if (height < 2.0f) height = 2.0f;
+            SDL_SetRenderDrawColor(r, 255, 205, 105, 230);
+            SDL_RenderLine(r, x, center - height, x, center + height);
+        }
+    }
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
 }
 

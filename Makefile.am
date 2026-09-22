@@ -32,6 +32,7 @@ dist_man1_MANS = 1986.1
 	src/drive.c \
 	src/drive1571cr.c \
 	src/drive_monitor.c \
+	src/tape.c \
 	src/gcr_drive.c \
 	src/iec_bus.c \
 	src/via6522.c \
@@ -66,6 +67,7 @@ noinst_HEADERS = \
 	src/drive.h \
 	src/drive1571cr.h \
 	src/drive_monitor.h \
+	src/tape.h \
 	src/drive_sound_samples.h \
 	src/gcr_drive.h \
 	src/iec_bus.h \
@@ -140,5 +142,5 @@ EXTRA_DIST = LICENSE README.md Development.md USAGE.md CONTROLS.md INSTALL.md \
 	tests/test_cartridge.c tests/test_cia.c tests/test_sid.c tests/test_config.c \
 	tests/test_joyport.c tests/test_c128_keyboard.c tests/test_gifcap.c \
 	tests/test_d64.c tests/test_d64_save.c tests/test_disk_formats.c \
-	tests/test_drive.c tests/test_drive1571cr.c tests/test_drive_monitor.c tests/test_gcr_drive.c tests/test_gcr_write.c tests/test_via6522.c tests/test_iec_bus.c tests/test_prg_drive.c tests/test_vdrive_blocks.c tests/test_overlay.c \
+	tests/test_drive.c tests/test_drive1571cr.c tests/test_drive_monitor.c tests/test_tape.c tests/test_gcr_drive.c tests/test_gcr_write.c tests/test_via6522.c tests/test_iec_bus.c tests/test_prg_drive.c tests/test_vdrive_blocks.c tests/test_overlay.c \
 	tests/test_display_footer.c tests/test_vic.c tests/test_vdc.c

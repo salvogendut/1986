@@ -27,6 +27,15 @@ Directory holding the machine ROM images (kernal.rom, basic.rom, chargen.rom).
 \fB\-\-disk\fR PATH
 Attach a D64, D71, D81, or read-only standalone PRG at launch.
 .TP
+\fB\-\-tape\fR PATH
+Attach a TAP pulse image or T64 file container at launch.
+.TP
+\fB\-\-tape\-play\fR
+Press Datasette Play on the mounted tape at launch.
+.TP
+\fB\-\-tape\-play\-at\fR N
+Press Datasette Play at emulated frame N.
+.TP
 \fB\-\-cart\fR PATH
 Attach a generic native-C128 CRT or raw external function-ROM image at launch.
 .TP
@@ -51,6 +60,12 @@ Show this help and exit.
 .TP
 .B F1
 Swap host input between C128 joystick ports 1 and 2.
+.TP
+.B F2
+Press or release the Datasette Play button.
+.TP
+.B F3
+Rewind the mounted tape.
 .TP
 .B F4
 Save a PPM screenshot.

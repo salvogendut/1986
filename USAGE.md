@@ -97,7 +97,25 @@ Some cartridges draw on the VIC 40-column output even when the saved default
 is VDC 80-column; select **General > 40/80 key > 40 columns (VIC)** to make
 the VIC output the persistent default, or press F10 to switch while running.
 Selection is restored at launch from `cart` in the config; `--cart PATH`
-overrides it for that run. Tape selection remains a placeholder for now.
+overrides it for that run.
+
+**Media > Tape** accepts Commodore `.tap` pulse images and `.t64` file
+containers. Replacing or clearing the entry ejects the prior tape; Del ejects
+it without forgetting the picker's last directory. F2 presses/releases the
+Datasette Play button and F3 rewinds. For TAP, use `LOAD"",1` at the BASIC
+prompt, then press F2 when asked to press Play. The C128 controls the motor,
+and tape pulses feed CIA1. T64 contains files rather than recorded pulses;
+it is ready for `LOAD"",1` as soon as it is mounted, and F3 returns to its
+first file. `--tape PATH` attaches either format at launch; `--tape-play`
+presses Play immediately, while `--tape-play-at N` delays that press until
+frame N for automated testing. Tape recording is not implemented.
+
+With Tinker enabled, **Advanced > Tape Audio Monitor** plays the TAP signal
+itself through the normal audio output, without artificial motor or button
+sounds. **Tape Video Monitor** shows Play/motor state, position, and recent
+pulses above the footer; it stacks above the drive monitor if both are on.
+T64 has no recorded waveform, so audio remains silent and the visual panel
+shows its file status instead.
 
 With **General > Tinker** enabled, **Media > U36 internal ROM** selects a raw
 `.bin`/`.rom` image for the C128's internal function-ROM socket. Images must
