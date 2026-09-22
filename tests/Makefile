@@ -11,7 +11,7 @@ else
 GC_SECTIONS_LDFLAGS = -Wl,--gc-sections
 endif
 
-TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-overlay test-display-footer test-vic test-vdc
+TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-vic test-vdc
 
 .PHONY: all check clean
 
@@ -102,6 +102,10 @@ test-prg-drive: test_prg_drive.c ../src/drive.c ../src/drive.h ../src/disk_image
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_prg_drive.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c -o $@
 
+test-vdrive-blocks: test_vdrive_blocks.c ../src/virtual_drive.c ../src/virtual_drive.h ../src/disk_image.c ../src/disk_image.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
+		test_vdrive_blocks.c ../src/virtual_drive.c ../src/disk_image.c -o $@
+
 test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c ../src/drive_monitor.c ../src/drive_sound_samples.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_overlay.c ../src/overlay.c ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c \
@@ -141,6 +145,7 @@ check: $(TESTS)
 	./test-via6522
 	./test-iec-bus
 	./test-prg-drive
+	./test-vdrive-blocks
 	./test-overlay
 	./test-display-footer
 	./test-vic

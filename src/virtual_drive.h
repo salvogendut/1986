@@ -33,6 +33,10 @@ typedef struct {
 
     bool channel_open[VDRIVE_CHANNELS];
     bool channel_save[VDRIVE_CHANNELS];
+    bool channel_direct[VDRIVE_CHANNELS];
+    u8 block_buffer[VDRIVE_CHANNELS][DISK_SECTOR_BYTES];
+    unsigned block_pos[VDRIVE_CHANNELS];
+    unsigned block_limit[VDRIVE_CHANNELS];
     char channel_name[VDRIVE_CHANNELS][VDRIVE_NAME_MAX];
     u8 *channel_data[VDRIVE_CHANNELS];
     size_t channel_len[VDRIVE_CHANNELS];

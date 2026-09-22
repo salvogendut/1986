@@ -697,6 +697,41 @@ static int persist_image(const DiskImage *d, const u8 *image) {
 #endif
 }
 
+DiskSaveResult disk_image_write_sector(DiskImage *d, int track, int sector,
+                                       const u8 *buf) {
+    if (!d || !d->data || !d->writable || d->format == DISK_FORMAT_PRG)
+        return DISK_SAVE_WRITE_PROTECT;
+    int sectors = disk_image_track_sectors(d, track);
+    if (!buf || sectors <= 0 || sector < 0 || sector >= sectors)
+        return DISK_SAVE_IO_ERROR;
+    size_t offset = (size_t)disk_image_track_offset(d, track) +
+                    (size_t)sector * DISK_SECTOR_BYTES;
+    if (offset + DISK_SECTOR_BYTES > d->size) return DISK_SAVE_IO_ERROR;
+
+    size_t error_byte = 0;
+    if (d->has_errors) {
+        error_byte = (size_t)disk_image_track_offset(d, d->tracks + 1) +
+                     offset / DISK_SECTOR_BYTES;
+        if (error_byte >= d->size) return DISK_SAVE_IO_ERROR;
+    }
+    if (!memcmp(d->data + offset, buf, DISK_SECTOR_BYTES) &&
+        (!d->has_errors || d->data[error_byte] == 1))
+        return DISK_SAVE_OK;
+
+    u8 *next = malloc(d->size);
+    if (!next) return DISK_SAVE_IO_ERROR;
+    memcpy(next, d->data, d->size);
+    memcpy(next + offset, buf, DISK_SECTOR_BYTES);
+    if (d->has_errors) next[error_byte] = 1;
+    if (persist_image(d, next) != 0) {
+        free(next);
+        return DISK_SAVE_IO_ERROR;
+    }
+    memcpy(d->data, next, d->size);
+    free(next);
+    return DISK_SAVE_OK;
+}
+
 DiskSaveResult disk_image_write_gcr_track(DiskImage *d, int track,
                                           const u8 *sector_data,
                                           unsigned sector_mask) {

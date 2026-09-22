@@ -206,6 +206,10 @@ cycle-level 1571 implementation without conflating their interfaces.
 - [ ] Further write-side DOS commands (format, copy, etc.).
 - [x] D71 and D81 image formats with two-sided BAM handling and PRG
   read/write support (#55).
+- [x] Fast virtual-drive direct-access buffers and `U1`/`U2`, `B-R`/`B-W`/
+  `B-P` block commands, with atomic sector write-back on D64/D71/D81 (#107).
+- [ ] Further VICE virtual-drive parity: REL files, partition commands,
+  full DOS memory-command semantics, and burst serial.
 - [ ] D81 partition navigation and REL-file operations.
 - [ ] True integrated 1571: drive CPU, 2K RAM, DOS ROM, CIA/VIA/FDC,
   mechanism timing, line-level IEC, and fast serial (#30).

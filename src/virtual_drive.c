@@ -45,6 +45,9 @@ static void close_channel(VirtualDrive *v, unsigned channel) {
     v->channel_data[channel] = NULL;
     v->channel_len[channel] = v->channel_cap[channel] = 0;
     v->channel_open[channel] = v->channel_save[channel] = false;
+    v->channel_direct[channel] = false;
+    memset(v->block_buffer[channel], 0, DISK_SECTOR_BYTES);
+    v->block_pos[channel] = v->block_limit[channel] = 0;
     v->channel_overflow[channel] = false;
     v->channel_name[channel][0] = '\0';
 }
@@ -95,6 +98,102 @@ static bool command_name(const char *raw, char name[17], bool require_prefix) {
     return true;
 }
 
+static void command_error(VirtualDrive *v, int code, const char *message,
+                          int track, int sector) {
+    snprintf(v->status, sizeof(v->status), "%02d,%s,%02d,%02d\r",
+             code, message, track, sector);
+    v->bus_status |= 0x02;
+}
+
+/* VICE's vdrive accepts either commas or spaces between decimal block-command
+ * arguments, with an optional colon after the command. Reject partial and
+ * overflowing commands instead of silently reporting OK. */
+static bool block_parameters(const char *p, int *values, unsigned count) {
+    for (unsigned i = 0; i < count; ++i) {
+        while (*p == ' ' || *p == ',' || *p == ':' || *p == '#' ||
+               *p == ')' || *p == 0x1d) ++p;
+        if (!isdigit((unsigned char)*p)) return false;
+        int value = 0;
+        do {
+            value = value * 10 + (*p++ - '0');
+            if (value > 255) return false;
+        } while (isdigit((unsigned char)*p));
+        values[i] = value;
+    }
+    while (*p == ' ' || *p == ',' || *p == ':' || *p == 0x1d) ++p;
+    return *p == '\0';
+}
+
+static void execute_block_command(VirtualDrive *v, const char *command) {
+    bool old_style = toupper((unsigned char)command[0]) == 'B';
+    char op = (char)toupper((unsigned char)command[old_style ? 2 : 1]);
+    bool position = old_style && op == 'P';
+    bool read = op == '1' || op == 'A' || (old_style && op == 'R');
+    bool write = op == '2' || (old_style && op == 'W') ||
+                 (!old_style && op == 'B');
+    int args[4] = {0};
+    if ((!read && !write && !position) ||
+        !block_parameters(command + (old_style ? 3 : 2), args,
+                          position ? 2 : 4)) {
+        command_error(v, 31, "SYNTAX ERROR", 0, 0);
+        return;
+    }
+    int channel = args[0];
+    if (channel >= VDRIVE_CHANNELS || !v->channel_open[channel] ||
+        !v->channel_direct[channel]) {
+        command_error(v, 70, "NO CHANNEL", 0, 0);
+        return;
+    }
+    if (position) {
+        v->block_pos[channel] = (unsigned)args[1];
+        set_status(v, "00, OK,00,00\r");
+        return;
+    }
+    int drive = args[1], track = args[2], sector = args[3];
+    if (drive != 0 || !v->disk || v->disk->format == DISK_FORMAT_PRG) {
+        command_error(v, 74, "DRIVE NOT READY", 0, 0);
+        return;
+    }
+    if (track < 1 || sector >= disk_image_track_sectors(v->disk, track)) {
+        command_error(v, 66, "ILLEGAL TRACK OR SECTOR", track, sector);
+        return;
+    }
+    if (read) {
+        if (disk_image_read_sector(v->disk, track, sector,
+                                   v->block_buffer[channel]) != 0) {
+            command_error(v, 21, "READ ERROR", track, sector);
+            return;
+        }
+        v->block_pos[channel] = old_style ? 1u : 0u;
+        v->block_limit[channel] = old_style
+            ? (unsigned)v->block_buffer[channel][0] + 1u
+            : DISK_SECTOR_BYTES;
+        if (v->block_limit[channel] < 2) v->block_limit[channel] = 2;
+    } else {
+        if (!v->disk->writable) {
+            command_error(v, 26, "WRITE PROTECT ON", track, sector);
+            return;
+        }
+        if (old_style) {
+            unsigned length = v->block_pos[channel] > 1
+                ? v->block_pos[channel] - 1u : 1u;
+            v->block_buffer[channel][0] = (u8)length;
+        }
+        DiskSaveResult result = disk_image_write_sector(v->disk, track,
+            sector, v->block_buffer[channel]);
+        if (result != DISK_SAVE_OK) {
+            command_error(v, result == DISK_SAVE_WRITE_PROTECT ? 26 : 25,
+                          result == DISK_SAVE_WRITE_PROTECT
+                              ? "WRITE PROTECT ON" : "WRITE ERROR",
+                          track, sector);
+            return;
+        }
+        v->block_pos[channel] = old_style ? 1u : 0u;
+        v->block_limit[channel] = DISK_SECTOR_BYTES;
+    }
+    set_status(v, "00, OK,00,00\r");
+}
+
 static void execute_command(VirtualDrive *v, const u8 *bytes, size_t length,
                             bool overflow) {
     if (length == 0 && !overflow) return;
@@ -109,18 +208,30 @@ static void execute_command(VirtualDrive *v, const u8 *bytes, size_t length,
                       command[length - 1] == '\n'))
         command[--length] = '\0';
     if (!length) return;
+    if (memchr(bytes, 0, length)) {
+        save_error(v, DISK_SAVE_BAD_NAME);
+        return;
+    }
     char op = (char)toupper((unsigned char)command[0]);
-    if (op == 'I' || op == 'U') {
+    if ((op == 'U' && length >= 2 &&
+         strchr("12AB", toupper((unsigned char)command[1]))) ||
+        (op == 'B' && length >= 3 && command[1] == '-' &&
+         strchr("RWP", toupper((unsigned char)command[2])))) {
+        execute_block_command(v, command);
+        return;
+    }
+    if (op == 'I' || (op == 'U' && length == 2 &&
+                      (command[1] == '0' || toupper((unsigned char)command[1]) == 'I'))) {
         set_status(v, "00, OK,00,00\r");
+        return;
+    }
+    if (op == 'U') {
+        command_error(v, 74, "DRIVE NOT READY", 0, 0);
         return;
     }
     if (op != 'S' && op != 'R') {
         set_status(v, "31,SYNTAX ERROR,00,00\r");
         v->bus_status |= 0x02;
-        return;
-    }
-    if (memchr(bytes, 0, length)) {
-        save_error(v, DISK_SAVE_BAD_NAME);
         return;
     }
     if (!v->disk) {
@@ -202,6 +313,10 @@ static void prepare_channel(VirtualDrive *v, unsigned channel) {
     /* Direct-access buffer channels (OPEN "#") are used by C128 startup and
      * burst negotiation. They carry U1/U2 commands, not a disk filename. */
     if (name[0] == '#') {
+        v->channel_direct[channel] = true;
+        memset(v->block_buffer[channel], 0, DISK_SECTOR_BYTES);
+        v->block_pos[channel] = 1;
+        v->block_limit[channel] = DISK_SECTOR_BYTES;
         set_status(v, "00, OK,00,00\r");
         return;
     }
@@ -267,7 +382,8 @@ static void finish_write(VirtualDrive *v) {
         memcpy(v->channel_name[channel], v->write_buf, n);
         v->channel_name[channel][n] = '\0';
         v->channel_open[channel] = true;
-        v->channel_save[channel] = channel == 1;
+        v->channel_save[channel] = channel == 1 &&
+                                   v->channel_name[channel][0] != '#';
         if (channel != 15) prepare_channel(v, channel);
         else execute_command(v, v->write_buf, v->write_len,
                              v->write_overflow);
@@ -312,6 +428,11 @@ static void prepare_talk(VirtualDrive *v) {
             v->response_len = length;
             memcpy(v->response, v->status, length);
         }
+        return;
+    }
+    if (v->channel_open[channel] && v->channel_direct[channel]) {
+        v->response_channel = (int)channel;
+        v->response_error = false;
         return;
     }
     if (v->response_channel != (int)channel) prepare_channel(v, channel);
@@ -394,6 +515,13 @@ void virtual_drive_send(VirtualDrive *v, u8 byte) {
     if (!v->addressed || !v->listening || v->write_mode == VDRIVE_WRITE_NONE)
         return;
     unsigned channel = v->secondary & 0x0f;
+    if (v->write_mode == VDRIVE_WRITE_DATA && v->channel_direct[channel]) {
+        unsigned pos = v->block_pos[channel];
+        v->block_buffer[channel][pos] = byte;
+        ++pos;
+        v->block_pos[channel] = pos >= v->block_limit[channel] ? 0u : pos;
+        return;
+    }
     if (v->write_mode == VDRIVE_WRITE_DATA && v->channel_save[channel]) {
         if (v->channel_overflow[channel]) return;
         size_t len = v->channel_len[channel];
@@ -422,6 +550,19 @@ int virtual_drive_receive(VirtualDrive *v, u8 *byte) {
     if (v->addressed && v->talking && v->response_error) {
         if (trace_enabled()) fprintf(stderr, "[IEC:R] serial error\n");
         return -1;
+    }
+    unsigned channel = v->secondary & 0x0f;
+    if (v->addressed && v->talking && v->channel_open[channel] &&
+        v->channel_direct[channel]) {
+        unsigned pos = v->block_pos[channel];
+        if (pos >= DISK_SECTOR_BYTES) pos = 0;
+        *byte = v->block_buffer[channel][pos++];
+        if (pos >= v->block_limit[channel]) {
+            v->block_pos[channel] = 1;
+            return 2;
+        }
+        v->block_pos[channel] = pos;
+        return 1;
     }
     if (!v->addressed || !v->talking || v->response_pos >= v->response_len)
         return 0;
