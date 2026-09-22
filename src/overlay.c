@@ -532,6 +532,8 @@ static void overlay_activate(Overlay *ov) {
                 ov->cfg->drive_unit = next_drive_unit(
                     ov->cfg->drive_unit, ov->cfg->drive2_unit);
                 drive_reset(&ov->c128->drive); /* abandon the old IEC address */
+                if (ov->c128->drive_raw_iec)
+                    notify_post("REAL DRIVE ADDRESS CHANGED - RESTART TO APPLY");
             } else if (media_item(ov, ov->row) == MEDIA_DRIVE2) {
                 ov->cfg->drive2_unit = next_drive_unit(
                     ov->cfg->drive2_unit, ov->cfg->drive_unit);
@@ -543,8 +545,8 @@ static void overlay_activate(Overlay *ov) {
                           ? &ov->cfg->drive_type : &ov->cfg->drive2_type;
                 *type = *type == 1571 ? 1581 : 1571;
                 notify_post(*type == 1571
-                    ? "1571CR HARDWARE BACKEND UNDER DEVELOPMENT"
-                    : "1581 HARDWARE BACKEND NOT YET IMPLEMENTED");
+                    ? "1571CR TYPE SELECTED - RESTART TO APPLY"
+                    : "1581 HARDWARE UNAVAILABLE - RESTART TO APPLY");
                 save_config(ov);
             } else {
                 open_media_dialog(ov, media_item(ov, ov->row));
@@ -583,9 +585,7 @@ static void overlay_activate(Overlay *ov) {
                     break;
                 case ADV_REAL_DISK_DRIVE:
                     ov->cfg->real_disk_drive = !ov->cfg->real_disk_drive;
-                    notify_post(ov->cfg->real_disk_drive
-                        ? "REAL DRIVE EMULATOR PENDING - USING VIRTUAL DRIVE"
-                        : "FAST VIRTUAL DRIVE ACTIVE");
+                    notify_post("DRIVE MODE CHANGED - RESTART TO APPLY");
                     break;
                 case ADV_SECOND_DRIVE:
                     ov->cfg->second_drive = !ov->cfg->second_drive;
@@ -892,7 +892,7 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
                 int type = item == MEDIA_TYPE2 ? ov->cfg->drive2_type :
                                                   ov->cfg->drive_type;
                 snprintf(vbuf, sizeof(vbuf), "%s", type == 1571
-                         ? "1571CR (pending)" : "1581 (not implemented)");
+                         ? "1571CR (ROM required)" : "1581 (not implemented)");
             } else {
                 const char *path = media_path(ov, item);
                 if (path && path[0])
@@ -931,7 +931,7 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
                  ov->cfg->vdc_ram_kb == 16 ? "16K" : "64K",
                  ov->row == ADV_VDC_RAM); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Real Disk Drive",
-                 ov->cfg->real_disk_drive ? "On (pending)" : "Off",
+                 ov->cfg->real_disk_drive ? "On" : "Off",
                  ov->row == ADV_REAL_DISK_DRIVE); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Second Drive",
                  ov->cfg->second_drive ? "On" : "Off",

@@ -46,6 +46,7 @@ typedef struct {
     IecBus  iec_bus;     /* physical slow IEC pins, separate from VirtualDrive */
     unsigned drive_clock_fraction;
     unsigned drive_media_generation;
+    bool drive_raw_iec; /* opt-in diagnostic: KERNAL serial ROM is unpatched */
     Config *cfg;
     bool    paused;
     bool    fast;        /* 8502 at 2 MHz (C128 fast mode) */

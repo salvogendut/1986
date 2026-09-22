@@ -277,9 +277,7 @@ int main(int argc, char **argv) {
         } else {
             fprintf(stderr, "1986: loaded %d ROM image(s) from '%s'\n", n, dir);
         }
-        /* The independent 1571CR core owns the optional DOS ROM. Its slow
-         * IEC pins are connected for hardware probing, but FDC and mechanism
-         * emulation are still missing; disk service remains virtual. */
+        /* The independent 1571CR core owns the optional DOS ROM. */
         char drive_rom_path[CONFIG_PATH_MAX];
         int drive_rom_len = snprintf(drive_rom_path, sizeof(drive_rom_path),
                                      "%s/dos1571cr.bin", dir);
@@ -331,7 +329,15 @@ int main(int argc, char **argv) {
         .receive = c128_iec_receive,
         .take_status = c128_iec_take_status,
     };
-    cpu_install_iec_traps(c.mem.kernal, &iec);
+    c.drive_raw_iec = cfg.real_disk_drive && cfg.drive_type == 1571 &&
+                      c.integrated_drive.rom_loaded;
+    if (c.drive_raw_iec)
+        fprintf(stderr, "1986: 1571CR DOS ROM and line-level IEC active\n");
+    else {
+        if (cfg.real_disk_drive)
+            fprintf(stderr, "1986: real-drive backend unavailable; using fast virtual drive\n");
+        cpu_install_iec_traps(c.mem.kernal, &iec);
+    }
 
     Overlay overlay;
     overlay_init(&overlay, &cfg, &c);

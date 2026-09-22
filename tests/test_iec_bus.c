@@ -15,6 +15,7 @@ int main(void) {
     Via6522 via;
     IecBus bus;
     via6522_init(&via);
+    via6522_write(&via, 12, 0x01); /* 1571 ROM enables rising CA1 edge */
     iec_bus_init(&bus, &via);
     via6522_set_port_hook(&via, via_port, &bus);
     via6522_write(&via, 2, 0x1a); /* PB1 DATA, PB3 CLK, PB4 ATNA output */
@@ -25,6 +26,12 @@ int main(void) {
           "idle open-collector lines are high at the CIA inputs");
     CHECK((via6522_read(&via, 0) & 0x85) == 0,
           "VIA1 IEC inputs are active-low on idle lines");
+    CHECK((via6522_read(&via, 0) & 0x60) == 0,
+          "integrated 1571CR address sense selects IEC unit 8");
+    iec_bus_set_unit(&bus, 9);
+    CHECK((via6522_read(&via, 0) & 0x60) == 0x20,
+          "VIA1 address straps can select IEC unit 9");
+    iec_bus_set_unit(&bus, 8);
 
     iec_bus_set_host(&bus, 0x08, 0x38); /* assert ATN */
     CHECK(!bus.atn_high && !bus.data_high && bus.clock_high,

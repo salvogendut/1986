@@ -100,6 +100,14 @@ int main(void) {
     install_program(&drive, program, sizeof(program));
     CHECK(drive.cpu.pc == 0x8000 && drive.cpu.sp == 0xfd,
           "reset vector and stack state come from drive ROM");
+    CHECK((drive1571cr_read(&drive, 0x1001) & 0x81) == 0x80,
+          "VIA1 PA0 detects the head at track zero and PA7 is idle high");
+    drive.gcr.half_track = 4;
+    drive.gcr.byte_ready = true;
+    CHECK((drive1571cr_read(&drive, 0x1001) & 0x81) == 0x01,
+          "VIA1 PA0 clears away from track zero and PA7 tracks byte ready");
+    drive.gcr.half_track = 2;
+    drive.gcr.byte_ready = false;
     drive1571cr_run(&drive, 55);
     CHECK(drive.ram[0x10] == 0x17 && drive.cpu.pc == 0x9000,
           "ROM code executes JSR, stack, INC, branch and BRK/IRQ vector");

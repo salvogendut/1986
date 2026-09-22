@@ -59,9 +59,7 @@ void drive_set_slot(Drive *d, unsigned slot) {
 }
 
 void drive_attention(Drive *d, u8 byte) {
-    /* cfg->real_disk_drive is a saved request for the future cycle-level
-     * backend. Until that backend exists, keep the working virtual IEC path
-     * connected even when the Advanced overlay preference is on. */
+    /* Reached only through the fast virtual KERNAL-trap backend. */
     bool was_addressed = d->virtual_drive.addressed;
     virtual_drive_attention(&d->virtual_drive, byte);
     if (was_addressed || d->virtual_drive.addressed) drive_activity(d);
