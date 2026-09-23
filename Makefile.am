@@ -5,6 +5,7 @@ dist_man1_MANS = 1986.1
 
 1986_SOURCES = \
 	src/config.c \
+	src/frame_pacer.c \
 	src/main.c \
 	src/display.c \
 	src/overlay.c \
@@ -45,6 +46,7 @@ noinst_HEADERS = \
 	src/compat_win.h \
 	src/startup_debug.h \
 	src/config.h \
+	src/frame_pacer.h \
 	src/display.h \
 	src/overlay.h \
 	src/kbd.h \
@@ -145,6 +147,7 @@ EXTRA_DIST = LICENSE README.md Development.md USAGE.md CONTROLS.md INSTALL.md \
 	packaging/debian/build-deb.sh packaging/macos/package.sh \
 	tests/Makefile tests/test_cpu.c tests/test_mmu.c tests/test_mem.c \
 	tests/test_cartridge.c tests/test_cia.c tests/test_sid.c tests/test_config.c \
+	tests/test_frame_pacer.c \
 	tests/test_joyport.c tests/test_c128_keyboard.c tests/test_gifcap.c \
 	tests/test_mos6502dis.c \
 	tests/test_d64.c tests/test_d64_save.c tests/test_disk_formats.c \

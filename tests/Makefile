@@ -11,7 +11,7 @@ else
 GC_SECTIONS_LDFLAGS = -Wl,--gc-sections
 endif
 
-TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-mos6502dis test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc test-snapshot
+TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-frame-pacer test-joyport test-c128-keyboard test-mos6502dis test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc test-snapshot
 
 .PHONY: all check clean
 
@@ -44,6 +44,10 @@ test-sid: test_sid.c ../src/sid.c ../src/sid.h
 test-config: test_config.c ../src/config.c ../src/config.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_config.c ../src/config.c -o $@
+
+test-frame-pacer: test_frame_pacer.c ../src/frame_pacer.c ../src/frame_pacer.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
+		test_frame_pacer.c ../src/frame_pacer.c -o $@
 
 test-joyport: test_joyport.c ../src/joyport.c ../src/joyport.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
@@ -147,6 +151,7 @@ check: $(TESTS)
 	./test-cia
 	./test-sid
 	./test-config
+	./test-frame-pacer
 	./test-joyport
 	./test-c128-keyboard
 	./test-mos6502dis
