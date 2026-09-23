@@ -50,6 +50,22 @@ typedef struct {
     CpuBus bus;
 } Cpu8502;
 
+/* Complete resumable state of the VICE-derived 8502 core.  The public
+ * Cpu8502 register mirror alone is not sufficient because the core keeps its
+ * own clock and opcode/interrupt bookkeeping. */
+typedef struct {
+    u8 a, x, y, sp, p;
+    u16 pc;
+    u64 clock;
+    u64 cycles;
+    u32 last_opcode_info;
+    bool irq_level;
+    bool nmi_level;
+    bool fast;
+    u8 io_ddr;
+    u8 io_port;
+} Cpu8502State;
+
 void cpu_init(Cpu8502 *cpu, CpuBus bus);
 void cpu_attach_mem(Cpu8502 *cpu, u8 *ram); /* set the RAM base used for the stack page */
 void cpu_set_stack_page(u8 *page); /* follow $D509/A stack-page relocation */
@@ -61,6 +77,11 @@ void cpu_nmi(Cpu8502 *cpu, bool level);
 void cpu_pc(Cpu8502 *cpu, u16 pc);
 u64  cpu_cycles(void);                /* total cycles executed (for raster sync) */
 bool cpu_rmw_active(void);            /* current instruction has an RMW bus write */
+/* Consume an illegal/JAM opcode reported by the VICE-derived core. The core
+ * remains cycle-bounded so the SDL event loop can reset instead of hanging. */
+bool cpu_take_jam(u16 *pc);
+void cpu_state_get(const Cpu8502 *cpu, Cpu8502State *state);
+void cpu_state_set(Cpu8502 *cpu, const Cpu8502State *state);
 void cpu_install_serial_traps(u8 *kernal); /* patch the KERNAL ROM with IEC traps */
 
 /* IEC (serial-bus) trap callbacks, invoked by the KERNAL's patched routines.

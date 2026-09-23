@@ -294,8 +294,11 @@ ROM through emulated hardware.
 - [x] TAP pulse playback through the C128 cassette port and T64 file loading,
   with F2/F3 transport controls plus optional tape-signal audio and visual
   monitors (#111). Tape recording remains future work.
-- [ ] Snapshots (VICE `.vsf` or a simple own format) for save/load of machine
-  state.
+- [x] VICE-container `.vsf` snapshots with complete 1986 CPU/video machine
+  state and transactional rejection of foreign VICE machine-state modules
+  (#126). See `docs/SNAPSHOTS.md` for the Z80/VDC compatibility limits.
+- [ ] Translate the complete set of VICE C128 CPU-interrupt, VIC-II, CIA, SID,
+  drive, tape, and input modules before enabling cross-emulator snapshot load.
 - [ ] Full native C128 keyboard coverage, host layouts, and auto-repeat.
 - [ ] 2 MHz fast-mode timing (`$D507`/`$01`) affects the raster and CIA.
 - [ ] Cycle-exact raster/CPU interleave; run VICE's test programs.

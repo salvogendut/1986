@@ -38,6 +38,8 @@ technical handoff sequence.
 | `--rom DIR` | Directory holding the machine ROM images. |
 | `--disk PATH` | Attach a D64, D71, D81, or standalone PRG to Drive 1 at launch. |
 | `--cart PATH` | Attach a generic C128 `.crt` or raw external function-ROM `.bin`/`.rom` at launch. |
+| `--snapshot PATH` | Load a 1986 C128 snapshot (`.vsf`) at launch. |
+| `--save-snapshot PATH` | Save a `.vsf` snapshot immediately before exit. |
 | `--gif-out PATH` | Start recording a GIF at launch. |
 | `--paste TEXT` | Inject text through the emulated keyboard. |
 | `--paste-at N` | Delay `--paste` until emulated frame N. |
@@ -163,6 +165,23 @@ pointer in the active VIC/VDC window. Ctrl+Enter releases it; opening the F9
 overlay, changing output with F10, or swapping input ports with F1 releases it
 too. These settings persist in `1986.conf`.
 Advanced > Joystick HIDAPI takes effect after restart.
+
+## Snapshots
+
+Open F9 and choose **Media > Save snapshot** or **Load snapshot**. Snapshot
+files use VICE's `.vsf` container and the picker remembers its last directory.
+Snapshots made by 1986 preserve both CPUs, both video systems, RAM, CIA/SID,
+input, tape position, and scheduler timing. Disk and tape images remain
+external files rather than being embedded.
+Save and load at an idle BASIC/CP/M prompt; an IEC/GCR operation already in
+progress inside a disk drive is not yet part of the snapshot.
+
+Plain VICE C128 snapshots are detected but rejected without changing the
+running machine. Restoring only their 8502/MMU/RAM modules while resetting
+the CIA, VIC-II, interrupt, drive, and input state is not safe for a running
+program; VICE 3.10 also omits the C128 Z80 and VDC state. VICE likewise does
+not understand 1986's complete `1986STATE` module. See
+[snapshot compatibility](docs/SNAPSHOTS.md) for details.
 
 The 785260 diagnostic cartridge expects Commodore's external test harness.
 1986 does not silently connect its user-port, serial, or cassette

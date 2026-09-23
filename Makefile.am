@@ -26,6 +26,7 @@ dist_man1_MANS = 1986.1
 	src/vice/interrupt.c \
 	src/paste.c \
 	src/monitor.c \
+	src/snapshot.c \
 	src/gifcap.c \
 	src/leds.c \
 	src/notify.c \
@@ -62,6 +63,7 @@ noinst_HEADERS = \
 	src/mos6502dis.h \
 	src/paste.h \
 	src/monitor.h \
+	src/snapshot.h \
 	src/gifcap.h \
 	src/leds.h \
 	src/notify.h \
@@ -132,7 +134,7 @@ dist_icon512_DATA  = icons/512x512/apps/io.github.salvogendut.Emulator1986.png
 
 # Files shipped in the dist tarball but not built (license, docs, examples).
 EXTRA_DIST = LICENSE README.md Development.md USAGE.md CONTROLS.md INSTALL.md \
-	ROADMAP.md docs/STATUS.md docs/DRIVES.md docs/Z80-CPM.md docs/ML-MONITOR.md \
+	ROADMAP.md docs/STATUS.md docs/DRIVES.md docs/Z80-CPM.md docs/ML-MONITOR.md docs/SNAPSHOTS.md \
 	1986.conf.example 1986_logo.png 1986.png 1986.spec \
 	screenshots/vicii-basic.png screenshots/vdc-basic.png \
 	screenshots/rocky-horror-staircase.png screenshots/rocky-horror-room.png \
@@ -147,4 +149,5 @@ EXTRA_DIST = LICENSE README.md Development.md USAGE.md CONTROLS.md INSTALL.md \
 	tests/test_mos6502dis.c \
 	tests/test_d64.c tests/test_d64_save.c tests/test_disk_formats.c \
 	tests/test_drive.c tests/test_drive1571cr.c tests/test_drive_monitor.c tests/test_tape.c tests/test_gcr_drive.c tests/test_gcr_write.c tests/test_via6522.c tests/test_iec_bus.c tests/test_prg_drive.c tests/test_vdrive_blocks.c tests/test_overlay.c \
-	tests/test_display_footer.c tests/test_leds.c tests/test_vic.c tests/test_vdc.c
+	tests/test_display_footer.c tests/test_leds.c tests/test_vic.c tests/test_vdc.c \
+	tests/test_snapshot.c

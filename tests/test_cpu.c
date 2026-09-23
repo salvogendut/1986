@@ -92,6 +92,18 @@ int main(void) {
           "JSR writes relocated stack page, not physical page one");
     cpu_set_stack_page(&ram[0x0100]);
 
+    /* A real illegal/JAM opcode must not reset the VICE core clock inside a
+     * bounded step and trap the host forever. Surface it to the machine so
+     * the SDL loop can reset cleanly. */
+    ram[0x0600] = 0x22;
+    ram[0xFFFC] = 0x00; ram[0xFFFD] = 0x06;
+    cpu_reset(&cpu);
+    CHECK(cpu_step_budget(&cpu, 1) >= 1, "JAM remains cycle-bounded");
+    u16 jam_pc = 0;
+    CHECK(cpu_take_jam(&jam_pc), "JAM is reported to the machine");
+    CHECK(jam_pc == 0x0600, "JAM reports its program counter");
+    CHECK(!cpu_take_jam(NULL), "JAM report is consumed once");
+
     /* C128 KERNAL IEC traps exchange bytes through BSOUR ($95) and the serial
      * input temporary ($A4), rather than assuming the accumulator is the
      * transport. */

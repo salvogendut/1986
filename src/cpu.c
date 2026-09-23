@@ -38,6 +38,8 @@ BYTE *mem_page_one = NULL;
 
 /* The active CpuBus (its ctx is the C128). Set by cpu_init(). */
 static CpuBus g_bus;
+static bool g_cpu_jammed;
+static u16 g_cpu_jam_pc;
 
 static BYTE cpu_mem_read(WORD addr) {
     return g_bus.read(g_bus.ctx, addr);
@@ -65,7 +67,14 @@ void mem_powerup(void) {
 
 int machine_jam(const char *fmt, ...) {
     (void)fmt;
-    return JAM_RESET;
+    g_cpu_jammed = true;
+    g_cpu_jam_pc = (u16)reg_pc;
+    /* Any value outside VICE's reset/monitor choices takes the bounded
+     * fallback path: advance one cycle and let cpu_step_budget() return.
+     * Returning JAM_RESET resets maincpu_clk to 6 inside the core; when the
+     * current budget was based on a much later snapshot clock that can loop
+     * forever before control reaches SDL again. */
+    return -1;
 }
 void machine_trigger_reset(int mode) {
     (void)mode;
@@ -396,6 +405,7 @@ void cpu_init(Cpu8502 *cpu, CpuBus bus) {
     maincpu_regs.p = 0x24;
     maincpu_clk = 0;
     maincpu_clk_limit = 0;
+    g_cpu_jammed = false;
 }
 
 void cpu_attach_mem(Cpu8502 *cpu, u8 *ram) {
@@ -416,6 +426,7 @@ void cpu_reset(Cpu8502 *cpu) {
     maincpu_regs.sp = 0xFD;
     maincpu_regs.p = 0x24;
     maincpu_clk = 0;
+    g_cpu_jammed = false;
     if (maincpu_int_status) {
         interrupt_cpu_status_reset(maincpu_int_status);
     }
@@ -460,13 +471,13 @@ int cpu_step_budget(Cpu8502 *cpu, int budget) {
 }
 
 void cpu_irq(Cpu8502 *cpu, bool level) {
-    (void)cpu;
+    if (cpu) cpu->irq_level = level;
     if (maincpu_int_status)
         interrupt_set_irq(maincpu_int_status, 0, level ? 1 : 0, maincpu_clk);
 }
 
 void cpu_nmi(Cpu8502 *cpu, bool level) {
-    (void)cpu;
+    if (cpu) cpu->nmi_level = level;
     if (maincpu_int_status)
         interrupt_set_nmi(maincpu_int_status, 0, level ? 1 : 0, maincpu_clk);
 }
@@ -482,4 +493,64 @@ u64 cpu_cycles(void) {
 
 bool cpu_rmw_active(void) {
     return maincpu_rmw_flag != 0;
+}
+
+bool cpu_take_jam(u16 *pc) {
+    bool jammed = g_cpu_jammed;
+    if (jammed && pc) *pc = g_cpu_jam_pc;
+    g_cpu_jammed = false;
+    return jammed;
+}
+
+void cpu_state_get(const Cpu8502 *cpu, Cpu8502State *state) {
+    if (!cpu || !state) return;
+    state->a = maincpu_regs.a;
+    state->x = maincpu_regs.x;
+    state->y = maincpu_regs.y;
+    state->sp = maincpu_regs.sp;
+    state->p = (u8)MOS6510_REGS_GET_STATUS(&maincpu_regs);
+    state->pc = (u16)maincpu_regs.pc;
+    state->clock = (u64)maincpu_clk;
+    state->cycles = cpu->cycles;
+    state->last_opcode_info = last_opcode_info;
+    state->irq_level = cpu->irq_level;
+    state->nmi_level = cpu->nmi_level;
+    state->fast = cpu->fast;
+    state->io_ddr = cpu->io_ddr;
+    state->io_port = cpu->io_port;
+}
+
+void cpu_state_set(Cpu8502 *cpu, const Cpu8502State *state) {
+    if (!cpu || !state) return;
+    MOS6510_REGS_SET_A(&maincpu_regs, state->a);
+    MOS6510_REGS_SET_X(&maincpu_regs, state->x);
+    MOS6510_REGS_SET_Y(&maincpu_regs, state->y);
+    MOS6510_REGS_SET_SP(&maincpu_regs, state->sp);
+    MOS6510_REGS_SET_PC(&maincpu_regs, state->pc);
+    MOS6510_REGS_SET_STATUS(&maincpu_regs, state->p);
+    reg_pc = state->pc;
+    maincpu_clk = (CLOCK)state->clock;
+    maincpu_clk_limit = 0;
+    maincpu_rmw_flag = 0;
+    g_cpu_jammed = false;
+    last_opcode_info = state->last_opcode_info;
+    if (maincpu_int_status)
+        interrupt_cpu_status_reset(maincpu_int_status);
+
+    cpu->a = state->a;
+    cpu->x = state->x;
+    cpu->y = state->y;
+    cpu->sp = state->sp;
+    cpu->p = state->p;
+    cpu->pc = state->pc;
+    cpu->cycles = state->cycles;
+    cpu->irq_level = false;
+    cpu->nmi_level = false;
+    cpu->fast = state->fast;
+    cpu->io_ddr = state->io_ddr;
+    cpu->io_port = state->io_port;
+    cpu_irq(cpu, state->irq_level);
+    cpu_nmi(cpu, state->nmi_level);
+    cpu->irq_level = state->irq_level;
+    cpu->nmi_level = state->nmi_level;
 }

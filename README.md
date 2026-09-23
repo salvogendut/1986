@@ -26,7 +26,8 @@ disk access and an experimental ROM-backed 1571CR path.
 - Native C128 cartridges, raw function ROMs, the U36 internal ROM socket, and
   TAP/T64 cassette support.
 - Unified or separate VIC/VDC windows, persistent configuration, screenshots,
-  GIF capture, a dual-CPU 8502/Z80 ML monitor, and a compact options overlay.
+  GIF capture, VICE-container snapshots, a dual-CPU 8502/Z80 ML monitor, and a
+  compact options overlay.
 
 See [current status and limitations](docs/STATUS.md) for the detailed hardware
 matrix and [disk and drive architecture](docs/DRIVES.md) for the distinction
@@ -75,6 +76,7 @@ media, configuration, ROM layout, and command-line options.
 | [Drives](docs/DRIVES.md) | Fast virtual drive and experimental 1571CR architecture |
 | [Z80/CP/M](docs/Z80-CPM.md) | Reset BIOS, shared-RAM trampoline, CPU handoff, and timing invariants |
 | [ML monitor](docs/ML-MONITOR.md) | 8502/Z80 disassembly, memory, stepping, and CPU-tagged breakpoints |
+| [Snapshots](docs/SNAPSHOTS.md) | Save/load state and the limits of VICE `.vsf` interchange |
 | [Development](Development.md) | Source layout, emulation design, diagnostics, and testing |
 | [Roadmap](ROADMAP.md) | Completed milestones and remaining work |
 | [Installation](INSTALL.md) | Source builds and packaged platforms |

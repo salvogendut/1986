@@ -152,6 +152,9 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "last_u36_dir")) {
         snprintf(cfg->last_u36_dir, sizeof(cfg->last_u36_dir), "%s", value);
     }
+    else if (!strcasecmp(key, "last_snapshot_dir")) {
+        snprintf(cfg->last_snapshot_dir, sizeof(cfg->last_snapshot_dir), "%s", value);
+    }
     else if (!strcasecmp(key, "drive_unit")) cfg->drive_unit = atoi(value);
     else if (!strcasecmp(key, "drive2_unit")) cfg->drive2_unit = atoi(value);
     else if (!strcasecmp(key, "drive_type")) cfg->drive_type = atoi(value);
@@ -229,6 +232,7 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "last_tape_dir = %s\n", cfg->last_tape_dir);
     fprintf(f, "last_cart_dir = %s\n", cfg->last_cart_dir);
     fprintf(f, "last_u36_dir = %s\n", cfg->last_u36_dir);
+    fprintf(f, "last_snapshot_dir = %s\n", cfg->last_snapshot_dir);
     fprintf(f, "drive_unit = %d\n", cfg->drive_unit);
     fprintf(f, "drive2_unit = %d\n", cfg->drive2_unit);
     fprintf(f, "drive_type = %d\n", cfg->drive_type);

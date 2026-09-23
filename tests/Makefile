@@ -11,7 +11,7 @@ else
 GC_SECTIONS_LDFLAGS = -Wl,--gc-sections
 endif
 
-TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-mos6502dis test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc
+TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-mos6502dis test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc test-snapshot
 
 .PHONY: all check clean
 
@@ -135,6 +135,10 @@ test-vdc: test_vdc.c ../src/vdc.c ../src/vdc.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_vdc.c ../src/vdc.c -o $@
 
+test-snapshot: test_snapshot.c ../src/snapshot.c ../src/snapshot.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
+		test_snapshot.c ../src/snapshot.c -o $@
+
 check: $(TESTS)
 	./test-cpu
 	./test-mmu
@@ -165,6 +169,7 @@ check: $(TESTS)
 	./test-leds
 	./test-vic
 	./test-vdc
+	./test-snapshot
 
 clean:
 	rm -f $(TESTS)
