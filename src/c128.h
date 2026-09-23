@@ -65,6 +65,8 @@ typedef struct {
     bool    restore_down; /* RESTORE is an NMI pin, not a keyboard-matrix key */
     int     frames_since_reset; /* frames elapsed since the last reset */
     int     cpu_frame_debt; /* instruction-cycle overrun carried across raster frames */
+    int     z80_frame_debt; /* Z80 T-state overrun carried across raster frames */
+    u64     bus_cycles;     /* shared one-MHz peripheral/bus clock */
     u64     total_cycles;
 } C128;
 

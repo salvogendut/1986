@@ -57,13 +57,13 @@ int main(void) {
     leds_render(renderer, 0, 0, 384, LED_BAR_H);
     SDL_Surface *two_mhz = SDL_RenderReadPixels(renderer, NULL);
 
-    /* With both drives enabled, the four indicators occupy 376 pixels and
+    /* With both drives enabled, the four indicators occupy 368 pixels and
      * remain inside the 384-pixel VIC window at scale 1. CPU lamp positions
-     * are therefore fixed at x=228 and x=332 for this worst-case layout. */
+     * are therefore fixed at x=184 and x=288 for this worst-case layout. */
     bool ok = one_mhz && two_mhz &&
-              pixel_is(two_mhz, 229, 7, 255, 255, 255) &&
-              pixel_is(two_mhz, 333, 7, 80, 150, 255) &&
-              areas_differ(one_mhz, two_mhz, 248, 7, 72, 8);
+              pixel_is(two_mhz, 185, 7, 255, 255, 255) &&
+              pixel_is(two_mhz, 289, 7, 80, 150, 255) &&
+              areas_differ(one_mhz, two_mhz, 204, 7, 72, 8);
 
     SDL_DestroySurface(one_mhz);
     SDL_DestroySurface(two_mhz);

@@ -54,3 +54,5 @@ void mmu_ffxx_write(Mmu *mmu, u16 addr, u8 val);
 bool mmu_take_c64_request(Mmu *mmu);
 void mmu_set_c64_enabled(Mmu *mmu, bool enabled);
 bool mmu_is_c64_mode(const Mmu *mmu);
+/* $D505 bit 0 selects the bus owner: 0 = Z80, 1 = 8502. */
+bool mmu_cpu_is_8502(const Mmu *mmu);

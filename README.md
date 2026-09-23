@@ -57,7 +57,7 @@ team for making this work available.
 
 1986 deliberately treats the Commodore 128 as a platform in its own right. It
 targets native C128 software, including the VIC-IIe 40-column and VDC
-80-column environments; CP/M mode is also planned. Its product scope does not
+80-column environments and the Z80-based CP/M mode. Its product scope does not
 include becoming a general-purpose C64 emulator.
 
 For development, **Advanced > C64 Test Mode** can temporarily arm the real
@@ -108,6 +108,9 @@ Current working pieces include:
   second virtual IEC drive, separately selected disk image/unit, and
   per-entry remembered file-picker directories.
 - VICE's 8502/6510 core and a reused Z80 core wired to the C128 bus.
+- CP/M Plus boot through the C128's authentic Z80 reset BIOS and 8502/Z80
+  shared-RAM handoff, with MMU-controlled CPU arbitration and Z80 access to
+  the native C128 memory and I/O map.
 - An opt-in, experimental C64-personality test path, disabled by default,
   used to validate the C128's shared VIC-IIe/SID/CIA/IEC hardware. It is not a
   promise of general C64 compatibility.
@@ -134,7 +137,7 @@ Current working pieces include:
   atomic block-command writes.
 
 Tape recording, further write-side DOS commands, complete 1571 emulation,
-high-fidelity SID filter/combined-waveform emulation, CP/M mode, and several
+high-fidelity SID filter/combined-waveform emulation, and several
 accuracy features remain unfinished. The virtual drive does not emulate 1571
 or 1581 hardware; it and the true 1571 share only the media/image layer.
 The independent 1571CR core has a 2K RAM/32K ROM bus map,
@@ -165,8 +168,8 @@ mixed real/virtual IEC mode is not supported. Selecting 1581 hardware does not
 imply that its hardware is emulated.
 The bottom bar shows a separately labeled activity LED for each enabled drive,
 in both the 40-column and 80-column windows. It also shows a white 8502 lamp
-whose label follows the active 1 MHz/2 MHz clock and a blue Z80 lamp; each
-brightens only while its processor is being clocked. In true-drive mode, each
+whose label follows the active 1 MHz/2 MHz clock and a blue Z80 2 MHz lamp;
+each brightens only while its processor is being clocked. In true-drive mode, each
 drive LED follows its own drive-ROM LED state and lights on motor, head, and
 actual byte activity; neither blinks on a timer. Advanced > Drive Audio Monitor
 (default Off) adds motor and head sounds from both 1571s to the SID output. The
