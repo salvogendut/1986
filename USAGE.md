@@ -79,9 +79,11 @@ see the rest of the host-key mappings, enable **General > Tinker**, then open
 **Advanced > Keyboard map** with Enter. Enter or Esc closes the map.
 
 F5 performs a normal hardware reset and therefore preserves the contents of
-main RAM and VDC video RAM. Alt+F5 performs a full power cycle: main and
+main RAM and VDC video RAM. Ctrl+F5 performs a full power cycle: main and
 real-drive RAM are cleared, VDC RAM receives its power-on pattern, and all
-chips and drives reset.
+chips and drives reset. GNOME reserves bare Alt+F5 for its global Unmaximize
+command. Shift+Alt+F5 is also accepted because the added Shift avoids that
+exact binding.
 Inserted disks, tape, cartridge and U36 ROM remain attached, and the physical
 40/80-key selection is preserved.
 

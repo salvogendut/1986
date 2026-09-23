@@ -319,8 +319,8 @@ static void render_function_keys(SDL_Renderer *r, int bottom_reserved) {
 
     const char *model = "C128DCR";
     const char *keys = rw >= 1050
-        ? "  F1=joy  F2=tape play  F3=rewind  F4=shot  F5=reset  Alt+F5=power  F6=GIF  F7=pause  F8=monitor  F9=options  F10=40/80  F11=full  F12=quit"
-        : "  F1 Joy F2 Play F3 Rew F4 Shot F5 Reset A+F5 Power F6 GIF F7 Pause F8 Mon F9 Opt F10 40/80 F11 Full F12 Quit";
+        ? "  F1=joy  F2=tape play  F3=rewind  F4=shot  F5=reset  Ctrl+F5=power  F6=GIF  F7=pause  F8=monitor  F9=options  F10=40/80  F11=full  F12=quit"
+        : "  F1 Joy F2 Play F3 Rew F4 Shot F5 Reset C+F5 Power F6 GIF F7 Pause F8 Mon F9 Opt F10 40/80 F11 Full F12 Quit";
     float text_w = (float)(strlen(model) + strlen(keys)) * 8.0f;
     float scale = text_w > (float)rw - 12.0f ? ((float)rw - 12.0f) / text_w : 1.0f;
     if (scale <= 0.0f) return;
