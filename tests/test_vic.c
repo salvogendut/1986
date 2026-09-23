@@ -94,22 +94,21 @@ int main(void) {
     CHECK(pixel(display, 0, 0) == 0xC46C71, "hires set bit uses screen high nibble");
     CHECK(pixel(display, 1, 0) == 0x75CEC8, "hires clear bit uses screen low nibble");
 
-    /* A raster split can point adjacent bitmap scanlines at different screen
-     * matrices; rendering from the final $D018 value loses half the image. */
+    /* A raster split can point adjacent bitmap scanlines at different bitmap
+     * banks. The screen matrix remains buffered from the badline fetch. */
     vic_reset(&vic);
     vic_write(&vic, 0xD011, 0x3B);
-    vic_write(&vic, 0xD018, 0x10); /* first scanline: matrix $0400 */
-    mem->ram[0x0400] = 0xA0;
-    mem->ram[0x0800] = 0xF0;
+    vic_write(&vic, 0xD018, 0x10); /* first scanline: bitmap $0000 */
+    mem->ram[0x0400] = 0xA3;
     mem->ram[0x0000] = 0x80;
-    mem->ram[0x0001] = 0x80;
     vic_latch_raster(&vic, mem, 51);
-    vic_write(&vic, 0xD018, 0x20); /* second scanline: matrix $0800 */
+    vic_write(&vic, 0xD018, 0x18); /* second scanline: bitmap $2000 */
+    mem->ram[0x2001] = 0x00;
     vic_latch_raster(&vic, mem, 52);
     vic_render(&vic, mem, display);
     CHECK(pixel(display, 0, 0) == 0xC46C71 &&
-          pixel(display, 0, 1) == 0xB2B2B2,
-          "bitmap raster split uses the matrix selected on each scanline");
+          pixel(display, 0, 1) == 0x75CEC8,
+          "bitmap raster split uses the bitmap bank selected per scanline");
 
     vic_reset(&vic);
     vic_write(&vic, 0xD011, 0x3B);
@@ -187,14 +186,13 @@ int main(void) {
     vic_write(&vic, 0xD011, 0x3B); /* bitmap */
     vic_write(&vic, 0xD016, 0x08);
     vic_write(&vic, 0xD018, 0x18); /* matrix $0400, bitmap $2000 */
-    mem->ram[0x0400] = 0xA0;
+    mem->ram[0x0400] = 0xA1;
     mem->ram[0x2000] = 0x80;
     vic_latch_raster(&vic, mem, 51);
     vic_write(&vic, 0xD011, 0x1B); /* text */
-    vic_write(&vic, 0xD018, 0x24); /* matrix $0800, characters $1000 */
-    mem->ram[0x0800] = 0x01;
+    vic_write(&vic, 0xD018, 0x14); /* same matrix, characters $1000 */
     mem->color_ram[0] = 0x01;
-    mem->chargen[0x1009] = 0x40;
+    mem->chargen[0x1509] = 0x40;
     vic_latch_raster(&vic, mem, 52);
     vic_render(&vic, mem, display);
     CHECK(pixel(display, 0, 0) == 0xC46C71,
@@ -249,6 +247,28 @@ int main(void) {
           "24-row mode keeps raster 51 in the border");
     CHECK(pixel(display, 0, 4) == 0xFFFFFF,
           "24-row mode starts glyph row zero on raster 55");
+
+    /* A YSCROLL write after the upper playfield has started changes future
+     * badline comparisons, not the row-counter phase already in progress. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD016, 0x08);
+    vic_write(&vic, 0xD018, 0x14);
+    memset(&mem->ram[0x0400], 0x01, 1000);
+    memset(&mem->color_ram[0], 0x01, 1000);
+    mem->chargen[0x1009] = 0x40;
+    mem->chargen[0x100A] = 0x20;
+    vic_write(&vic, 0xD011, 0x1B); /* establish YSCROLL 3 badlines */
+    for (unsigned line = 0; line <= 100; line++)
+        vic_latch_raster(&vic, mem, line);
+    vic_write(&vic, 0xD011, 0x1C); /* change after raster row 6 began */
+    for (unsigned line = 101; line < VIC_RASTER_LINES; line++)
+        vic_latch_raster(&vic, mem, line);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 2, 50) == 0xFFFFFF &&
+          pixel(display, 1, 50) == 0x000000,
+          "mid-frame YSCROLL write preserves the active row-counter phase");
 
     /* Sprite registers and pointer-table RAM are sampled per raster. Raster
      * multiplexers rewrite both while earlier sprites are still visible. */

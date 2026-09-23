@@ -344,7 +344,49 @@ static void vic_draw_sprites(Vic *v, Mem *m, Display *d, const u8 *foreground) {
  * then the eight hardware sprites are composited over the graphics plane. */
 void vic_render(Vic *v, Mem *m, Display *d) {
     u8 foreground[C128_SCREEN_W * C128_SCREEN_H];
+    int matrix_row[VIC_RASTER_LINES];
+    u8 matrix_line[VIC_RASTER_LINES];
+    u32 matrix_base[VIC_RASTER_LINES];
     memset(foreground, 0, sizeof(foreground));
+    for (unsigned line = 0; line < VIC_RASTER_LINES; line++)
+        matrix_row[line] = -1;
+
+    /* Follow the VIC-II's badline-driven row counter in raster order. A
+     * mid-frame YSCROLL write only changes later badline comparisons; it
+     * does not retroactively remap every following scanline. Screen/color
+     * matrix data is fetched on a badline and remains buffered while RC runs
+     * from 0 to 7, whereas character/bitmap data follows $D018 each line. */
+    bool den_latched = false;
+    bool display_state = false;
+    int row = -1;
+    u8 row_counter = 0;
+    u32 screen_base = 0;
+    for (unsigned line = 0; line < VIC_RASTER_LINES; line++) {
+        VicRasterState fallback;
+        const VicRasterState *state =
+            vic_state_for_line(v, m, line, &fallback);
+        if (line == 48)
+            den_latched = (state->d011 & 0x10) != 0;
+        bool badline = den_latched && line >= 48 && line <= 247 &&
+                       (line & 0x07) == (state->d011 & 0x07);
+        if (badline) {
+            row++;
+            row_counter = 0;
+            display_state = true;
+            screen_base = state->bank_addr + ((state->d018 & 0xF0) << 6);
+        }
+        if (display_state && row >= 0 && row < VIC_CHARS_Y) {
+            matrix_row[line] = row;
+            matrix_line[line] = row_counter;
+            matrix_base[line] = screen_base;
+        }
+        if (display_state) {
+            if (row_counter == 7)
+                display_state = false;
+            else
+                row_counter++;
+        }
+    }
 
     /* Render each line from its sampled registers. Bitmap mode uses $D011
      * bit 5. $D018 bit 3 selects the 8K
@@ -363,10 +405,7 @@ void vic_render(Vic *v, Mem *m, Display *d) {
             d->pixels[dy * C128_SCREEN_W + dx] = border;
 
         /* RSEL selects a 25-row window on raster lines 51..250 or a 24-row
-         * window on 55..246. The low three $D011 bits select the first
-         * badline (48 + YSCROLL), which is where character row 0 / glyph
-         * line 0 is fetched. Keeping that relationship makes a changing
-         * YSCROLL move the picture one scanline at a time. */
+         * window on 55..246. */
         unsigned display_first = (state->d011 & 0x08) ? 51u : 55u;
         unsigned display_last = (state->d011 & 0x08) ? 251u : 247u;
         if (raster < display_first || raster >= display_last ||
@@ -376,15 +415,12 @@ void vic_render(Vic *v, Mem *m, Display *d) {
         u32 bg = VIC_COLORS[state->bg_color[0] & 0x0F];
         for (int dx = VIC_TEXT_X; dx < VIC_TEXT_X + VIC_TEXT_W; dx++)
             d->pixels[dy * C128_SCREEN_W + dx] = bg;
-        int graphics_y = (int)raster - (48 + (state->d011 & 0x07));
-        if (graphics_y < 0)
+        if (matrix_row[raster] < 0)
             continue;
-        int cy = graphics_y >> 3;
-        int py = graphics_y & 7;
-        if (cy >= VIC_CHARS_Y)
-            continue;
+        int cy = matrix_row[raster];
+        int py = matrix_line[raster];
 
-        u32 screen_base = state->bank_addr + ((state->d018 & 0xF0) << 6);
+        u32 screen_base = matrix_base[raster];
         u32 bitmap_addr = state->bank_addr +
             (((state->d018 & 0x0E) << 10) & 0x2000);
         u16 char_addr = (u16)((state->d018 & 0x0E) << 10);
