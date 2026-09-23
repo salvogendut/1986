@@ -127,6 +127,20 @@ void c128_vdc_port_write(C128 *c, u16 addr, u8 val) {
         vdc_write_data(&c->vdc, val);
 }
 
+/* IRQ/NMI sources are level-sensitive.  A device register can acknowledge
+ * an interrupt in the middle of an instruction, so propagate the changed
+ * line to the active CPU immediately instead of leaving it asserted until
+ * the next raster-line boundary. */
+static void c128_refresh_interrupt_lines(C128 *c) {
+    bool irq = cia_irq_line(&c->cia1) || (c->vic.irq_status & 0x80);
+    if (mmu_cpu_is_8502(&c->mem.mmu)) {
+        cpu_irq(&c->cpu, irq);
+        cpu_nmi(&c->cpu, cia_irq_line(&c->cia2) || c->restore_down);
+    } else {
+        c->z80.pending_irq = irq;
+    }
+}
+
 static u8 io_read(C128 *c, u16 addr) {
     u8 v;
     if (addr >= 0xD000 && addr < 0xD400) v = vic_read(&c->vic, addr);
@@ -196,6 +210,9 @@ static u8 io_read(C128 *c, u16 addr) {
         v = c128_vdc_port_read(c, addr);
     }
     else v = 0xFF;
+    if ((addr >= 0xD000 && addr < 0xD400) ||
+        (addr >= 0xDC00 && addr < 0xDE00))
+        c128_refresh_interrupt_lines(c);
     return v;
 }
 
@@ -205,6 +222,7 @@ static void io_write(C128 *c, u16 addr, u8 val) {
             vic_write_rmw(&c->vic, addr, val);
         else
             vic_write(&c->vic, addr, val);
+        c128_refresh_interrupt_lines(c);
         return;
     }
     if (addr >= 0xD400 && addr < 0xD500) { sid_write(&c->sid, addr, val); return; }
@@ -231,12 +249,17 @@ static void io_write(C128 *c, u16 addr, u8 val) {
             return;
         }
     }
-    if (addr >= 0xDC00 && addr < 0xDD00) { cia_write(&c->cia1, addr, val); return; }
+    if (addr >= 0xDC00 && addr < 0xDD00) {
+        cia_write(&c->cia1, addr, val);
+        c128_refresh_interrupt_lines(c);
+        return;
+    }
     if (addr >= 0xDD00 && addr < 0xDE00) {
         drive_sync_to_cpu(c);
         cia_write(&c->cia2, addr, val);
         if ((addr & 15) == 0 || (addr & 15) == 2)
             iec_bus_set_host(&c->iec_bus, c->cia2.pra, c->cia2.ddra);
+        c128_refresh_interrupt_lines(c);
         return;
     }
     if (addr >= 0xD600 && addr < 0xD700) {
