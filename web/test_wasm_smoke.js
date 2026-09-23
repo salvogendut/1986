@@ -1,8 +1,13 @@
 const assert=require('assert');
+const fs=require('fs');
 const path=require('path');
 const create1986=require('./dist/1986.js');
+const wasmPath=path.join(__dirname,'dist','1986.wasm');
 
-create1986({locateFile:name=>path.join(__dirname,'dist',name)}).then(Module=>{
+create1986({
+  locateFile:name=>path.join(__dirname,'dist',name),
+  wasmBinary:fs.readFileSync(wasmPath),
+}).then(Module=>{
   assert.equal(Module._poc_init(),0);
   assert.equal(Module._poc_display(),80);
   assert.equal(Module._poc_width(),640);
