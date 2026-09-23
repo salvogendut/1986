@@ -11,6 +11,8 @@ typedef struct {
 static const LedPalette palette[LED_COUNT] = {
     [LED_FDC_A]  = { 70, 18, 18,  255,  70,  70 },
     [LED_FDC_B]  = { 70, 18, 18,  255,  70,  70 },
+    [LED_CPU_8502] = { 55, 55, 55,  255, 255, 255 },
+    [LED_CPU_Z80] = { 20, 35, 75,   80, 150, 255 },
     [LED_IDE]    = { 18, 70, 18,   80, 255,  80 },
     [LED_USB]    = { 25, 50,110,   90, 160, 255 },
     [LED_SD]     = { 25, 50,110,   90, 160, 255 },
@@ -36,6 +38,7 @@ static const LedPalette palette_m4_net   = { 70, 70, 70,  240, 240, 240 };
 
 static bool   g_enabled  [LED_COUNT];
 static int    g_drive_unit[2] = { 8, 9 };
+static unsigned g_cpu_mhz = 1;
 static Uint64 g_last_ms  [LED_COUNT];   /* Generic, also used for LED_USIFAC RX half */
 static Uint64 g_last_ms_b[LED_COUNT];   /* Only used for split LEDs (TX half) */
 static bool   g_mouse_inside;
@@ -50,6 +53,8 @@ static const char *led_label(LedId id) {
     switch (id) {
     case LED_FDC_A:   return "Drive 1";
     case LED_FDC_B:   return "Drive 2";
+    case LED_CPU_8502: return "8502 CPU";
+    case LED_CPU_Z80: return "Z80 CPU";
     case LED_IDE:     return "IDE disk";
     case LED_USB:     return "Albireo USB";
     case LED_SD:      return "SD card";
@@ -65,6 +70,8 @@ static const char *led_label(LedId id) {
 static int led_width(LedId id) {
     const int led_w = 24;
     if (id == LED_FDC_A || id == LED_FDC_B) return 104;
+    if (id == LED_CPU_8502) return 96;
+    if (id == LED_CPU_Z80) return 48;
     return id == LED_M4 ? led_w * 3 / 2 : led_w;
 }
 
@@ -120,6 +127,10 @@ static void update_hover(int x, int y, int w, int h) {
                 bool tx = (g_mouse_x - cx) >= half_w;
                 set_hover_label(tx ? "USIfAC TX" : "USIfAC RX",
                                 cx + (tx ? half_w : 0), half_w, y);
+            } else if (i == LED_CPU_8502) {
+                char label[32];
+                snprintf(label, sizeof(label), "8502 CPU (%u MHz)", g_cpu_mhz);
+                set_hover_label(label, cx, this_w, y);
             } else {
                 set_hover_label(led_label((LedId)i), cx, this_w, y);
             }
@@ -137,6 +148,10 @@ void leds_set_enabled(LedId id, bool enabled) {
 void leds_set_drive_unit(LedId id, int unit) {
     if ((id == LED_FDC_A || id == LED_FDC_B) && unit >= 8 && unit <= 11)
         g_drive_unit[id == LED_FDC_B] = unit;
+}
+
+void leds_set_cpu_frequency(unsigned mhz) {
+    g_cpu_mhz = mhz >= 2 ? 2 : 1;
 }
 
 void leds_ping(LedId id) {
@@ -244,7 +259,8 @@ void leds_render(SDL_Renderer *r, int x, int y, int w, int h) {
             /* Single outline around the whole footprint */
             SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
             SDL_RenderRect(r, &led);
-        } else if (i == LED_FDC_A || i == LED_FDC_B) {
+        } else if (i == LED_FDC_A || i == LED_FDC_B ||
+                   i == LED_CPU_8502 || i == LED_CPU_Z80) {
             const LedPalette *p = &palette[i];
             Uint64 dt = now - g_last_ms[i];
             bool active = g_last_ms[i] != 0 && dt < LED_GLOW_MS;
@@ -257,8 +273,15 @@ void leds_render(SDL_Renderer *r, int x, int y, int w, int h) {
             SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
             SDL_RenderRect(r, &lamp);
             char label[32];
-            snprintf(label, sizeof(label), "DRIVE %d #%d",
-                     i == LED_FDC_A ? 1 : 2, g_drive_unit[i == LED_FDC_B]);
+            if (i == LED_FDC_A || i == LED_FDC_B) {
+                snprintf(label, sizeof(label), "DRIVE %d #%d",
+                         i == LED_FDC_A ? 1 : 2,
+                         g_drive_unit[i == LED_FDC_B]);
+            } else if (i == LED_CPU_8502) {
+                snprintf(label, sizeof(label), "8502 %uMHZ", g_cpu_mhz);
+            } else {
+                snprintf(label, sizeof(label), "Z80");
+            }
             SDL_SetRenderDrawColor(r, 205, 205, 205, 255);
             SDL_RenderDebugText(r, (float)(cx + 20), (float)(cy + 1), label);
         } else {

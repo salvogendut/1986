@@ -113,6 +113,22 @@ bool c128_mount_tape(C128 *c, const char *path) {
 
 /* --- CPU bus: route CPU reads/writes through memory + I/O. --- */
 
+u8 c128_vdc_port_read(C128 *c, u16 addr) {
+    vdc_set_bus_clock(&c->vdc, cpu_cycles(),
+                      c->fast || c->vic.fast_mode);
+    return (addr & 1) == 0 ? vdc_read_status(&c->vdc)
+                           : vdc_read_data(&c->vdc);
+}
+
+void c128_vdc_port_write(C128 *c, u16 addr, u8 val) {
+    vdc_set_bus_clock(&c->vdc, cpu_cycles(),
+                      c->fast || c->vic.fast_mode);
+    if ((addr & 1) == 0)
+        vdc_write_index(&c->vdc, val);
+    else
+        vdc_write_data(&c->vdc, val);
+}
+
 static u8 io_read(C128 *c, u16 addr) {
     u8 v;
     if (addr >= 0xD000 && addr < 0xD400) v = vic_read(&c->vic, addr);
@@ -175,12 +191,13 @@ static u8 io_read(C128 *c, u16 addr) {
                      iec_bus_host_inputs(&c->iec_bus));
         } else v = cia_read(&c->cia2, addr);
     }
-    else if (!mem_c64_mode(&c->mem) && addr >= 0xD600 && addr < 0xD700) {
-        vdc_set_bus_clock(&c->vdc, cpu_cycles(), c->fast);
-        v = ((addr & 1) == 0) ? vdc_read_status(&c->vdc) : vdc_read_data(&c->vdc);
+    else if (addr >= 0xD600 && addr < 0xD700) {
+        /* The VDC remains mapped in the C128's C64 personality. Software
+         * such as Elite128 probes and uses it there; VICE likewise registers
+         * the $D600-$D6FF device independently of the active personality. */
+        v = c128_vdc_port_read(c, addr);
     }
     else v = 0xFF;
-
     return v;
 }
 
@@ -224,10 +241,8 @@ static void io_write(C128 *c, u16 addr, u8 val) {
             iec_bus_set_host(&c->iec_bus, c->cia2.pra, c->cia2.ddra);
         return;
     }
-    if (!mem_c64_mode(&c->mem) && addr >= 0xD600 && addr < 0xD700) {
-        vdc_set_bus_clock(&c->vdc, cpu_cycles(), c->fast);
-        if ((addr & 1) == 0) vdc_write_index(&c->vdc, val);   /* $D600 */
-        else                 vdc_write_data(&c->vdc, val);    /* $D601 */
+    if (addr >= 0xD600 && addr < 0xD700) {
+        c128_vdc_port_write(c, addr, val);
         return;
     }
 }
@@ -390,6 +405,7 @@ int c128_frame(C128 *c) {
      * compare line (VICE's alarm-based timing). */
     bool fast_now = c->fast || c->vic.fast_mode;
     c->cpu.fast = fast_now;
+    leds_set_cpu_frequency(fast_now ? 2 : 1);
     int frame_cycles = fast_now ? 2 * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
     c->drive_clock_denominator = (unsigned)frame_cycles;
     c->drive_host_cycle_synced = cpu_cycles();
@@ -449,6 +465,8 @@ int c128_frame(C128 *c) {
         cpu_nmi(&c->cpu, cia_irq_line(&c->cia2) || c->restore_down);
     }
     c->cpu_frame_debt = cpu_debt;
+    if (total > 0)
+        leds_ping(LED_CPU_8502);
     /* The 6526 TOD input follows the PAL 50 Hz mains signal, not the 8502
      * clock (which may run at 2 MHz). One completed PAL frame is one pulse. */
     cia_tod_tick(&c->cia1);

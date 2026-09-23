@@ -12,6 +12,9 @@ static int failures;
 #define CHECK(condition, message) do { if (!(condition)) { \
     fprintf(stderr, "FAIL: %s\n", message); ++failures; } } while (0)
 
+static u64 test_cpu_clock;
+u64 cpu_cycles(void) { return test_cpu_clock; }
+
 static bool pressed(const Kbd *kbd, int row, int col) {
     return (kbd_matrix(kbd, row) & (1u << col)) == 0;
 }
@@ -74,6 +77,20 @@ int main(void) {
           c->vdc.bytes_per_char == 16,
           "switching back to VDC leaves its display registers intact");
 
+    /* VICE keeps the VDC host ports registered in C64 mode. Elite128 uses
+     * this exact R18/R19 round trip to distinguish a C128 from a stock C64. */
+    vdc_init(&c->vdc);
+    c->mem.mmu.c64_mode = true;
+    test_cpu_clock = 100;
+    c128_vdc_port_write(c, 0xD600, 18);
+    c128_vdc_port_write(c, 0xD601, 0x40);
+    c128_vdc_port_write(c, 0xD600, 19);
+    c128_vdc_port_write(c, 0xD601, 0x80);
+    c128_vdc_port_write(c, 0xD600, 18);
+    CHECK(c128_vdc_port_read(c, 0xD601) == 0x40,
+          "C64 personality retains access to the C128 VDC ports");
+
+    free(c->vdc.fb);
     free(c);
     if (!failures) puts("test-c128-keyboard: OK");
     return failures ? 1 : 0;

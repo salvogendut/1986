@@ -87,6 +87,9 @@ int  c128_iec_receive(void *ctx, u8 *byte);
 u8   c128_iec_take_status(void *ctx);
 u8   c128_mem_read(void *ctx, u16 addr);
 void c128_mem_write(void *ctx, u16 addr, u8 val);
+/* 8563/8568 host ports remain available in native and C64 personalities. */
+u8   c128_vdc_port_read(C128 *c, u16 addr);
+void c128_vdc_port_write(C128 *c, u16 addr, u8 val);
 
 /* Frame counter (used by the z80.c debug instrumentation and boot trace). */
 extern int c128_frame_count;
