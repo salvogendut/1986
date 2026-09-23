@@ -41,7 +41,8 @@ function startAudio(){
 }
 
 function inputActive(){return document.activeElement===canvas||document.activeElement.closest?.(".keyboard");}
-document.addEventListener("keydown",e=>{if(!inputActive())return;if(e.code==="F10"){e.preventDefault();switchDisplay();return;}const scan=CODE2SCAN[e.code];if(scan===undefined)return;e.preventDefault();if(!e.repeat)Module._poc_key(scan,1);startAudio();});
+function playTape(){if(!mounted.tape){status("No tape mounted");toast("Load a tape first");return;}Module._poc_tape_control(1);startAudio();status("Tape playing");toast("Datasette Play");}
+document.addEventListener("keydown",e=>{if(!inputActive())return;if(e.code==="F2"){e.preventDefault();if(!e.repeat)playTape();return;}if(e.code==="F10"){e.preventDefault();switchDisplay();return;}const scan=CODE2SCAN[e.code];if(scan===undefined)return;e.preventDefault();if(!e.repeat)Module._poc_key(scan,1);startAudio();});
 document.addEventListener("keyup",e=>{const scan=CODE2SCAN[e.code];if(scan===undefined||!inputActive())return;e.preventDefault();Module._poc_key(scan,0);});
 window.addEventListener("blur",()=>{for(const scan of Object.values(CODE2SCAN))Module?._poc_key(scan,0);});
 canvas.addEventListener("pointerdown",()=>{canvas.focus();startAudio();});
@@ -61,7 +62,7 @@ async function mount(file,kind){if(!file)return;try{const path=await putFile(fil
 for(const kind of ["disk","tape","cart"]){$(kind+"File").addEventListener("change",e=>mount(e.target.files[0],kind));$(kind+"Eject").addEventListener("click",()=>{Module["_poc_eject_"+kind]();mounted[kind]=null;$(kind+"Name").textContent=kind==="cart"?"No cartridge":kind==="tape"?"No tape":"No disk";$(kind+"Eject").disabled=true;if(kind==="tape"){$("tapePlay").disabled=true;$("tapeRewind").disabled=true;}status(`${kind} ejected`);});}
 $("screenStage").addEventListener("dragover",e=>{e.preventDefault();e.dataTransfer.dropEffect="copy";});
 $("screenStage").addEventListener("drop",e=>{e.preventDefault();const file=e.dataTransfer.files[0];if(!file)return;const ext=(file.name.match(/\.[^.]+$/)||[""])[0].toLowerCase();const kind=[".d64",".d71",".d81",".prg"].includes(ext)?"disk":[".tap",".t64"].includes(ext)?"tape":[".crt",".bin",".rom"].includes(ext)?"cart":null;if(kind)mount(file,kind);else toast("Unsupported media type");});
-$("tapePlay").addEventListener("click",()=>{Module._poc_tape_control(1);startAudio();status("Tape playing");});$("tapeRewind").addEventListener("click",()=>{Module._poc_tape_control(2);status("Tape rewound");});
+$("tapePlay").addEventListener("click",playTape);$("tapeRewind").addEventListener("click",()=>{Module._poc_tape_control(2);status("Tape rewound");});
 $("realDrive").addEventListener("change",e=>{const wanted=e.target.checked;status(`Restarting with ${wanted?"real 1571":"fast virtual"} drive…`);if(Module._poc_set_real_drive(wanted?1:0)!==0){e.target.checked=false;status("Drive mode change failed");return;}e.target.checked=!!Module._poc_real_drive();Module._poc_audio_reset();status(e.target.checked?"Real 1571 drive enabled":"Fast virtual drive enabled");toast(statusEl.textContent);});
 
 async function fetchMedia(url,kind){const response=await fetch(url);if(!response.ok)throw new Error(`HTTP ${response.status}`);const name=JS1986Media.filenameFromUrl(url,kind);return new File([await response.arrayBuffer()],name);}
