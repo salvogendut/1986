@@ -34,6 +34,12 @@ static void vic_capture_state(const Vic *v, const Mem *m,
     } else {
         memset(state->sprite_pointer, 0, sizeof(state->sprite_pointer));
     }
+    state->matrix_valid = false;
+    state->matrix_row = -1;
+    state->matrix_line = 0;
+    memset(state->matrix_data, 0, sizeof(state->matrix_data));
+    memset(state->color_data, 0, sizeof(state->color_data));
+    memset(state->graphics_data, 0, sizeof(state->graphics_data));
 }
 
 static const VicRasterState *vic_state_for_line(const Vic *v, const Mem *m,
@@ -85,6 +91,13 @@ void vic_reset(Vic *v) {
     v->cycles = 0;
     memset(v->raster_state, 0, sizeof(v->raster_state));
     memset(v->raster_state_valid, 0, sizeof(v->raster_state_valid));
+    v->fetch_den_latched = false;
+    v->fetch_display_state = false;
+    v->fetch_matrix_row = -1;
+    v->fetch_row_counter = 0;
+    v->fetch_matrix_valid = false;
+    memset(v->fetch_matrix_data, 0, sizeof(v->fetch_matrix_data));
+    memset(v->fetch_color_data, 0, sizeof(v->fetch_color_data));
     v->fast_mode = false;
 }
 
@@ -239,14 +252,115 @@ bool vic_tick(Vic *v) {
     return (v->irq_status & 0x80) != 0;
 }
 
+static u8 vic_fetch_text_byte(const VicRasterState *state, const Mem *m,
+                              u8 ch, u8 row) {
+    if ((state->d011 & 0x60) == 0x40)
+        ch &= 0x3F;
+    u16 char_addr = (u16)((state->d018 & 0x0E) << 10);
+    u16 glyph_addr = (u16)(char_addr + ((u16)ch << 3) + row);
+    u32 physical_glyph = state->bank_addr + glyph_addr;
+    bool rom = mem_c64_mode(m)
+        ? (physical_glyph & 0x7000) == 0x1000
+        : (!(m->pla_data & 0x04) && (glyph_addr & 0x3000) == 0x1000);
+    return rom
+        ? m->chargen[(mem_c64_mode(m) ? 0 : 0x1000) +
+                     (glyph_addr & 0x0FFF)]
+        : m->ram[physical_glyph];
+}
+
+static void vic_latch_matrix_fetch(Vic *v, const Mem *m, unsigned line,
+                                   VicRasterState *state) {
+    if (line == 48)
+        v->fetch_den_latched = (state->d011 & 0x10) != 0;
+
+    bool badline = v->fetch_den_latched && line >= 48 && line <= 247 &&
+                   (line & 0x07) == (state->d011 & 0x07);
+    if (badline) {
+        v->fetch_matrix_row++;
+        v->fetch_row_counter = 0;
+        v->fetch_display_state = true;
+        v->fetch_matrix_valid = v->fetch_matrix_row >= 0 &&
+                                v->fetch_matrix_row < VIC_CHARS_Y;
+        if (v->fetch_matrix_valid) {
+            u32 screen_base = state->bank_addr +
+                              ((state->d018 & 0xF0) << 6);
+            unsigned cell = (unsigned)v->fetch_matrix_row * VIC_CHARS_X;
+            unsigned cbank = mem_c64_mode(m) ? 0 :
+                             (m->pla_data >> 1) & 0x01;
+            for (unsigned cx = 0; cx < VIC_CHARS_X; cx++) {
+                v->fetch_matrix_data[cx] = m->ram[screen_base + cell + cx];
+                v->fetch_color_data[cx] =
+                    m->color_ram[cbank * 0x400 + cell + cx] & 0x0F;
+            }
+        }
+    }
+
+    if (v->fetch_display_state && v->fetch_matrix_valid) {
+        state->matrix_valid = true;
+        state->matrix_row = v->fetch_matrix_row;
+        state->matrix_line = v->fetch_row_counter;
+        memcpy(state->matrix_data, v->fetch_matrix_data,
+               sizeof(state->matrix_data));
+        memcpy(state->color_data, v->fetch_color_data,
+               sizeof(state->color_data));
+        bool bitmap = (state->d011 & 0x20) != 0;
+        for (unsigned cx = 0; cx < VIC_CHARS_X; cx++) {
+            if (bitmap) {
+                u32 bitmap_addr = state->bank_addr +
+                    (((state->d018 & 0x0E) << 10) & 0x2000);
+                state->graphics_data[cx] = m->ram[bitmap_addr +
+                    (unsigned)v->fetch_matrix_row * 320 + cx * 8 +
+                    v->fetch_row_counter];
+            } else {
+                state->graphics_data[cx] = vic_fetch_text_byte(
+                    state, m, v->fetch_matrix_data[cx],
+                    v->fetch_row_counter);
+            }
+        }
+    }
+
+    if (v->fetch_display_state) {
+        if (v->fetch_row_counter == 7)
+            v->fetch_display_state = false;
+        else
+            v->fetch_row_counter++;
+    }
+}
+
 void vic_begin_frame(Vic *v, const Mem *m) {
     memset(v->raster_state_valid, 0, sizeof(v->raster_state_valid));
+    v->fetch_den_latched = false;
+    v->fetch_display_state = false;
+    v->fetch_matrix_row = -1;
+    v->fetch_row_counter = 0;
+    v->fetch_matrix_valid = false;
     vic_latch_raster(v, m, 0);
 }
 
 void vic_latch_raster(Vic *v, const Mem *m, unsigned line) {
     if (line < VIC_RASTER_LINES) {
+        /* At 2 MHz the CPU loop visits each physical raster twice. Refresh
+         * its register sample on the second visit, but do not advance the
+         * VIC's badline/row-counter state or discard data fetched earlier
+         * on that raster. */
+        bool already_latched = v->raster_state_valid[line];
+        VicRasterState fetched;
+        if (already_latched)
+            fetched = v->raster_state[line];
         vic_capture_state(v, m, &v->raster_state[line]);
+        if (!already_latched) {
+            vic_latch_matrix_fetch(v, m, line, &v->raster_state[line]);
+        } else {
+            v->raster_state[line].matrix_valid = fetched.matrix_valid;
+            v->raster_state[line].matrix_row = fetched.matrix_row;
+            v->raster_state[line].matrix_line = fetched.matrix_line;
+            memcpy(v->raster_state[line].matrix_data, fetched.matrix_data,
+                   sizeof(fetched.matrix_data));
+            memcpy(v->raster_state[line].color_data, fetched.color_data,
+                   sizeof(fetched.color_data));
+            memcpy(v->raster_state[line].graphics_data,
+                   fetched.graphics_data, sizeof(fetched.graphics_data));
+        }
         v->raster_state_valid[line] = true;
     }
 }
@@ -415,12 +529,13 @@ void vic_render(Vic *v, Mem *m, Display *d) {
         u32 bg = VIC_COLORS[state->bg_color[0] & 0x0F];
         for (int dx = VIC_TEXT_X; dx < VIC_TEXT_X + VIC_TEXT_W; dx++)
             d->pixels[dy * C128_SCREEN_W + dx] = bg;
-        if (matrix_row[raster] < 0)
+        bool fetched = v->raster_state_valid[raster] && state->matrix_valid;
+        if (!fetched && matrix_row[raster] < 0)
             continue;
-        int cy = matrix_row[raster];
-        int py = matrix_line[raster];
+        int cy = fetched ? state->matrix_row : matrix_row[raster];
+        int py = fetched ? state->matrix_line : matrix_line[raster];
 
-        u32 screen_base = matrix_base[raster];
+        u32 screen_base = fetched ? 0 : matrix_base[raster];
         u32 bitmap_addr = state->bank_addr +
             (((state->d018 & 0x0E) << 10) & 0x2000);
         u16 char_addr = (u16)((state->d018 & 0x0E) << 10);
@@ -431,14 +546,15 @@ void vic_render(Vic *v, Mem *m, Display *d) {
         for (int cx = 0; cx < VIC_CHARS_X; cx++) {
             u16 cell_index = (u16)(cy * VIC_CHARS_X + cx);
             u32 cell = screen_base + cell_index;
-            u8 screen = m->ram[cell];
+            u8 screen = fetched ? state->matrix_data[cx] : m->ram[cell];
             unsigned cbank = mem_c64_mode(m) ? 0 :
                              (m->pla_data >> 1) & 0x01;
-            u8 cram = m->color_ram[cbank * 0x400 +
-                                   (cell_index & 0x3FF)] & 0x0F;
+            u8 cram = fetched ? state->color_data[cx] :
+                m->color_ram[cbank * 0x400 + (cell_index & 0x3FF)] & 0x0F;
 
             if (bitmap && !extended) {
-                u8 bits = m->ram[bitmap_addr + cy * 320 + cx * 8 + py];
+                u8 bits = fetched ? state->graphics_data[cx] :
+                    m->ram[bitmap_addr + cy * 320 + cx * 8 + py];
                 if (!multicolor) {
                     u32 fg = VIC_COLORS[screen >> 4];
                     u32 cell_bg = VIC_COLORS[screen & 0x0F];
@@ -485,7 +601,7 @@ void vic_render(Vic *v, Mem *m, Display *d) {
                     ? &m->chargen[(mem_c64_mode(m) ? 0 : 0x1000) +
                                   (glyph_addr & 0x0FFF)]
                     : &m->ram[state->bank_addr + glyph_addr];
-                u8 bits = glyph[py];
+                u8 bits = fetched ? state->graphics_data[cx] : glyph[py];
                 bool text_multicolor = multicolor && (cram & 0x08) && !extended;
                 if (text_multicolor) {
                     u32 colors[4] = {

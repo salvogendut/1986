@@ -39,6 +39,12 @@ typedef struct {
     u8 sprite_color[VIC_SPRITES];
     u8 sprite_pointer[VIC_SPRITES];
     u32 bank_addr;
+    bool matrix_valid;
+    s8 matrix_row;
+    u8 matrix_line;
+    u8 matrix_data[VIC_CHARS_X];
+    u8 color_data[VIC_CHARS_X];
+    u8 graphics_data[VIC_CHARS_X];
 } VicRasterState;
 
 typedef struct {
@@ -73,6 +79,13 @@ typedef struct {
     u64  cycles;       /* raster cycle counter */
     VicRasterState raster_state[VIC_RASTER_LINES];
     bool raster_state_valid[VIC_RASTER_LINES];
+    bool fetch_den_latched;
+    bool fetch_display_state;
+    s8 fetch_matrix_row;
+    u8 fetch_row_counter;
+    bool fetch_matrix_valid;
+    u8 fetch_matrix_data[VIC_CHARS_X];
+    u8 fetch_color_data[VIC_CHARS_X];
     bool fast_mode;     /* VIC-IIe $D030 bit 0: 8502 requests 2 MHz */
 } Vic;
 

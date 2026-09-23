@@ -270,6 +270,53 @@ int main(void) {
           pixel(display, 1, 50) == 0x000000,
           "mid-frame YSCROLL write preserves the active row-counter phase");
 
+    /* Screen, colour, and graphics data belong to the raster on which the
+     * VIC fetched them. Games may rewrite all three later in the same frame;
+     * those writes must not alter lines which have already been scanned. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD011, 0x1B);
+    vic_write(&vic, 0xD016, 0x08);
+    vic_write(&vic, 0xD018, 0x14);
+    mem->ram[0x0400] = 0x01;
+    mem->color_ram[0] = 0x01;
+    mem->chargen[0x1008] = 0x80;
+    vic_begin_frame(&vic, mem);
+    for (unsigned line = 1; line <= 51; line++)
+        vic_latch_raster(&vic, mem, line);
+    mem->ram[0x0400] = 0x02;
+    mem->color_ram[0] = 0x02;
+    mem->chargen[0x1008] = 0x00;
+    mem->chargen[0x1010] = 0x40;
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xFFFFFF &&
+          pixel(display, 1, 0) == 0x000000,
+          "a scanned raster retains its fetched matrix, colour, and glyph");
+
+    /* A 2 MHz frame calls the raster latch twice per physical line. The
+     * second sample may update registers, but must neither fetch again nor
+     * advance the row counter a second time. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD011, 0x1B);
+    vic_write(&vic, 0xD016, 0x08);
+    vic_write(&vic, 0xD018, 0x14);
+    mem->ram[0x0400] = 0x01;
+    mem->color_ram[0] = 0x01;
+    mem->chargen[0x1008] = 0x80;
+    mem->chargen[0x1009] = 0x40;
+    vic_begin_frame(&vic, mem);
+    for (unsigned line = 0; line <= 52; line++) {
+        vic_latch_raster(&vic, mem, line);
+        vic_latch_raster(&vic, mem, line);
+    }
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xFFFFFF &&
+          pixel(display, 1, 1) == 0xFFFFFF,
+          "duplicate 2 MHz raster samples retain one row-counter advance");
+
     /* Sprite registers and pointer-table RAM are sampled per raster. Raster
      * multiplexers rewrite both while earlier sprites are still visible. */
     vic_reset(&vic);
