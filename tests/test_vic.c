@@ -94,22 +94,21 @@ int main(void) {
     CHECK(pixel(display, 0, 0) == 0xC46C71, "hires set bit uses screen high nibble");
     CHECK(pixel(display, 1, 0) == 0x75CEC8, "hires clear bit uses screen low nibble");
 
-    /* A raster split can point adjacent bitmap scanlines at different screen
-     * matrices; rendering from the final $D018 value loses half the image. */
+    /* A raster split can point adjacent bitmap scanlines at different bitmap
+     * banks. The screen matrix remains buffered from the badline fetch. */
     vic_reset(&vic);
     vic_write(&vic, 0xD011, 0x3B);
-    vic_write(&vic, 0xD018, 0x10); /* first scanline: matrix $0400 */
-    mem->ram[0x0400] = 0xA0;
-    mem->ram[0x0800] = 0xF0;
+    vic_write(&vic, 0xD018, 0x10); /* first scanline: bitmap $0000 */
+    mem->ram[0x0400] = 0xA3;
     mem->ram[0x0000] = 0x80;
-    mem->ram[0x0001] = 0x80;
-    vic_latch_raster(&vic, 51);
-    vic_write(&vic, 0xD018, 0x20); /* second scanline: matrix $0800 */
-    vic_latch_raster(&vic, 52);
+    vic_latch_raster(&vic, mem, 51);
+    vic_write(&vic, 0xD018, 0x18); /* second scanline: bitmap $2000 */
+    mem->ram[0x2001] = 0x00;
+    vic_latch_raster(&vic, mem, 52);
     vic_render(&vic, mem, display);
     CHECK(pixel(display, 0, 0) == 0xC46C71 &&
-          pixel(display, 0, 1) == 0xB2B2B2,
-          "bitmap raster split uses the matrix selected on each scanline");
+          pixel(display, 0, 1) == 0x75CEC8,
+          "bitmap raster split uses the bitmap bank selected per scanline");
 
     vic_reset(&vic);
     vic_write(&vic, 0xD011, 0x3B);
@@ -130,6 +129,243 @@ int main(void) {
           "multicolor 10 uses screen low nibble");
     CHECK(pixel(display, 6, 0) == 0x706DEB && pixel(display, 7, 0) == 0x706DEB,
           "multicolor 11 uses colour RAM");
+
+    /* Multicolor text is selected per character by color RAM bit 3. Each
+     * two-bit glyph pair selects background 0/1/2 or the low three bits of
+     * the character color. COMMANDO relies heavily on this VIC-II mode. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD011, 0x1B);
+    vic_write(&vic, 0xD016, 0x18);
+    vic_write(&vic, 0xD018, 0x14);
+    vic_write(&vic, 0xD021, 0x02);
+    vic_write(&vic, 0xD022, 0x03);
+    vic_write(&vic, 0xD023, 0x04);
+    mem->ram[0x0400] = 0x01;
+    mem->color_ram[0] = 0x0D;
+    mem->chargen[0x1008] = 0x1B; /* 00, 01, 10, 11 */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x813338 &&
+          pixel(display, 1, 0) == 0x813338,
+          "multicolor text 00 uses background 0");
+    CHECK(pixel(display, 2, 0) == 0x75CEC8 &&
+          pixel(display, 3, 0) == 0x75CEC8,
+          "multicolor text 01 uses background 1");
+    CHECK(pixel(display, 4, 0) == 0x8E3C97 &&
+          pixel(display, 5, 0) == 0x8E3C97,
+          "multicolor text 10 uses background 2");
+    CHECK(pixel(display, 6, 0) == 0x56AC4D &&
+          pixel(display, 7, 0) == 0x56AC4D,
+          "multicolor text 11 uses the character color");
+
+    /* Extended-color text uses the character's upper two bits to select one
+     * of four backgrounds and its lower six bits for the glyph. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD011, 0x5B);
+    vic_write(&vic, 0xD016, 0x08);
+    vic_write(&vic, 0xD018, 0x14);
+    vic_write(&vic, 0xD024, 0x07);
+    mem->ram[0x0400] = 0xC1;
+    mem->color_ram[0] = 0x01;
+    mem->chargen[0x1008] = 0x80;
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xFFFFFF,
+          "extended-color text retains the foreground color");
+    CHECK(pixel(display, 1, 0) == 0xEDF171,
+          "extended-color text selects its background from the character");
+
+    /* Video mode, memory pointers, and colors are sampled per raster line.
+     * A final-state renderer would render both rows in only one of these
+     * modes and colors. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD011, 0x3B); /* bitmap */
+    vic_write(&vic, 0xD016, 0x08);
+    vic_write(&vic, 0xD018, 0x18); /* matrix $0400, bitmap $2000 */
+    mem->ram[0x0400] = 0xA1;
+    mem->ram[0x2000] = 0x80;
+    vic_latch_raster(&vic, mem, 51);
+    vic_write(&vic, 0xD011, 0x1B); /* text */
+    vic_write(&vic, 0xD018, 0x14); /* same matrix, characters $1000 */
+    mem->color_ram[0] = 0x01;
+    mem->chargen[0x1509] = 0x40;
+    vic_latch_raster(&vic, mem, 52);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xC46C71,
+          "a raster line retains bitmap mode and its memory pointers");
+    CHECK(pixel(display, 1, 1) == 0xFFFFFF,
+          "the following raster line can switch to text mode");
+
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    vic_write(&vic, 0xD020, 0x02);
+    vic_latch_raster(&vic, mem, 16);
+    vic_write(&vic, 0xD020, 0x05);
+    vic_latch_raster(&vic, mem, 17);
+    vic_write(&vic, 0xD021, 0x03);
+    vic_latch_raster(&vic, mem, 51);
+    vic_write(&vic, 0xD021, 0x04);
+    vic_latch_raster(&vic, mem, 52);
+    vic_render(&vic, mem, display);
+    CHECK(display->pixels[0] == 0x813338 &&
+          display->pixels[C128_SCREEN_W] == 0x56AC4D,
+          "border color changes are preserved per raster line");
+    CHECK(pixel(display, 0, 0) == 0x75CEC8 &&
+          pixel(display, 0, 1) == 0x8E3C97,
+          "background color changes are preserved per raster line");
+
+    /* $D011 YSCROLL chooses the first badline. Advancing it by one moves
+     * character row zero down by one physical scanline instead of jumping a
+     * complete character row. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD018, 0x14);
+    vic_write(&vic, 0xD020, 0x02);
+    mem->ram[0x0400] = 0x01;
+    mem->color_ram[0] = 0x01;
+    mem->chargen[0x1008] = 0x80;
+    vic_write(&vic, 0xD011, 0x1B); /* 25 rows, YSCROLL 3 */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xFFFFFF,
+          "YSCROLL 3 starts glyph row zero on raster 51");
+    vic_write(&vic, 0xD011, 0x1C); /* YSCROLL 4 */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x000000 &&
+          pixel(display, 0, 1) == 0xFFFFFF,
+          "incrementing YSCROLL moves graphics down one scanline");
+
+    /* RSEL's 24-row window starts four lines lower. COMMANDO uses this with
+     * YSCROLL 7 for its playfield and lower status/text split. */
+    vic_write(&vic, 0xD011, 0x17); /* 24 rows, YSCROLL 7 */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x813338,
+          "24-row mode keeps raster 51 in the border");
+    CHECK(pixel(display, 0, 4) == 0xFFFFFF,
+          "24-row mode starts glyph row zero on raster 55");
+
+    /* A YSCROLL write after the upper playfield has started changes future
+     * badline comparisons, not the row-counter phase already in progress. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD016, 0x08);
+    vic_write(&vic, 0xD018, 0x14);
+    memset(&mem->ram[0x0400], 0x01, 1000);
+    memset(&mem->color_ram[0], 0x01, 1000);
+    mem->chargen[0x1009] = 0x40;
+    mem->chargen[0x100A] = 0x20;
+    vic_write(&vic, 0xD011, 0x1B); /* establish YSCROLL 3 badlines */
+    for (unsigned line = 0; line <= 100; line++)
+        vic_latch_raster(&vic, mem, line);
+    vic_write(&vic, 0xD011, 0x1C); /* change after raster row 6 began */
+    for (unsigned line = 101; line < VIC_RASTER_LINES; line++)
+        vic_latch_raster(&vic, mem, line);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 2, 50) == 0xFFFFFF &&
+          pixel(display, 1, 50) == 0x000000,
+          "mid-frame YSCROLL write preserves the active row-counter phase");
+
+    /* Screen, colour, and graphics data belong to the raster on which the
+     * VIC fetched them. Games may rewrite all three later in the same frame;
+     * those writes must not alter lines which have already been scanned. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD011, 0x1B);
+    vic_write(&vic, 0xD016, 0x08);
+    vic_write(&vic, 0xD018, 0x14);
+    mem->ram[0x0400] = 0x01;
+    mem->color_ram[0] = 0x01;
+    mem->chargen[0x1008] = 0x80;
+    vic_begin_frame(&vic, mem);
+    for (unsigned line = 1; line <= 51; line++)
+        vic_latch_raster(&vic, mem, line);
+    mem->ram[0x0400] = 0x02;
+    mem->color_ram[0] = 0x02;
+    mem->chargen[0x1008] = 0x00;
+    mem->chargen[0x1010] = 0x40;
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xFFFFFF &&
+          pixel(display, 1, 0) == 0x000000,
+          "a scanned raster retains its fetched matrix, colour, and glyph");
+
+    /* A 2 MHz frame calls the raster latch twice per physical line. The
+     * second sample may update registers, but must neither fetch again nor
+     * advance the row counter a second time. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD011, 0x1B);
+    vic_write(&vic, 0xD016, 0x08);
+    vic_write(&vic, 0xD018, 0x14);
+    mem->ram[0x0400] = 0x01;
+    mem->color_ram[0] = 0x01;
+    mem->chargen[0x1008] = 0x80;
+    mem->chargen[0x1009] = 0x40;
+    vic_begin_frame(&vic, mem);
+    for (unsigned line = 0; line <= 52; line++) {
+        vic_latch_raster(&vic, mem, line);
+        vic_latch_raster(&vic, mem, line);
+    }
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xFFFFFF &&
+          pixel(display, 1, 1) == 0xFFFFFF,
+          "duplicate 2 MHz raster samples retain one row-counter advance");
+
+    /* Sprite registers and pointer-table RAM are sampled per raster. Raster
+     * multiplexers rewrite both while earlier sprites are still visible. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    vic_write(&vic, 0xD018, 0x14);
+    set_sprite_pointer(mem, &vic, 0, 0x20);
+    mem->ram[0x0800] = 0x80;
+    vic_write(&vic, 0xD000, 24);
+    vic_write(&vic, 0xD001, 51);
+    vic_write(&vic, 0xD015, 0x01);
+    vic_write(&vic, 0xD027, 0x02);
+    vic_latch_raster(&vic, mem, 51);
+    set_sprite_pointer(mem, &vic, 0, 0x21);
+    mem->ram[0x0843] = 0x80;
+    vic_write(&vic, 0xD027, 0x05);
+    vic_latch_raster(&vic, mem, 52);
+    set_sprite_pointer(mem, &vic, 0, 0x22); /* overwritten after the split */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x813338 &&
+          pixel(display, 0, 1) == 0x56AC4D,
+          "sprite registers and pointers are preserved per raster line");
+
+    /* VICE's multicolor mask treats pair 01 as background and pairs 10/11
+     * as foreground. A behind-background sprite must remain visible over 01
+     * but disappear behind 10. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD011, 0x1B);
+    vic_write(&vic, 0xD016, 0x18);
+    vic_write(&vic, 0xD018, 0x14);
+    vic_write(&vic, 0xD023, 0x03);
+    mem->ram[0x0400] = 0x01;
+    mem->color_ram[0] = 0x08;
+    mem->chargen[0x1008] = 0x40; /* first pair 01: background */
+    set_sprite_pointer(mem, &vic, 0, 0x20);
+    mem->ram[0x0800] = 0x80;
+    vic_write(&vic, 0xD000, 24);
+    vic_write(&vic, 0xD001, 51);
+    vic_write(&vic, 0xD015, 0x01);
+    vic_write(&vic, 0xD01B, 0x01);
+    vic_write(&vic, 0xD027, 0x02);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x813338,
+          "priority sprite remains visible over multicolor pair 01");
+    mem->chargen[0x1008] = 0x80; /* first pair 10: foreground */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x75CEC8,
+          "priority sprite stays behind multicolor pair 10");
 
     /* Native C128 text mode uses the upper 4K half of the 8K character ROM. */
     vic_reset(&vic);
