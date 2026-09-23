@@ -634,7 +634,7 @@ void c128_init(C128 *c, Config *cfg) {
      * the reset vector must be read from the loaded KERNAL ROM. */
 }
 
-void c128_reset(C128 *c) {
+static void c128_reset_internal(C128 *c, bool power_cycle) {
     mem_reset(&c->mem);
     cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
     cpu_reset(&c->cpu);
@@ -653,8 +653,13 @@ void c128_reset(C128 *c) {
     tape_set_motor(&c->tape, false);
     drive_reset(&c->drive);
     drive_reset(&c->drive2);
-    drive1571cr_reset(&c->integrated_drive);
-    drive1571cr_reset(&c->second_real_drive);
+    if (power_cycle) {
+        drive1571cr_power_cycle(&c->integrated_drive);
+        drive1571cr_power_cycle(&c->second_real_drive);
+    } else {
+        drive1571cr_reset(&c->integrated_drive);
+        drive1571cr_reset(&c->second_real_drive);
+    }
     drive_monitor_reset(&c->drive_monitor);
     drive_monitor_reset(&c->drive2_monitor);
     iec_bus_reset(&c->iec_bus);
@@ -680,6 +685,22 @@ void c128_reset(C128 *c) {
     /* Preserve the 40/80 column choice across resets. */
     c->mem.mmu.col4080 = !c->col_mode_80;
     display_set_vdc_active(&c->display, c->col_mode_80);
+}
+
+void c128_reset(C128 *c) {
+    c128_reset_internal(c, false);
+}
+
+void c128_power_cycle(C128 *c) {
+    /* Unlike RESET, removing power destroys both banks of system RAM and
+     * VDC RAM. ROMs, inserted media, configuration, and the physical 40/80
+     * key remain in place. */
+    mem_power_cycle(&c->mem);
+    vdc_powerup(&c->vdc);
+    c->cpu.io_ddr = 0;
+    c->cpu.io_port = 0;
+    c->total_cycles = 0;
+    c128_reset_internal(c, true);
 }
 
 int c128_frame(C128 *c) {

@@ -113,6 +113,7 @@ typedef struct {
 
 void c128_init(C128 *c, Config *cfg);
 void c128_reset(C128 *c);
+void c128_power_cycle(C128 *c);
 int  c128_frame(C128 *c);      /* run one frame; returns CPU cycles consumed */
 u64  c128_cycles_to_ns(const C128 *c, int cycles);
 void c128_key_event(C128 *c, int scancode, bool down);

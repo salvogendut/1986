@@ -143,6 +143,7 @@ static void usage(const char *argv0) {
         "  F3     Rewind tape\n"
         "  F4     Screenshot (PPM)\n"
         "  F5     Reset\n"
+        "  Ctrl+F5 Power cycle (Shift+Alt+F5 also accepted)\n"
         "  F6     Toggle GIF capture\n"
         "  F7     Pause\n"
         "  F8     Monitor\n"
@@ -357,9 +358,10 @@ int main(int argc, char **argv) {
         notify_post("C64 TEST MODE NEEDS BASIC64 AND KERNAL64 ROMS");
     }
 
-    /* Reset after ROMs are loaded so the reset vector comes from the KERNAL. */
+    /* Power up after ROMs are loaded so the reset vector comes from the
+     * KERNAL and volatile RAM receives its hardware startup pattern. */
     c.col_mode_80 = cfg.col_mode_80;
-    c128_reset(&c);
+    c128_power_cycle(&c);
     display_focus_active(&c.display);
 
     /* Patch the KERNAL ROM with the IEC serial traps (like VICE) so the boot
@@ -535,8 +537,11 @@ int main(int argc, char **argv) {
             if (ev.type == SDL_EVENT_KEY_DOWN) {
                 bool ctrl  = (ev.key.mod & SDL_KMOD_CTRL) != 0;
                 bool shift = (ev.key.mod & SDL_KMOD_SHIFT) != 0;
+                bool alt   = (ev.key.mod & SDL_KMOD_ALT) != 0;
                 bool fkey  = (ev.key.scancode >= SDL_SCANCODE_F1 &&
                               ev.key.scancode <= SDL_SCANCODE_F8);
+                bool power_cycle_key = ev.key.scancode == SDL_SCANCODE_F5 &&
+                                       ((shift && alt) || ctrl);
                 if (ev.key.scancode == SDL_SCANCODE_LSHIFT ||
                     ev.key.scancode == SDL_SCANCODE_RSHIFT)
                     pc_shift_held = true;
@@ -560,7 +565,7 @@ int main(int argc, char **argv) {
                  * emulator's plain F-key shortcuts otherwise). The held PC
                  * Shift must NOT also apply as a C128 Shift, or F1 would read
                  * as F2; override it with the function key's own Shift. */
-                if (fkey && shift) {
+                if (fkey && shift && !power_cycle_key) {
                     int row, col;
                     bool need_shift;
                     if (kbd_map_scancode(ev.key.scancode, &row, &col, &need_shift)) {
@@ -621,7 +626,15 @@ int main(int argc, char **argv) {
                                                (int)sfx_buf_len);
                     }
                 } else if (ev.key.scancode == SDL_SCANCODE_F5) {
-                    c128_reset(&c);
+                    /* GNOME reserves bare Alt+F5 for Unmaximize. Adding Shift
+                     * avoids that exact compositor binding; Ctrl+F5 remains
+                     * a fallback for environments with broader shortcuts. */
+                    if (power_cycle_key) {
+                        c128_power_cycle(&c);
+                        notify_post("C128DCR POWER CYCLE");
+                    } else {
+                        c128_reset(&c);
+                    }
                     if (audio_stream) SDL_ClearAudioStream(audio_stream);
                 } else if (ev.key.scancode == SDL_SCANCODE_F6) {
                     if (videocap_active()) {

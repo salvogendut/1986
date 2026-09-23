@@ -234,6 +234,11 @@ int main(void) {
     CHECK(drive1571cr_read(&drive, 0x1c01) == drive.gcr.read_byte &&
           !drive.gcr.byte_ready, "VIA2 port A reads and acknowledges GCR byte");
 
+    drive.ram[0] = 0x5a;
+    drive1571cr_power_cycle(&drive);
+    CHECK(drive.ram[0] == 0 && drive.rom_loaded && drive.gcr.image == &image,
+          "drive power cycle clears RAM while retaining ROM and inserted disk");
+
     const char *user_rom = getenv("C128_TEST_1571_ROM");
     if (user_rom && *user_rom) {
         CHECK(drive1571cr_load_rom(&drive, user_rom),

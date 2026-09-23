@@ -46,13 +46,10 @@ static void vdc_ram_write(Vdc *v, u16 addr, u8 value) {
 void vdc_init(Vdc *v) {
     memset(v, 0, sizeof(*v));
     v->address_mask = 0xFFFF; /* C128DCR default: 64 KiB */
-    /* Power-up RAM pattern is separate from resetting the VDC registers. */
-    for (int i = 0; i < VDC_RAM_SIZE; i++)
-        v->ram[i] = (i & 1) ? 0x00 : 0xFF;
     v->fb_w = VDC_MAX_COLS * VDC_CHAR_WIDTH;
     v->fb_h = VDC_MAX_LINES * VDC_CHAR_HEIGHT;
     v->fb = (u32 *)malloc((size_t)v->fb_w * v->fb_h * sizeof(u32));
-    vdc_reset(v);
+    vdc_powerup(v);
 }
 
 void vdc_set_ram_size_kb(Vdc *v, int kb) {
@@ -104,6 +101,14 @@ void vdc_reset(Vdc *v) {
     v->ready_clock = 0;
     v->clock_scale = 1;
     v->dirty = true;
+}
+
+void vdc_powerup(Vdc *v) {
+    /* The 8563/8568 comes up with the same $ff,$00 alternating VRAM pattern
+     * modelled by VICE. A chip reset intentionally leaves this RAM intact. */
+    for (int i = 0; i < VDC_RAM_SIZE; ++i)
+        v->ram[i] = (i & 1) ? 0x00 : 0xff;
+    vdc_reset(v);
 }
 
 void vdc_write_index(Vdc *v, u8 val) {

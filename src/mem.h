@@ -47,6 +47,8 @@ typedef struct {
 
 void mem_init(Mem *m);
 void mem_reset(Mem *m);
+/* Reinitialize volatile RAM as a C128 power-up would, preserving ROM/media. */
+void mem_power_cycle(Mem *m);
 /* Decode the effective 8502 port pins; input lines float high. */
 void mem_set_processor_port(Mem *m, u8 dir, u8 data);
 u8   mem_read(Mem *m, u16 addr);
