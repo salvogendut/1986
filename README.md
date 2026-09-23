@@ -28,6 +28,9 @@ disk access and an experimental ROM-backed 1571CR path.
 - Unified or separate VIC/VDC windows, persistent configuration, screenshots,
   GIF capture, VICE-container snapshots, a dual-CPU 8502/Z80 ML monitor, and a
   compact options overlay.
+- An Emscripten/WebAssembly browser frontend with VIC/VDC video, SID audio,
+  on-screen keyboard, gamepad input, disk, tape and cartridge media, and the
+  shared Retro CRT/Sapporo themes plus a C128 DCR hardware theme.
 
 See [current status and limitations](docs/STATUS.md) for the detailed hardware
 matrix and [disk and drive architecture](docs/DRIVES.md) for the distinction
@@ -66,6 +69,21 @@ make -C tests check
 See [INSTALL.md](INSTALL.md) for other platforms and [USAGE.md](USAGE.md) for
 media, configuration, ROM layout, and command-line options.
 
+### Browser build
+
+With Emscripten installed and an authorized C128DCR ROM set in `roms/`:
+
+```bash
+make -C web
+make -C web serve
+```
+
+Open `http://localhost:8080`. The browser starts with the fast virtual drive;
+the **Real 1571 drive** switch restarts it with the ROM-backed drive. The build
+embeds the local ROM set into the generated WASM package but the source tree,
+CI artifacts, and repository continue to exclude ROM dumps. See
+[the browser frontend guide](web/README.md) for startup-media URL parameters.
+
 ## Documentation
 
 | Document | Contents |
@@ -77,6 +95,7 @@ media, configuration, ROM layout, and command-line options.
 | [Z80/CP/M](docs/Z80-CPM.md) | Reset BIOS, shared-RAM trampoline, CPU handoff, and timing invariants |
 | [ML monitor](docs/ML-MONITOR.md) | 8502/Z80 disassembly, memory, stepping, and CPU-tagged breakpoints |
 | [Snapshots](docs/SNAPSHOTS.md) | Save/load state and the limits of VICE `.vsf` interchange |
+| [Browser frontend](web/README.md) | Build, serve, media links, and ROM handling for WebAssembly |
 | [Development](Development.md) | Source layout, emulation design, diagnostics, and testing |
 | [Roadmap](ROADMAP.md) | Completed milestones and remaining work |
 | [Installation](INSTALL.md) | Source builds and packaged platforms |

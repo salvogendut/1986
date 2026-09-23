@@ -34,6 +34,8 @@ roms/*
 /1986-*.tar.gz
 /1986-0.1.0/
 /dist/
+/web/build/
+/web/dist/
 
 # flatpak-builder artifacts and bundles
 /.flatpak-builder/

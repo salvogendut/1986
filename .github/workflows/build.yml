@@ -9,6 +9,31 @@ on:
   workflow_dispatch:
 
 jobs:
+  wasm:
+    name: Browser WASM (ROM-free validation)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Emscripten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emscripten
+      - name: Create non-distributable test ROM fixtures
+        run: |
+          mkdir -p "$RUNNER_TEMP/1986-test-roms"
+          truncate -s 32768 "$RUNNER_TEMP/1986-test-roms/basic.bin"
+          truncate -s 16384 "$RUNNER_TEMP/1986-test-roms/kernal.bin"
+          truncate -s 8192 "$RUNNER_TEMP/1986-test-roms/chargen.bin"
+          truncate -s 4096 "$RUNNER_TEMP/1986-test-roms/z80bios.bin"
+          truncate -s 32768 "$RUNNER_TEMP/1986-test-roms/dos1571cr.bin"
+      - name: Test and compile browser frontend
+        run: |
+          make -C web test
+          make -C web ROM_DIR="$RUNNER_TEMP/1986-test-roms" -j2
+          test -s web/dist/1986.js
+          test -s web/dist/1986.wasm
+          make -C web ROM_DIR="$RUNNER_TEMP/1986-test-roms" test-wasm
+
   fedora:
     name: Fedora RPM (x86_64)
     runs-on: ubuntu-latest
