@@ -248,6 +248,24 @@ int main(void) {
         unlink(u36_file);
     }
 
+    /* RESET preserves RAM, while a power cycle rebuilds volatile memory and
+     * leaves the loaded ROMs and attached cartridge in place. */
+    mem->ram[0] = mem->ram[128] = mem->ram[256] = 0x5a;
+    mem->color_ram[0] = 0;
+    mem->basic[0] = 0xb7;
+    mem->cart.rom[0] = 0xc7;
+    mem->cart.attached = true;
+    mem_power_cycle(mem);
+    CHECK(mem->ram[0] == 0 && mem->ram[127] == 0 &&
+          mem->ram[128] == 0 && mem->ram[255] == 0 &&
+          mem->ram[256] == 0,
+          "power cycle clears both C128 RAM banks");
+    CHECK(mem->color_ram[0] == 0x0f && mem->color_ram[0x7ff] == 0x0f,
+          "power cycle reinitializes both color-RAM banks");
+    CHECK(mem->basic[0] == 0xb7 && mem->cart.rom[0] == 0xc7 &&
+          mem->cart.attached && mem->pla_data == 0xff,
+          "power cycle preserves ROM media and floats the processor port");
+
     free(mem);
     if (failures == 0) { printf("test-mem: OK\n"); return 0; }
     printf("test-mem: %d failure(s)\n", failures);

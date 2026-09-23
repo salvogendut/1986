@@ -332,6 +332,14 @@ int main(void) {
     CHECK(pixels[0] == 0xFFFFFF && pixels[1] == 0x000000,
           "16K VDC text rendering follows the physical RAM mirror");
 
+    v->ram[0] = v->ram[1] = v->ram[2] = 0x5a;
+    reg_write(v, 1, 40);
+    vdc_powerup(v);
+    CHECK(v->ram[0] == 0xff && v->ram[1] == 0x00 && v->ram[2] == 0xff,
+          "VDC power cycle restores the alternating VRAM startup pattern");
+    CHECK(v->address_mask == 0x3fff && v->regs[1] == 102,
+          "VDC power cycle preserves fitted RAM size and resets registers");
+
     free(v->fb);
     free(v);
     free(pixels);

@@ -170,6 +170,11 @@ void drive1571cr_reset(Drive1571Cr *d) {
     cpu->irq = cpu->nmi_pending = cpu->jammed = false;
 }
 
+void drive1571cr_power_cycle(Drive1571Cr *d) {
+    memset(d->ram, 0, sizeof(d->ram));
+    drive1571cr_reset(d);
+}
+
 void drive1571cr_irq(Drive1571Cr *d, bool level) {
     d->external_irq = level;
     update_irq(d);

@@ -14,6 +14,17 @@ void mem_reset(Mem *m) {
     mmu_reset(&m->mmu);
 }
 
+void mem_power_cycle(Mem *m) {
+    /* A power cycle destroys all retained machine state. Use a deterministic
+     * cleared value: unlike host garbage this is reproducible, and the C128
+     * ROM's startup memory test then establishes its normal working state. */
+    memset(m->ram, 0, sizeof(m->ram));
+
+    /* Colour RAM is volatile too. Only its low nibble is physically used. */
+    memset(m->color_ram, 0x0f, sizeof(m->color_ram));
+    mem_set_processor_port(m, 0, 0);
+}
+
 void mem_set_processor_port(Mem *m, u8 dir, u8 data) {
     m->pla_data = (u8)((data & dir) | (u8)~dir);
 }

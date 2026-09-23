@@ -51,6 +51,8 @@ void drive1571cr_set_io(Drive1571Cr *drive, Drive1571CrIoRead read,
 u8 drive1571cr_read(Drive1571Cr *drive, u16 addr);
 void drive1571cr_write(Drive1571Cr *drive, u16 addr, u8 value);
 void drive1571cr_reset(Drive1571Cr *drive);
+/* Reset the drive after clearing its volatile 2 KiB RAM. */
+void drive1571cr_power_cycle(Drive1571Cr *drive);
 void drive1571cr_irq(Drive1571Cr *drive, bool level);
 void drive1571cr_nmi(Drive1571Cr *drive);
 /* One NMOS 6502 instruction; returns cycles used, or zero if stopped/jammed. */

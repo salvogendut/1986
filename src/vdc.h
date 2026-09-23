@@ -60,6 +60,8 @@ typedef struct {
 
 void vdc_init(Vdc *v);
 void vdc_reset(Vdc *v);
+/* Restore VDC RAM and registers to their power-on state. */
+void vdc_powerup(Vdc *v);
 void vdc_set_ram_size_kb(Vdc *v, int kb);
 void vdc_write_index(Vdc *v, u8 val);   /* $D600 */
 void vdc_write_data(Vdc *v, u8 val);    /* $D601 */
