@@ -31,7 +31,8 @@ src/
   z80.*       - cycle-stepped Z80 (reused from 1983/1984/1985) for CP/M
   z80dis.*    - Z80 disassembler (reused)
   paste.*     - clipboard text -> keyboard injection
-  monitor.*   - F8 register monitor window
+  monitor.*   - F8 multiprocessor ML monitor UI and commands
+  mos6502dis.*- 8502/6502 disassembler, including NMOS undocumented opcodes
   gifcap.*    - F6 built-in GIF89a encoder (reused from 1984)
   leds.*      - drive and 8502/Z80 activity/frequency footer
   notify.*    - desktop/screen notifications (reused from 1984)

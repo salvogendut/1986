@@ -12,4 +12,6 @@ void         monitor_open(Monitor *mon);
 bool         monitor_is_open(const Monitor *mon);
 bool         monitor_handle_event(Monitor *mon, SDL_Event *e);
 void         monitor_render(Monitor *mon);
+/* Delivers instruction-boundary breakpoint/step events from the machine. */
+void         monitor_tick(Monitor *mon);
 SDL_WindowID monitor_window_id(const Monitor *mon);

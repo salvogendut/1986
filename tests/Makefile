@@ -11,7 +11,7 @@ else
 GC_SECTIONS_LDFLAGS = -Wl,--gc-sections
 endif
 
-TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc
+TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-mos6502dis test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc
 
 .PHONY: all check clean
 
@@ -49,10 +49,14 @@ test-joyport: test_joyport.c ../src/joyport.c ../src/joyport.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_joyport.c ../src/joyport.c -o $@
 
-test-c128-keyboard: test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c ../src/c128.h ../src/kbd.h ../src/vdc.h
+test-c128-keyboard: test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c ../src/mmu.c ../src/c128.h ../src/kbd.h ../src/vdc.h ../src/mmu.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra \
 		-ffunction-sections -fdata-sections $(GC_SECTIONS_LDFLAGS) -I../src \
-		test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c $(SDL3_LIBS) -o $@
+		test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c ../src/mmu.c $(SDL3_LIBS) -o $@
+
+test-mos6502dis: test_mos6502dis.c ../src/mos6502dis.c ../src/mos6502dis.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
+		test_mos6502dis.c ../src/mos6502dis.c -o $@
 
 test-gifcap: test_gifcap.c ../src/gifcap.c ../src/gifcap.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
@@ -141,6 +145,7 @@ check: $(TESTS)
 	./test-config
 	./test-joyport
 	./test-c128-keyboard
+	./test-mos6502dis
 	./test-gifcap
 	./test-d64
 	./test-d64-save

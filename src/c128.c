@@ -408,6 +408,180 @@ static void z80_io_write(void *ctx, u16 port, u8 val) {
     z80_mem_write(ctx, port, val);
 }
 
+/* --- Instruction-boundary debugger -------------------------------------- */
+
+C128DebugCpu c128_debug_owner(const C128 *c) {
+    return mmu_cpu_is_8502(&c->mem.mmu)
+        ? C128_DEBUG_CPU_8502 : C128_DEBUG_CPU_Z80;
+}
+
+u16 c128_debug_pc(const C128 *c, C128DebugCpu cpu) {
+    return cpu == C128_DEBUG_CPU_Z80 ? c->z80.pc : c->cpu.pc;
+}
+
+/* Debug reads must not acknowledge CIA/VIC interrupts or advance the VDC
+ * update address. Read mutable devices through a temporary copy so a full
+ * 64K monitor snapshot is observational. */
+static u8 debug_io_peek(C128 *c, u16 address) {
+    if (address < 0xd400) {
+        Vic copy = c->vic;
+        return vic_read(&copy, address);
+    }
+    if (address < 0xd500) return sid_read(&c->sid, address);
+    if (!mem_c64_mode(&c->mem) && address < 0xd510 && c->mem.mmu.mmio)
+        return mmu_read(&c->mem.mmu, address);
+    if (address >= 0xd600 && address < 0xd700) {
+        Vdc copy = c->vdc;
+        return (address & 1) ? vdc_read_data(&copy) : vdc_read_status(&copy);
+    }
+    if (address >= 0xd800 && address < 0xdc00) {
+        unsigned bank = mem_c64_mode(&c->mem) ? 0 : c->mem.pla_data & 1;
+        return c->mem.color_ram[bank * 0x400 + (address & 0x3ff)];
+    }
+    if (address >= 0xdc00 && address < 0xdd00) {
+        Cia copy = c->cia1;
+        return cia_read(&copy, address);
+    }
+    if (address >= 0xdd00 && address < 0xde00) {
+        Cia copy = c->cia2;
+        return cia_read(&copy, address);
+    }
+    return 0xff;
+}
+
+u8 c128_debug_mem_read(C128 *c, C128DebugCpu cpu, u16 address) {
+    if (cpu == C128_DEBUG_CPU_Z80) return z80_mem_read(c, address);
+    if (address == 0) return c->cpu.io_ddr;
+    if (address == 1) return c->cpu.io_port;
+    if (!mem_c64_mode(&c->mem) && address >= 0xff00 && address <= 0xff04)
+        return mmu_ffxx_read(&c->mem.mmu, address);
+    if (address >= 0xd000 && address < 0xe000 && mem_io_visible(&c->mem))
+        return debug_io_peek(c, address);
+    return mem_read(&c->mem, address);
+}
+
+void c128_debug_mem_write(C128 *c, C128DebugCpu cpu, u16 address, u8 value) {
+    if (cpu == C128_DEBUG_CPU_Z80)
+        z80_mem_write(c, address, value);
+    else
+        c128_mem_write(c, address, value);
+}
+
+static void debug_set_stop(C128 *c, C128DebugStopReason reason,
+                           C128DebugCpu cpu, u16 address) {
+    c->paused = true;
+    c->debug.step_pending = false;
+    c->debug.stop_reason = reason;
+    c->debug.stop_cpu = cpu;
+    c->debug.stop_address = address;
+}
+
+void c128_debug_pause(C128 *c) {
+    C128DebugCpu cpu = c128_debug_owner(c);
+    debug_set_stop(c, C128_DEBUG_STOP_PAUSE, cpu, c128_debug_pc(c, cpu));
+}
+
+void c128_debug_continue(C128 *c) {
+    C128DebugCpu cpu = c128_debug_owner(c);
+    c->debug.skip_break_once = true;
+    c->debug.skip_cpu = cpu;
+    c->debug.skip_address = c128_debug_pc(c, cpu);
+    c->debug.step_pending = false;
+    c->debug.stop_reason = C128_DEBUG_STOP_NONE;
+    c->paused = false;
+}
+
+bool c128_debug_step(C128 *c, C128DebugCpu cpu) {
+    if (!c->paused || c128_debug_owner(c) != cpu) return false;
+    c->debug.skip_break_once = true;
+    c->debug.skip_cpu = cpu;
+    c->debug.skip_address = c128_debug_pc(c, cpu);
+    c->debug.step_cpu = cpu;
+    c->debug.step_pending = true;
+    c->debug.stop_reason = C128_DEBUG_STOP_NONE;
+    return true;
+}
+
+unsigned c128_debug_breakpoint_add(C128 *c, C128DebugCpu cpu, u16 address) {
+    for (unsigned i = 0; i < C128_DEBUG_MAX_BREAKPOINTS; ++i) {
+        C128DebugBreakpoint *bp = &c->debug.breakpoints[i];
+        if (bp->used && bp->cpu == cpu && bp->address == address)
+            return bp->id;
+    }
+    for (unsigned i = 0; i < C128_DEBUG_MAX_BREAKPOINTS; ++i) {
+        C128DebugBreakpoint *bp = &c->debug.breakpoints[i];
+        if (bp->used) continue;
+        unsigned id = ++c->debug.next_breakpoint_id;
+        if (id == 0) id = ++c->debug.next_breakpoint_id;
+        *bp = (C128DebugBreakpoint){
+            .id = id, .cpu = cpu, .address = address,
+            .enabled = true, .used = true
+        };
+        return id;
+    }
+    return 0;
+}
+
+bool c128_debug_breakpoint_remove(C128 *c, unsigned id) {
+    for (unsigned i = 0; i < C128_DEBUG_MAX_BREAKPOINTS; ++i) {
+        C128DebugBreakpoint *bp = &c->debug.breakpoints[i];
+        if (bp->used && bp->id == id) {
+            memset(bp, 0, sizeof(*bp));
+            return true;
+        }
+    }
+    return false;
+}
+
+bool c128_debug_breakpoint_enable(C128 *c, unsigned id, bool enabled) {
+    for (unsigned i = 0; i < C128_DEBUG_MAX_BREAKPOINTS; ++i) {
+        C128DebugBreakpoint *bp = &c->debug.breakpoints[i];
+        if (bp->used && bp->id == id) {
+            bp->enabled = enabled;
+            return true;
+        }
+    }
+    return false;
+}
+
+const C128DebugBreakpoint *c128_debug_breakpoint_at(const C128 *c,
+                                                     unsigned slot) {
+    if (slot >= C128_DEBUG_MAX_BREAKPOINTS) return NULL;
+    return c->debug.breakpoints[slot].used ? &c->debug.breakpoints[slot] : NULL;
+}
+
+C128DebugStopReason c128_debug_take_stop(C128 *c, C128DebugCpu *cpu,
+                                          u16 *address) {
+    C128DebugStopReason reason = c->debug.stop_reason;
+    if (reason == C128_DEBUG_STOP_NONE) return reason;
+    if (cpu) *cpu = c->debug.stop_cpu;
+    if (address) *address = c->debug.stop_address;
+    c->debug.stop_reason = C128_DEBUG_STOP_NONE;
+    return reason;
+}
+
+static bool debug_before_instruction(C128 *c, C128DebugCpu cpu, u16 pc) {
+    if (c->debug.skip_break_once && c->debug.skip_cpu == cpu &&
+        c->debug.skip_address == pc) {
+        c->debug.skip_break_once = false;
+        return false;
+    }
+    for (unsigned i = 0; i < C128_DEBUG_MAX_BREAKPOINTS; ++i) {
+        const C128DebugBreakpoint *bp = &c->debug.breakpoints[i];
+        if (bp->used && bp->enabled && bp->cpu == cpu && bp->address == pc) {
+            debug_set_stop(c, C128_DEBUG_STOP_BREAKPOINT, cpu, pc);
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool debug_after_instruction(C128 *c, C128DebugCpu cpu, u16 pc) {
+    if (!c->debug.step_pending || c->debug.step_cpu != cpu) return false;
+    debug_set_stop(c, C128_DEBUG_STOP_STEP, cpu, pc);
+    return true;
+}
+
 /* --- Machine lifecycle --- */
 
 void c128_init(C128 *c, Config *cfg) {
@@ -493,6 +667,10 @@ void c128_reset(C128 *c) {
     c->drive2_media_generation = (unsigned)-1;
     drive_set_unit(&c->drive2, c->cfg->drive2_unit);
     c->paused = false;
+    c->debug.step_pending = false;
+    c->debug.skip_break_once = false;
+    c->debug.stop_reason = C128_DEBUG_STOP_NONE;
+    c->debug.partial_frame = false;
     c->frames_since_reset = 0;
     c->cpu_frame_debt = 0;
     c->z80_frame_debt = 0;
@@ -505,6 +683,8 @@ void c128_reset(C128 *c) {
 }
 
 int c128_frame(C128 *c) {
+    if (c->paused && !c->debug.step_pending) return 0;
+    bool resuming_frame = c->debug.partial_frame;
     c->tape.frame_edges = 0;
     if (c->drive_media_generation != c->drive.media_generation) {
         gcr_drive_attach(&c->integrated_drive.gcr,
@@ -530,23 +710,45 @@ int c128_frame(C128 *c) {
     bool debt_fast = c->cpu.fast;
     bool ran_8502 = false;
     bool ran_z80 = false;
+    bool debug_halted = false;
     c->audio_count = 0;
     c128_update_vic_bank(c);
-    vic_set_raster_line(&c->vic, 0);
-    vic_begin_frame(&c->vic, &c->mem);
-    for (unsigned video_line = 0; video_line < VIC_RASTER_LINES; video_line++) {
+    if (!resuming_frame) {
+        vic_set_raster_line(&c->vic, 0);
+        vic_begin_frame(&c->vic, &c->mem);
+    }
+    unsigned first_video_line = resuming_frame
+        ? c->debug.partial_video_line : 0;
+    for (unsigned video_line = first_video_line;
+         video_line < VIC_RASTER_LINES && !debug_halted; video_line++) {
         vdc_set_raster_line(&c->vdc, video_line);
         bool z80_line = !mmu_cpu_is_8502(&c->mem.mmu);
-        if (z80_line) {
+        bool resumed_line = resuming_frame && video_line == first_video_line;
+        if (resumed_line &&
+            c->debug.partial_cpu != c128_debug_owner(c)) {
+            /* The instruction which stopped the debugger handed the bus to
+             * the other CPU. The normal scheduler changes CPU only at the
+             * next raster line, so finish this line without running it. */
+            if (c->debug.partial_cpu == C128_DEBUG_CPU_Z80)
+                z80_debt = c->debug.partial_progressed - c->debug.partial_target;
+            else
+                cpu_debt = c->debug.partial_progressed - c->debug.partial_target;
+        } else if (z80_line) {
             /* A stock C128 feeds the Z80 two T-states per one-MHz video
              * cycle.  The optional dot-clock modification supplies four
              * during the same CPU phase, doubling effective Z80 throughput
              * without accelerating the shared bus or peripherals. */
             int z80_ratio = c->cfg && c->cfg->double_z80_frequency ? 4 : 2;
-            int target = 63 * z80_ratio - z80_debt;
-            int progressed = 0;
+            int target = resumed_line
+                ? c->debug.partial_target : 63 * z80_ratio - z80_debt;
+            int progressed = resumed_line ? c->debug.partial_progressed : 0;
             while (progressed < target &&
                    !mmu_cpu_is_8502(&c->mem.mmu)) {
+                if (debug_before_instruction(c, C128_DEBUG_CPU_Z80,
+                                             c->z80.pc)) {
+                    debug_halted = true;
+                    break;
+                }
                 int ran = z80_step(&c->z80, &c->z80_bus);
                 if (ran <= 0) break;
                 progressed += ran;
@@ -567,8 +769,19 @@ int c128_frame(C128 *c) {
                 tape_mix_audio(&c->tape, c->audio_frame + c->audio_count,
                                produced, c->cfg->tape_audio_monitor);
                 c->audio_count += produced;
+                if (debug_after_instruction(c, C128_DEBUG_CPU_Z80,
+                                            c->z80.pc)) {
+                    debug_halted = true;
+                    break;
+                }
             }
-            z80_debt = progressed - target;
+            if (debug_halted) {
+                c->debug.partial_frame = true;
+                c->debug.partial_video_line = video_line;
+                c->debug.partial_cpu = C128_DEBUG_CPU_Z80;
+                c->debug.partial_target = target;
+                c->debug.partial_progressed = progressed;
+            } else z80_debt = progressed - target;
         } else {
             bool fast_now = c->fast || c->vic.fast_mode;
             if (fast_now != debt_fast) {
@@ -589,8 +802,10 @@ int c128_frame(C128 *c) {
                     c->drive_clock_denominator);
             }
             c->drive_clock_denominator = drive_denominator;
-            int target = 63 * (fast_now ? 2 : 1) - cpu_debt;
-            int progressed = 0;
+            int target = resumed_line
+                ? c->debug.partial_target
+                : 63 * (fast_now ? 2 : 1) - cpu_debt;
+            int progressed = resumed_line ? c->debug.partial_progressed : 0;
             while (progressed < target &&
                    mmu_cpu_is_8502(&c->mem.mmu)) {
                 /* A full raster-line gap can swallow an IEC bit transition.
@@ -599,6 +814,11 @@ int c128_frame(C128 *c) {
                 /* $D505 can transfer the bus to the Z80 during any 8502
                  * instruction.  Stop at every instruction boundary so the
                  * inactive processor cannot run past the handoff. */
+                if (debug_before_instruction(c, C128_DEBUG_CPU_8502,
+                                             c->cpu.pc)) {
+                    debug_halted = true;
+                    break;
+                }
                 int ran = cpu_step_budget(&c->cpu, 1);
                 if (ran <= 0) break;
                 int elapsed = ran;
@@ -630,9 +850,23 @@ int c128_frame(C128 *c) {
                 tape_mix_audio(&c->tape, c->audio_frame + c->audio_count,
                                produced, c->cfg->tape_audio_monitor);
                 c->audio_count += produced;
+                if (debug_after_instruction(c, C128_DEBUG_CPU_8502,
+                                            c->cpu.pc)) {
+                    debug_halted = true;
+                    break;
+                }
             }
-            cpu_debt = progressed - target;
+            if (debug_halted) {
+                c->debug.partial_frame = true;
+                c->debug.partial_video_line = video_line;
+                c->debug.partial_cpu = C128_DEBUG_CPU_8502;
+                c->debug.partial_target = target;
+                c->debug.partial_progressed = progressed;
+            } else cpu_debt = progressed - target;
         }
+        if (debug_halted) break;
+        c->debug.partial_frame = false;
+        resuming_frame = false;
         c128_update_vic_bank(c);
         unsigned next_line = video_line + 1;
         vic_set_raster_line(&c->vic, next_line);
@@ -647,16 +881,20 @@ int c128_frame(C128 *c) {
             c->z80.pending_irq = irq;
         }
     }
-    c->cpu_frame_debt = cpu_debt;
-    c->z80_frame_debt = z80_debt;
+    if (!debug_halted) {
+        c->cpu_frame_debt = cpu_debt;
+        c->z80_frame_debt = z80_debt;
+    }
     if (ran_8502)
         leds_ping(LED_CPU_8502);
     if (ran_z80)
         leds_ping(LED_CPU_Z80);
     /* The 6526 TOD input follows the PAL 50 Hz mains signal, not the 8502
      * clock (which may run at 2 MHz). One completed PAL frame is one pulse. */
-    cia_tod_tick(&c->cia1);
-    cia_tod_tick(&c->cia2);
+    if (!debug_halted) {
+        cia_tod_tick(&c->cia1);
+        cia_tod_tick(&c->cia2);
+    }
     c->total_cycles += (u64)total;
     if (c->drive_raw_iec && drive_monitor_update(&c->drive_monitor,
             c->integrated_drive.gcr.motor,
@@ -694,8 +932,10 @@ int c128_frame(C128 *c) {
                 (int)gcr2->write_error);
         gcr2->write_error_reported = true;
     }
-    c128_frame_count++;
-    c->frames_since_reset++;
+    if (!debug_halted) {
+        c128_frame_count++;
+        c->frames_since_reset++;
+    }
     if (c->tape.kind == TAPE_TAP && getenv("C128_TAPE_TRACE") &&
         c128_frame_count % 100 == 0)
         fprintf(stderr, "[tape] frame=%d play=%d motor=%d pos=%zu/%zu edges=%u pc=$%04x\n",

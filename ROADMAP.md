@@ -39,6 +39,9 @@ READY.
 - [x] Fast virtual IEC drive with D64/D71/D81 `DIRECTORY`, `LOAD`/`DLOAD`,
   and `SAVE`/`DSAVE`.
 - [x] Live disk-image replacement/ejection from the Media Overlay.
+- [x] F8 multiprocessor ML monitor with 8502/Z80 register and disassembly
+  contexts, MMU-aware memory access, stepping, and CPU-tagged breakpoints
+  (#124).
 - [x] Default rejection of `GO64`, plus an opt-in experimental C128 C64
   personality for shared-hardware testing (#113).
 

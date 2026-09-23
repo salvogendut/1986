@@ -26,6 +26,45 @@
 
 #define C128_PAL_FRAME_CYCLES  19656   /* 312 raster lines x 63 cycles at 1 MHz */
 #define C128_AUDIO_FRAME_CAPACITY 1024
+#define C128_DEBUG_MAX_BREAKPOINTS 32
+
+typedef enum {
+    C128_DEBUG_CPU_8502 = 0,
+    C128_DEBUG_CPU_Z80 = 1
+} C128DebugCpu;
+
+typedef enum {
+    C128_DEBUG_STOP_NONE = 0,
+    C128_DEBUG_STOP_PAUSE,
+    C128_DEBUG_STOP_STEP,
+    C128_DEBUG_STOP_BREAKPOINT
+} C128DebugStopReason;
+
+typedef struct {
+    unsigned id;
+    C128DebugCpu cpu;
+    u16 address;
+    bool enabled;
+    bool used;
+} C128DebugBreakpoint;
+
+typedef struct {
+    bool step_pending;
+    C128DebugCpu step_cpu;
+    bool skip_break_once;
+    C128DebugCpu skip_cpu;
+    u16 skip_address;
+    C128DebugStopReason stop_reason;
+    C128DebugCpu stop_cpu;
+    u16 stop_address;
+    bool partial_frame;
+    unsigned partial_video_line;
+    C128DebugCpu partial_cpu;
+    int partial_target;
+    int partial_progressed;
+    unsigned next_breakpoint_id;
+    C128DebugBreakpoint breakpoints[C128_DEBUG_MAX_BREAKPOINTS];
+} C128DebugState;
 
 typedef struct {
     Display display;
@@ -61,6 +100,7 @@ typedef struct {
     bool drive2_raw_iec; /* second physical 1571 joined to the same IEC bus */
     Config *cfg;
     bool    paused;
+    C128DebugState debug;
     bool    fast;        /* 8502 at 2 MHz (C128 fast mode) */
     bool    col_mode_80; /* persistent 40/80 mode: true = 80-col (survives reset) */
     bool    restore_down; /* RESTORE is an NMI pin, not a keyboard-matrix key */
@@ -82,6 +122,22 @@ bool c128_set_c64_test_mode(C128 *c, bool enabled);
 bool c128_is_c64_mode(const C128 *c);
 bool c128_mount_tape(C128 *c, const char *path);
 void c128_eject_tape(C128 *c);
+
+/* Instruction-boundary debugger support shared by the F8 monitor and the
+ * dual-CPU scheduler. Addresses are interpreted in the selected processor's
+ * current MMU-visible address space. */
+C128DebugCpu c128_debug_owner(const C128 *c);
+u16  c128_debug_pc(const C128 *c, C128DebugCpu cpu);
+u8   c128_debug_mem_read(C128 *c, C128DebugCpu cpu, u16 address);
+void c128_debug_mem_write(C128 *c, C128DebugCpu cpu, u16 address, u8 value);
+void c128_debug_pause(C128 *c);
+void c128_debug_continue(C128 *c);
+bool c128_debug_step(C128 *c, C128DebugCpu cpu);
+unsigned c128_debug_breakpoint_add(C128 *c, C128DebugCpu cpu, u16 address);
+bool c128_debug_breakpoint_remove(C128 *c, unsigned id);
+bool c128_debug_breakpoint_enable(C128 *c, unsigned id, bool enabled);
+const C128DebugBreakpoint *c128_debug_breakpoint_at(const C128 *c, unsigned slot);
+C128DebugStopReason c128_debug_take_stop(C128 *c, C128DebugCpu *cpu, u16 *address);
 
 /* IEC serial-bus forwarding (installed via cpu_install_iec_traps). */
 void c128_iec_attention(void *ctx, u8 b);

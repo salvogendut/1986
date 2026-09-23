@@ -403,7 +403,6 @@ int main(int argc, char **argv) {
 
     bool running = true;
     bool fullscreen = cfg.fullscreen;
-    bool paused = false;
     SDL_Window *mouse_captured = NULL;
     SDL_Gamepad *gamepad = open_first_gamepad();
     bool pc_shift_held = false;
@@ -446,7 +445,7 @@ int main(int argc, char **argv) {
                 leds_set_mouse_position(0, 0, false);
             } else if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
                 SDL_Window *target = active_input_window(&c.display);
-                if (!paused && !overlay_is_visible(&overlay) && mouse_mode && target &&
+                if (!c.paused && !overlay_is_visible(&overlay) && mouse_mode && target &&
                     ev.button.windowID == SDL_GetWindowID(target)) {
                     if (!mouse_captured && SDL_SetWindowRelativeMouseMode(target, true))
                         mouse_captured = target;
@@ -619,11 +618,11 @@ int main(int argc, char **argv) {
                         videocap_start(path, cfg.gif_width, cfg.gif_fps);
                     }
                 } else if (ev.key.scancode == SDL_SCANCODE_F7) {
-                    paused = !paused;
-                    c.paused = paused;
-                    if (paused && mouse_captured)
+                    if (c.paused) c128_debug_continue(&c);
+                    else c128_debug_pause(&c);
+                    if (c.paused && mouse_captured)
                         release_mouse(&mouse_captured, &c.joyports);
-                    if (paused && audio_stream) SDL_ClearAudioStream(audio_stream);
+                    if (c.paused && audio_stream) SDL_ClearAudioStream(audio_stream);
                 } else if (ev.key.scancode == SDL_SCANCODE_F10) {
                     if (mouse_captured) release_mouse(&mouse_captured, &c.joyports);
                     c128_switch_4080(&c);   /* toggle 40-col VIC <-> 80-col VDC */
@@ -686,14 +685,18 @@ int main(int argc, char **argv) {
         overlay_tick(&overlay);
 
         for (unsigned port = 0; port < 2; ++port) joyports_set_joystick(&c.joyports, port, 0);
-        if (!paused && !overlay_is_visible(&overlay) &&
+        if (!c.paused && !overlay_is_visible(&overlay) &&
             cfg.joy_port_mode[cfg.main_input_port - 1] == JOYPORT_JOYSTICK)
             joyports_set_joystick(&c.joyports, (unsigned)(cfg.main_input_port - 1),
                                   poll_gamepad(gamepad));
 
         /* --- Machine step --- */
-        if (!paused) {
+        if (!c.paused || c.debug.step_pending) {
             int cycles = c128_frame(&c);
+            if (c.paused && mouse_captured)
+                release_mouse(&mouse_captured, &c.joyports);
+            if (c.paused && audio_stream)
+                SDL_ClearAudioStream(audio_stream);
             uint64_t emulated_frame_ns = c128_cycles_to_ns(&c, cycles);
             drive_monitor_mix(&c.drive_monitor, c.audio_frame, c.audio_count,
                               cfg.drive_audio_monitor && c.drive_raw_iec);
@@ -755,6 +758,7 @@ int main(int argc, char **argv) {
         }
 
         /* --- Notifications (fade/toast timer) --- */
+        monitor_tick(monitor);
         notify_tick(20);
 
         /* --- Frame present --- */
@@ -763,7 +767,7 @@ int main(int argc, char **argv) {
         overlay_render_tape_scope(&overlay, display_active_renderer(&c.display));
         overlay_render(&overlay, display_active_renderer(&c.display));
         display_render_function_keys(&c.display);
-        if (paused) display_draw_paused_label(&c.display);
+        if (c.paused) display_draw_paused_label(&c.display);
         notify_render(c.display.renderer);
         if (!c.display.one_display && c.display.vdc_renderer)
             notify_render(c.display.vdc_renderer);

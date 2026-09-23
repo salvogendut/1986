@@ -90,6 +90,25 @@ int main(void) {
     CHECK(c128_vdc_port_read(c, 0xD601) == 0x40,
           "C64 personality retains access to the C128 VDC ports");
 
+    /* The ML monitor's scheduler state keeps breakpoints separated by CPU
+     * and refuses to step a processor which does not own the shared bus. */
+    c->mem.mmu.mcr5 = 1;
+    c->cpu.pc = 0x1234;
+    c->z80.pc = 0x5678;
+    unsigned bp8502 = c128_debug_breakpoint_add(c, C128_DEBUG_CPU_8502, 0x2000);
+    unsigned bpz80 = c128_debug_breakpoint_add(c, C128_DEBUG_CPU_Z80, 0x2000);
+    CHECK(bp8502 && bpz80 && bp8502 != bpz80,
+          "same address has independent 8502 and Z80 breakpoints");
+    CHECK(c128_debug_breakpoint_enable(c, bpz80, false),
+          "Z80 breakpoint can be disabled independently");
+    CHECK(c128_debug_breakpoint_remove(c, bp8502),
+          "8502 breakpoint can be removed by id");
+    c->paused = true;
+    CHECK(!c128_debug_step(c, C128_DEBUG_CPU_Z80),
+          "inactive Z80 cannot be stepped while 8502 owns bus");
+    CHECK(c128_debug_step(c, C128_DEBUG_CPU_8502) && c->debug.step_pending,
+          "active 8502 schedules exactly one instruction");
+
     free(c->vdc.fb);
     free(c);
     if (!failures) puts("test-c128-keyboard: OK");
