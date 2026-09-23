@@ -4,7 +4,7 @@
 header, machine identifier, module headers, versions, lengths, and little-
 endian encoding follow VICE 3.10's snapshot implementation.
 
-Use **General > Save snapshot** and **General > Load snapshot** in the F9
+Use **Media > Save snapshot** and **Media > Load snapshot** in the F9
 overlay. The picker remembers its last directory. The equivalent command-line
 options are `--snapshot FILE.vsf` and `--save-snapshot FILE.vsf`.
 

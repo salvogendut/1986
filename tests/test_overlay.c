@@ -304,7 +304,7 @@ int main(void) {
     CHECK(cfg.drive2_unit == 11 && c->drive2.unit == 11 &&
           cfg.drive_unit != cfg.drive2_unit,
           "Drive 2 cycles to an unused unit and updates live routing");
-    for (int i = 0; i < 8; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 4; ++i) key(&ov, SDL_SCANCODE_DOWN);
     CHECK(ov.row == 6, "Tinker Media includes U36 with Drive 2 enabled");
 
     key(&ov, SDL_SCANCODE_RIGHT);
@@ -313,13 +313,13 @@ int main(void) {
     CHECK(!cfg.second_drive && !second_led_enabled,
           "Second Drive toggle disables its device and LED");
     key(&ov, SDL_SCANCODE_LEFT);
-    for (int i = 0; i < 8; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 4; ++i) key(&ov, SDL_SCANCODE_DOWN);
     CHECK(ov.row == 4, "disabled Media section hides Drive 2 but retains U36");
 
     key(&ov, SDL_SCANCODE_LEFT);
     CHECK(ov.section == OV_GENERAL && ov.row == 0,
           "General opens with first selectable row");
-    for (int i = 0; i < 8; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 6; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.about_visible, "General About opens program details");
     key(&ov, SDL_SCANCODE_RIGHT);
@@ -334,21 +334,24 @@ int main(void) {
     CHECK(!ov.about_visible && ov.visible, "Enter dismisses About");
 
     snprintf(cfg.last_snapshot_dir, sizeof(cfg.last_snapshot_dir), "%s", temp_home);
-    ov.row = 6;
+    ov.section = OV_MEDIA;
+    ov.row = 5; /* Drive 1, image, tape, cartridge, U36, then snapshots. */
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.dialog_kind == OV_DIALOG_SNAPSHOT_LOAD && !picker_was_save &&
           !strcmp(picker_filter, "vsf;VSF") && !strcmp(picker_location, temp_home),
-          "General opens VICE snapshot loader in its remembered directory");
+          "Media opens VICE snapshot loader in its remembered directory");
     snprintf(ov.dialog_path, sizeof(ov.dialog_path), "%s/state.vsf", temp_home);
     ov.dialog_ready = true;
     overlay_tick(&ov);
-    ov.row = 7;
+    ov.row = 6;
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.dialog_kind == OV_DIALOG_SNAPSHOT_SAVE && picker_was_save &&
           !strcmp(picker_location, temp_home),
-          "General opens VICE snapshot saver in its remembered directory");
+          "Media opens VICE snapshot saver in its remembered directory");
     ov.dialog_kind = OV_DIALOG_NONE; /* model cancelling the native dialog */
 
+    ov.section = OV_GENERAL;
+    ov.row = 0;
     key(&ov, SDL_SCANCODE_RIGHT);
     key(&ov, SDL_SCANCODE_RIGHT);
     CHECK(ov.section == OV_ADVANCED && ov.row == 0,
@@ -582,7 +585,7 @@ int main(void) {
     ov.section = OV_MEDIA;
     ov.row = 0;
     for (int i = 0; i < 8; ++i) key(&ov, SDL_SCANCODE_DOWN);
-    CHECK(ov.row == 3, "U36 Media row is hidden without Tinker");
+    CHECK(ov.row == 5, "U36 Media row is hidden while snapshot rows remain");
     cfg.tinker = true;
 
     /* Real-drive hardware type lives in Media, separately for each unit.
@@ -624,7 +627,7 @@ int main(void) {
     ov.section = OV_MEDIA;
     ov.row = 0;
     for (int i = 0; i < 12; i++) key(&ov, SDL_SCANCODE_DOWN);
-    CHECK(ov.row == 6,
+    CHECK(ov.row == 8,
           "fast-drive Media layout hides hardware type while gate is off");
 
     ov.visible = false;

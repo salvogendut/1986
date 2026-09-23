@@ -168,7 +168,7 @@ Advanced > Joystick HIDAPI takes effect after restart.
 
 ## Snapshots
 
-Open F9 and choose **General > Save snapshot** or **Load snapshot**. Snapshot
+Open F9 and choose **Media > Save snapshot** or **Load snapshot**. Snapshot
 files use VICE's `.vsf` container and the picker remembers its last directory.
 Snapshots made by 1986 preserve both CPUs, both video systems, RAM, CIA/SID,
 input, tape position, and scheduler timing. Disk and tape images remain

@@ -58,7 +58,9 @@ static const char *const keyboard_map_lines[] = {
 #define MEDIA_TAPE     6
 #define MEDIA_CART     7
 #define MEDIA_U36      8
-#define MEDIA_ITEM_COUNT 9
+#define MEDIA_SNAPSHOT_LOAD 9
+#define MEDIA_SNAPSHOT_SAVE 10
+#define MEDIA_ITEM_COUNT 11
 
 /* Advanced section rows. */
 #define ADV_SMOOTHING           0
@@ -302,7 +304,8 @@ static const char *media_label(int row) {
     static const char *const labels[MEDIA_ITEM_COUNT] = {
         "Drive 1", "Drive 1 type", "Drive 1 image",
         "Drive 2", "Drive 2 type", "Drive 2 image",
-        "Tape", "Cartridge", "U36 internal ROM"
+        "Tape", "Cartridge", "U36 internal ROM",
+        "Load snapshot", "Save snapshot"
     };
     return labels[row];
 }
@@ -310,7 +313,7 @@ static const char *media_label(int row) {
 static const char *media_extension(int row) {
     static const char *const exts[MEDIA_ITEM_COUNT] = {
         "", "", ".d64/.d71/.d81/.prg", "", "", ".d64/.d71/.d81/.prg", ".tap/.t64",
-        ".crt/.bin/.rom", ".bin/.rom"
+        ".crt/.bin/.rom", ".bin/.rom", ".vsf", ".vsf"
     };
     return exts[row];
 }
@@ -514,10 +517,10 @@ static bool section_available(const Overlay *ov, OvSection s) {
 /* Number of selectable rows in each section. */
 static int section_rows(const Overlay *ov, OvSection s) {
     switch (s) {
-        case OV_GENERAL:  return 9;   /* display, input ports, Tinker, ROMs, snapshots, About */
+        case OV_GENERAL:  return 7;   /* display, input ports, Tinker, ROMs, About */
         case OV_MEDIA:    return 4 + (ov->cfg->second_drive ? 2 : 0) +
                                  (ov->cfg->real_disk_drive ? 1 + (ov->cfg->second_drive ? 1 : 0) : 0) +
-                                 (ov->cfg->tinker ? 1 : 0);
+                                 (ov->cfg->tinker ? 1 : 0) + 2; /* load/save snapshot */
         case OV_ADVANCED: return ADV_ROWS;
         default:          return 0;
     }
@@ -567,10 +570,6 @@ static void overlay_activate(Overlay *ov) {
                     ov->section = OV_GENERAL;
             } else if (ov->row == 5) {
                 open_rom_dialog(ov);
-            } else if (ov->row == 6) {
-                open_snapshot_dialog(ov, false);
-            } else if (ov->row == 7) {
-                open_snapshot_dialog(ov, true);
             } else {
                 ov->about_visible = true;
             }
@@ -598,6 +597,10 @@ static void overlay_activate(Overlay *ov) {
                     ? "1571CR TYPE SELECTED - RESTART TO APPLY"
                     : "1581 HARDWARE UNAVAILABLE - RESTART TO APPLY");
                 save_config(ov);
+            } else if (media_item(ov, ov->row) == MEDIA_SNAPSHOT_LOAD) {
+                open_snapshot_dialog(ov, false);
+            } else if (media_item(ov, ov->row) == MEDIA_SNAPSHOT_SAVE) {
+                open_snapshot_dialog(ov, true);
             } else {
                 open_media_dialog(ov, media_item(ov, ov->row));
             }
@@ -1105,8 +1108,11 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
     int rw, rh;
     if (!SDL_GetRenderOutputSize(r, &rw, &rh))
         SDL_GetWindowSize(ov->c128->display.window, &rw, &rh);
-    int rows = ov->section == OV_ADVANCED ? ADV_ROWS :
-               ov->section == OV_MEDIA ? section_rows(ov, OV_MEDIA) : 11;
+    /* General has six informational rows plus one blank separator in
+     * addition to its selectable rows. Keep panel sizing tied to the actual
+     * section contents so new entries cannot spill through the footer. */
+    int rows = section_rows(ov, ov->section);
+    if (ov->section == OV_GENERAL) rows += 7;
     int panel_h = 48 + rows * OV_LINE_H + 42;
     float min_logical_h = panel_h + 8 > 510 ? (float)(panel_h + 8) : 510.0f;
     float scale = OV_SCALE;
@@ -1180,16 +1186,14 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         rom_path_display(ov, rd, sizeof(rd));
         draw_row(r, panel_w, y, "ROMS PATH", rd, ov->row == 5);
         y += OV_LINE_H;
-        draw_row(r, panel_w, y, "Load snapshot", ".vsf", ov->row == 6);
-        y += OV_LINE_H;
-        draw_row(r, panel_w, y, "Save snapshot", ".vsf", ov->row == 7);
-        y += OV_LINE_H;
-        draw_row(r, panel_w, y, "About", "Program details", ov->row == 8);
+        draw_row(r, panel_w, y, "About", "Program details", ov->row == 6);
     } else if (ov->section == OV_MEDIA) {
         for (int i = 0; i < section_rows(ov, OV_MEDIA); i++) {
             int item = media_item(ov, i);
             char vbuf[CONFIG_PATH_MAX + 8];
-            if (item == MEDIA_DRIVE1 || item == MEDIA_DRIVE2) {
+            if (item == MEDIA_SNAPSHOT_LOAD || item == MEDIA_SNAPSHOT_SAVE) {
+                snprintf(vbuf, sizeof(vbuf), ".vsf");
+            } else if (item == MEDIA_DRIVE1 || item == MEDIA_DRIVE2) {
                 int unit = item == MEDIA_DRIVE2 ? ov->cfg->drive2_unit :
                                                  ov->cfg->drive_unit;
                 snprintf(vbuf, sizeof(vbuf), "#%d", unit);
