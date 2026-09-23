@@ -77,6 +77,9 @@ void cpu_nmi(Cpu8502 *cpu, bool level);
 void cpu_pc(Cpu8502 *cpu, u16 pc);
 u64  cpu_cycles(void);                /* total cycles executed (for raster sync) */
 bool cpu_rmw_active(void);            /* current instruction has an RMW bus write */
+/* Consume an illegal/JAM opcode reported by the VICE-derived core. The core
+ * remains cycle-bounded so the SDL event loop can reset instead of hanging. */
+bool cpu_take_jam(u16 *pc);
 void cpu_state_get(const Cpu8502 *cpu, Cpu8502State *state);
 void cpu_state_set(Cpu8502 *cpu, const Cpu8502State *state);
 void cpu_install_serial_traps(u8 *kernal); /* patch the KERNAL ROM with IEC traps */

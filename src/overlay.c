@@ -479,7 +479,7 @@ static void open_rom_dialog(Overlay *ov) {
 
 static void open_snapshot_dialog(Overlay *ov, bool save) {
     static const SDL_DialogFileFilter filters[] = {
-        { "VICE C128 snapshot", "vsf;VSF" },
+        { "1986 C128 snapshot", "vsf;VSF" },
         { "All files", "*" },
     };
     ov->dialog_kind = save ? OV_DIALOG_SNAPSHOT_SAVE : OV_DIALOG_SNAPSHOT_LOAD;
@@ -876,9 +876,7 @@ void overlay_tick(Overlay *ov) {
     if (kind == OV_DIALOG_SNAPSHOT_LOAD) {
         SnapshotResult result = snapshot_load(ov->c128, ov->dialog_path);
         if (result == SNAPSHOT_OK) {
-            notify_post(snapshot_last_load_was_partial()
-                        ? "VICE SNAPSHOT IMPORTED - CORE STATE ONLY"
-                        : "SNAPSHOT LOADED");
+            notify_post("SNAPSHOT LOADED");
             display_focus_active(&ov->c128->display);
         } else {
             notify_post("SNAPSHOT LOAD FAILED: %s", snapshot_result_name(result));

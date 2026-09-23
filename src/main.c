@@ -129,7 +129,7 @@ static void usage(const char *argv0) {
         "  --tape-play      press Play on a mounted TAP at launch\n"
         "  --tape-play-at N press Play at emulated frame N\n"
         "  --cart PATH      attach a generic C128 CRT or raw function ROM\n"
-        "  --snapshot PATH  load a VICE C128 .vsf snapshot at launch\n"
+        "  --snapshot PATH  load a 1986 C128 .vsf snapshot at launch\n"
         "  --save-snapshot PATH save a .vsf snapshot before exit\n"
         "  --gif-out PATH   start recording a GIF at launch\n"
         "  --paste TEXT     inject text through the keyboard matrix\n"
@@ -402,10 +402,7 @@ int main(int argc, char **argv) {
             display_destroy(&c.display);
             return 1;
         }
-        fprintf(stderr, "1986: loaded %s snapshot '%s'%s\n",
-                snapshot_last_load_was_partial() ? "partial VICE" : "full",
-                snapshot_path,
-                snapshot_last_load_was_partial() ? " (unsupported devices reset)" : "");
+        fprintf(stderr, "1986: loaded snapshot '%s'\n", snapshot_path);
     }
 
     Overlay overlay;

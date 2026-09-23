@@ -38,6 +38,8 @@ BYTE *mem_page_one = NULL;
 
 /* The active CpuBus (its ctx is the C128). Set by cpu_init(). */
 static CpuBus g_bus;
+static bool g_cpu_jammed;
+static u16 g_cpu_jam_pc;
 
 static BYTE cpu_mem_read(WORD addr) {
     return g_bus.read(g_bus.ctx, addr);
@@ -65,7 +67,14 @@ void mem_powerup(void) {
 
 int machine_jam(const char *fmt, ...) {
     (void)fmt;
-    return JAM_RESET;
+    g_cpu_jammed = true;
+    g_cpu_jam_pc = (u16)reg_pc;
+    /* Any value outside VICE's reset/monitor choices takes the bounded
+     * fallback path: advance one cycle and let cpu_step_budget() return.
+     * Returning JAM_RESET resets maincpu_clk to 6 inside the core; when the
+     * current budget was based on a much later snapshot clock that can loop
+     * forever before control reaches SDL again. */
+    return -1;
 }
 void machine_trigger_reset(int mode) {
     (void)mode;
@@ -396,6 +405,7 @@ void cpu_init(Cpu8502 *cpu, CpuBus bus) {
     maincpu_regs.p = 0x24;
     maincpu_clk = 0;
     maincpu_clk_limit = 0;
+    g_cpu_jammed = false;
 }
 
 void cpu_attach_mem(Cpu8502 *cpu, u8 *ram) {
@@ -416,6 +426,7 @@ void cpu_reset(Cpu8502 *cpu) {
     maincpu_regs.sp = 0xFD;
     maincpu_regs.p = 0x24;
     maincpu_clk = 0;
+    g_cpu_jammed = false;
     if (maincpu_int_status) {
         interrupt_cpu_status_reset(maincpu_int_status);
     }
@@ -484,6 +495,13 @@ bool cpu_rmw_active(void) {
     return maincpu_rmw_flag != 0;
 }
 
+bool cpu_take_jam(u16 *pc) {
+    bool jammed = g_cpu_jammed;
+    if (jammed && pc) *pc = g_cpu_jam_pc;
+    g_cpu_jammed = false;
+    return jammed;
+}
+
 void cpu_state_get(const Cpu8502 *cpu, Cpu8502State *state) {
     if (!cpu || !state) return;
     state->a = maincpu_regs.a;
@@ -514,6 +532,7 @@ void cpu_state_set(Cpu8502 *cpu, const Cpu8502State *state) {
     maincpu_clk = (CLOCK)state->clock;
     maincpu_clk_limit = 0;
     maincpu_rmw_flag = 0;
+    g_cpu_jammed = false;
     last_opcode_info = state->last_opcode_info;
     if (maincpu_int_status)
         interrupt_cpu_status_reset(maincpu_int_status);

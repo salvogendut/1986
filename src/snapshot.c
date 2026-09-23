@@ -16,7 +16,6 @@
 #define VSF_MODULE_HEADER_SIZE 22
 #define PRIVATE_MAGIC 0x36383931u /* bytes: 31 39 38 36 ("1986") */
 #define PRIVATE_SCHEMA 1u
-#define VICE_RAM_SIZE 0x40000u
 
 typedef struct {
     FILE *file;
@@ -36,8 +35,6 @@ typedef struct {
     size_t size;
     u8 major, minor;
 } ModuleView;
-
-static bool last_partial;
 
 static bool host_little_endian(void) {
     const u16 value = 1;
@@ -324,45 +321,6 @@ static SnapshotResult load_private(C128 *c, const ModuleView *module) {
     return SNAPSHOT_OK;
 }
 
-static SnapshotResult load_vice_projection(C128 *c, const ModuleView *maincpu,
-                                           const ModuleView *memory) {
-    if (maincpu->major > 1 || maincpu->size < 27 ||
-        memory->major > 0 || memory->size < 11 + VICE_RAM_SIZE)
-        return SNAPSHOT_ERR_VERSION;
-    Reader cpu_r = {maincpu->payload, maincpu->size, 0, false};
-    Cpu8502State state = {0};
-    state.clock = read_u64(&cpu_r);
-    state.a = read_u8(&cpu_r); state.x = read_u8(&cpu_r);
-    state.y = read_u8(&cpu_r); state.sp = read_u8(&cpu_r);
-    state.pc = read_u16(&cpu_r); state.p = read_u8(&cpu_r);
-    state.last_opcode_info = read_u32(&cpu_r);
-    (void)read_u32(&cpu_r); (void)read_u32(&cpu_r);
-    state.cycles = state.clock;
-    if (cpu_r.failed) return SNAPSHOT_ERR_FORMAT;
-
-    c128_reset(c);
-    const u8 *mmu = memory->payload;
-    memcpy(c->mem.ram, memory->payload + 11, RAM_TOTAL);
-    c->mem.mmu.mcr = mmu[0]; c->mem.mmu.prefig = mmu[1];
-    c->mem.mmu.pcr2 = mmu[2]; c->mem.mmu.pcr3 = mmu[3];
-    c->mem.mmu.pcr4 = mmu[4]; c->mem.mmu.mcr5 = mmu[5] & 0x7f;
-    c->mem.mmu.col4080 = (mmu[5] & 0x80) != 0;
-    c->mem.mmu.rcr = mmu[6]; c->mem.mmu.page0 = mmu[7];
-    c->mem.mmu.page0_bank = mmu[8] & 1; c->mem.mmu.page0_bank_latch = mmu[8];
-    c->mem.mmu.page1 = mmu[9]; c->mem.mmu.page1_bank = mmu[10] & 1;
-    c->mem.mmu.page1_bank_latch = mmu[10];
-    state.io_ddr = c->mem.ram[0]; state.io_port = c->mem.ram[1];
-    state.fast = c->fast;
-    cpu_state_set(&c->cpu, &state);
-    mem_set_processor_port(&c->mem, state.io_ddr, state.io_port);
-    cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
-    c->bus_cycles = state.clock;
-    c->total_cycles = state.clock;
-    c->drive_host_cycle_synced = state.clock;
-    c128_set_4080(c, !c->mem.mmu.col4080);
-    return SNAPSHOT_OK;
-}
-
 SnapshotResult snapshot_save(C128 *c, const char *path) {
     if (!c || !path || !path[0]) return SNAPSHOT_ERR_ARGUMENT;
     size_t length = strlen(path);
@@ -391,7 +349,6 @@ SnapshotResult snapshot_save(C128 *c, const char *path) {
 }
 
 SnapshotResult snapshot_load(C128 *c, const char *path) {
-    last_partial = false;
     if (!c || !path || !path[0]) return SNAPSHOT_ERR_ARGUMENT;
     FILE *file = fopen(path, "rb");
     if (!file) return SNAPSHOT_ERR_IO;
@@ -417,8 +374,13 @@ SnapshotResult snapshot_load(C128 *c, const char *path) {
         result = load_private(c, &private_state);
     } else if (find_module(data, (size_t)end, "MAINCPU", &maincpu) &&
                find_module(data, (size_t)end, "C128MEM", &memory)) {
-        result = load_vice_projection(c, &maincpu, &memory);
-        last_partial = result == SNAPSHOT_OK;
+        /* CPU+RAM alone cannot resume a running C128. VICE's accompanying
+         * interrupt, VIC-II, CIA, drive and input modules use implementation-
+         * specific state and its C128 writer omits Z80/VDC state altogether.
+         * The old projection copied CPU/RAM after resetting every peripheral;
+         * raster-sensitive code then diverged into data and could JAM the
+         * 8502. Reject before changing any live state. */
+        result = SNAPSHOT_ERR_FOREIGN_STATE;
     } else {
         result = SNAPSHOT_ERR_FORMAT;
     }
@@ -435,10 +397,8 @@ const char *snapshot_result_name(SnapshotResult result) {
         case SNAPSHOT_ERR_MACHINE: return "SNAPSHOT IS NOT FOR A C128";
         case SNAPSHOT_ERR_VERSION: return "UNSUPPORTED SNAPSHOT VERSION";
         case SNAPSHOT_ERR_STATE: return "INCOMPATIBLE 1986 SNAPSHOT STATE";
+        case SNAPSHOT_ERR_FOREIGN_STATE:
+            return "VICE MACHINE STATE IS NOT YET IMPORTABLE";
         default: return "SNAPSHOT ERROR";
     }
-}
-
-bool snapshot_last_load_was_partial(void) {
-    return last_partial;
 }

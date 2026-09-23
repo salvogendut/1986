@@ -38,7 +38,7 @@ technical handoff sequence.
 | `--rom DIR` | Directory holding the machine ROM images. |
 | `--disk PATH` | Attach a D64, D71, D81, or standalone PRG to Drive 1 at launch. |
 | `--cart PATH` | Attach a generic C128 `.crt` or raw external function-ROM `.bin`/`.rom` at launch. |
-| `--snapshot PATH` | Load a C128 VICE Snapshot File (`.vsf`) at launch. |
+| `--snapshot PATH` | Load a 1986 C128 snapshot (`.vsf`) at launch. |
 | `--save-snapshot PATH` | Save a `.vsf` snapshot immediately before exit. |
 | `--gif-out PATH` | Start recording a GIF at launch. |
 | `--paste TEXT` | Inject text through the emulated keyboard. |
@@ -176,12 +176,12 @@ external files rather than being embedded.
 Save and load at an idle BASIC/CP/M prompt; an IEC/GCR operation already in
 progress inside a disk drive is not yet part of the snapshot.
 
-Plain VICE C128 snapshots can be imported, but only their 8502/MMU/RAM core
-state is portable: VICE 3.10 does not save the C128 Z80, and its 40-column
-snapshot path does not save VDC state. The emulator displays a partial-import
-notification and resets unsupported devices. VICE does not understand
-1986's complete `1986STATE` module. See [snapshot compatibility](docs/SNAPSHOTS.md)
-for the format and interoperability details.
+Plain VICE C128 snapshots are detected but rejected without changing the
+running machine. Restoring only their 8502/MMU/RAM modules while resetting
+the CIA, VIC-II, interrupt, drive, and input state is not safe for a running
+program; VICE 3.10 also omits the C128 Z80 and VDC state. VICE likewise does
+not understand 1986's complete `1986STATE` module. See
+[snapshot compatibility](docs/SNAPSHOTS.md) for details.
 
 The 785260 diagnostic cartridge expects Commodore's external test harness.
 1986 does not silently connect its user-port, serial, or cassette

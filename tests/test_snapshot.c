@@ -98,7 +98,6 @@ int main(void) {
     c.cia1.ta_counter = 0; c.sid.regs[0x18] = 0; c.total_cycles = 0;
     core_state.pc = 0;
     CHECK(snapshot_load(&c, path) == SNAPSHOT_OK, "load full snapshot");
-    CHECK(!snapshot_last_load_was_partial(), "full snapshot marker");
     CHECK(c.mem.ram[0x1234] == 0xA7 && c.mem.color_ram[0x321] == 0x0E,
           "RAM and color RAM round trip");
     CHECK(c.z80.pc == 0xCAFE && c.z80.af == 0xBEEF && c.z80.iff1,
@@ -112,13 +111,14 @@ int main(void) {
     CHECK(c.vdc.fb == (u32 *)(uintptr_t)0x1234, "host VDC pointer preserved");
 
     make_vice_projection(vice);
-    CHECK(snapshot_load(&c, vice) == SNAPSHOT_OK, "load VICE projection");
-    CHECK(snapshot_last_load_was_partial(), "VICE import marked partial");
-    CHECK(core_state.pc == 0x5678 && core_state.a == 0x11,
-          "VICE MAINCPU imported");
-    CHECK(c.mem.ram[0x1234] == (u8)(0x1234 ^ 0x5a), "VICE C128MEM imported");
-    CHECK(c.mem.mmu.mcr == 0x41 && c.mem.mmu.page0 == 7,
-          "VICE MMU imported");
+    core_state.pc = 0xabcd;
+    c.mem.ram[0x1234] = 0x6e;
+    c.mem.mmu.mcr = 0x9a;
+    CHECK(snapshot_load(&c, vice) == SNAPSHOT_ERR_FOREIGN_STATE,
+          "foreign VICE machine state is rejected");
+    CHECK(core_state.pc == 0xabcd && c.mem.ram[0x1234] == 0x6e &&
+          c.mem.mmu.mcr == 0x9a,
+          "rejected VICE snapshot does not partially mutate the machine");
 
     remove(path); remove(vice);
     if (failures) return 1;

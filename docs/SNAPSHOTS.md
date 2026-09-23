@@ -27,15 +27,18 @@ or ROM-drive IEC/GCR transactions are not yet serialized.
 
 ## Interoperability
 
-- 1986 can import a VICE 3.10 C128 snapshot's `MAINCPU` and `C128MEM` modules.
-  Because VICE does not provide the Z80/VDC state required for a full resume,
-  1986 resets unsupported devices and reports **VICE SNAPSHOT IMPORTED - CORE
-  STATE ONLY**.
+- 1986 recognizes a plain VICE C128 snapshot but rejects it before changing
+  the running machine. A `MAINCPU` + `C128MEM` projection is not resumable:
+  the CPU interrupt state, VIC-II raster phase, CIA timers/interrupts, SID,
+  drives, tape, keyboard, and joyports must remain synchronized. Resetting
+  those devices while resuming a running CPU can make execution diverge into
+  data and JAM the 8502.
 - Snapshots created by 1986 round-trip the complete state described above.
 - VICE cannot currently resume `1986STATE`. 1986 deliberately does not emit a
   misleading, incomplete set of VICE peripheral modules: VICE will reject an
   1986-authored file rather than partially applying it and becoming unstable.
 
-This is intentionally asymmetric compatibility. Full two-way interchange
-would require VICE and 1986 to agree on modules for the Z80 and VDC as well as
-all peripheral state.
+The shared `.vsf` framing therefore does not currently imply shared machine
+state. Full two-way interchange requires module translation for every device
+plus an agreed representation for the Z80 and VDC state that VICE's C128
+writer currently omits.

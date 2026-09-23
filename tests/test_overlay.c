@@ -33,7 +33,6 @@ SnapshotResult snapshot_load(C128 *c, const char *path) {
 const char *snapshot_result_name(SnapshotResult result) {
     (void)result; return "OK";
 }
-bool snapshot_last_load_was_partial(void) { return false; }
 void display_set_smoothing(Display *d, bool smooth) { (void)d; (void)smooth; }
 void display_set_crt(Display *d, bool enabled, int scanlines, int brightness,
                      int contrast, int red, int green, int blue) {
@@ -339,7 +338,7 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.dialog_kind == OV_DIALOG_SNAPSHOT_LOAD && !picker_was_save &&
           !strcmp(picker_filter, "vsf;VSF") && !strcmp(picker_location, temp_home),
-          "Media opens VICE snapshot loader in its remembered directory");
+          "Media opens snapshot loader in its remembered directory");
     snprintf(ov.dialog_path, sizeof(ov.dialog_path), "%s/state.vsf", temp_home);
     ov.dialog_ready = true;
     overlay_tick(&ov);
@@ -347,7 +346,7 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.dialog_kind == OV_DIALOG_SNAPSHOT_SAVE && picker_was_save &&
           !strcmp(picker_location, temp_home),
-          "Media opens VICE snapshot saver in its remembered directory");
+          "Media opens snapshot saver in its remembered directory");
     ov.dialog_kind = OV_DIALOG_NONE; /* model cancelling the native dialog */
 
     ov.section = OV_GENERAL;

@@ -821,6 +821,14 @@ int c128_frame(C128 *c) {
                 }
                 int ran = cpu_step_budget(&c->cpu, 1);
                 if (ran <= 0) break;
+                u16 jam_pc;
+                if (cpu_take_jam(&jam_pc)) {
+                    fprintf(stderr, "1986: 8502 JAM at $%04X; resetting machine\n",
+                            jam_pc);
+                    notify_post("8502 JAM AT $%04X - MACHINE RESET", jam_pc);
+                    c128_reset(c);
+                    return total;
+                }
                 int elapsed = ran;
                 total += ran;
                 progressed += ran;
