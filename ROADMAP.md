@@ -7,7 +7,7 @@ the Z80 core for CP/M mode, and VICE's 8502 (6510-core) instruction set.
 This document is the forward plan. The current status and technical notes are
 in [Development.md](Development.md); controls are in [CONTROLS.md](CONTROLS.md).
 
-The roadmap targets the C128 platform and eventual CP/M support. A temporary,
+The roadmap targets the C128 platform, including its working CP/M mode. A temporary,
 default-Off C64-personality gate exists only to validate hardware shared with
 the C128 and C128-enhanced software which starts in C64 mode; general C64
 emulation remains out of scope.
@@ -262,14 +262,15 @@ ROM through emulated hardware.
 
 ---
 
-## Milestone 9 — CP/M mode  `[ ]`
+## Milestone 9 — CP/M mode  `[x]`
 
 **Goal.** Switch the bus to the Z80 and map the CP/M RAM bank.
 
 - [x] Z80 core (`z80.c`, reused from the sibling projects) wired to a `Z80Bus`.
-- [ ] Step the Z80 when the MMU `$D507` Z80-enable bit is set.
-- [ ] Map the 64K CP/M bank and route the Z80 memory/IO through the C128 bus.
-- [ ] Provide the Z80 ROM traps the KERNAL uses to enter CP/M.
+- [x] Step the Z80 when MMU `$D505` bit 0 gives it bus ownership.
+- [x] Map the 64K CP/M bank and route Z80 memory and I/O through the C128 bus.
+- [x] Run the authentic Z80 reset BIOS, including the shared-RAM handoff
+  trampoline used by the KERNAL.
 
 **Done when.** A CP/M disk boots.
 
@@ -313,8 +314,7 @@ The main unfinished areas, grouped by likely development scale, are:
    timing beyond the working three-voice SDL3 output.
 3. **Storage features:** further DOS write commands, D81 partitions, and
    REL-file operations.
-4. **Large machine subsystems:** true cycle-level 1571 hardware and CP/M/Z80
-   bus switching.
+4. **Large machine subsystems:** true cycle-level 1571 hardware.
 5. **Usability and validation:** snapshots, complete keyboard handling,
    accurate 2 MHz operation, cycle-exact tests, capture/gamepad options,
    packaging, and CI.

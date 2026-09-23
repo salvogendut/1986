@@ -69,9 +69,9 @@ static const char *led_label(LedId id) {
 
 static int led_width(LedId id) {
     const int led_w = 24;
-    if (id == LED_FDC_A || id == LED_FDC_B) return 104;
+    if (id == LED_FDC_A || id == LED_FDC_B) return 80;
     if (id == LED_CPU_8502) return 96;
-    if (id == LED_CPU_Z80) return 48;
+    if (id == LED_CPU_Z80) return 88;
     return id == LED_M4 ? led_w * 3 / 2 : led_w;
 }
 
@@ -131,6 +131,8 @@ static void update_hover(int x, int y, int w, int h) {
                 char label[32];
                 snprintf(label, sizeof(label), "8502 CPU (%u MHz)", g_cpu_mhz);
                 set_hover_label(label, cx, this_w, y);
+            } else if (i == LED_CPU_Z80) {
+                set_hover_label("Z80 CPU (2 MHz)", cx, this_w, y);
             } else {
                 set_hover_label(led_label((LedId)i), cx, this_w, y);
             }
@@ -274,13 +276,13 @@ void leds_render(SDL_Renderer *r, int x, int y, int w, int h) {
             SDL_RenderRect(r, &lamp);
             char label[32];
             if (i == LED_FDC_A || i == LED_FDC_B) {
-                snprintf(label, sizeof(label), "DRIVE %d #%d",
+                snprintf(label, sizeof(label), "D%d #%d",
                          i == LED_FDC_A ? 1 : 2,
                          g_drive_unit[i == LED_FDC_B]);
             } else if (i == LED_CPU_8502) {
                 snprintf(label, sizeof(label), "8502 %uMHZ", g_cpu_mhz);
             } else {
-                snprintf(label, sizeof(label), "Z80");
+                snprintf(label, sizeof(label), "Z80 2MHZ");
             }
             SDL_SetRenderDrawColor(r, 205, 205, 205, 255);
             SDL_RenderDebugText(r, (float)(cx + 20), (float)(cy + 1), label);

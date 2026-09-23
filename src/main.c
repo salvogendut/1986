@@ -719,9 +719,13 @@ int main(int argc, char **argv) {
             if (g_boot_trace && (c128_frame_count % 10) == 0) {
                 const Cpu8502 *cpu = &c.cpu;
                 fprintf(stderr,
-                        "[boot] frame=%d PC=%04X SP=%02X P=%02X mcr=%02X c64=%d\n",
-                        c128_frame_count, cpu->pc, cpu->sp, cpu->p,
-                        c.mem.mmu.mcr, c128_is_c64_mode(&c) ? 1 : 0);
+                        "[boot] frame=%d owner=%s PC=%04X SP=%02X P=%02X "
+                        "ZPC=%04X ZSP=%04X CR=%02X D505=%02X c64=%d\n",
+                        c128_frame_count,
+                        mmu_cpu_is_8502(&c.mem.mmu) ? "8502" : "Z80",
+                        cpu->pc, cpu->sp, cpu->p,
+                        c.z80.pc, c.z80.sp, c.mem.mmu.mcr, c.mem.mmu.mcr5,
+                        c128_is_c64_mode(&c) ? 1 : 0);
             }
 
             /* Pace to the emulated frame time. */

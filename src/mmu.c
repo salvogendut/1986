@@ -131,3 +131,7 @@ void mmu_set_c64_enabled(Mmu *mmu, bool enabled) {
 bool mmu_is_c64_mode(const Mmu *mmu) {
     return mmu->c64_mode;
 }
+
+bool mmu_cpu_is_8502(const Mmu *mmu) {
+    return (mmu->mcr5 & 0x01) != 0;
+}

@@ -12,6 +12,12 @@ int main(void) {
 
     CHECK(mmu.mcr == 0x01, "default MCR");
     CHECK(mmu.mmio, "MMIO mapped by default");
+    CHECK(!mmu_cpu_is_8502(&mmu), "reset gives the bus to the Z80");
+
+    mmu_write(&mmu, 0xD505, 0xB1);
+    CHECK(mmu_cpu_is_8502(&mmu), "$D505 bit 0 gives the bus to the 8502");
+    mmu_write(&mmu, 0xD505, 0xB0);
+    CHECK(!mmu_cpu_is_8502(&mmu), "clearing $D505 bit 0 returns to the Z80");
 
     mmu_write(&mmu, 0xD506, 0x2A);   /* RAM configuration register */
     CHECK(mmu.rcr == 0x2A, "RAM configuration from $D506");

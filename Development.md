@@ -1,7 +1,9 @@
 # 1986 - Development
 
-This file describes the scaffolding, its module layout, and the roadmap toward
-a bootable Commodore C128DCR emulator.
+This file describes the source layout and the main emulation seams of the
+working Commodore C128DCR core. User-facing status is in
+[`docs/STATUS.md`](docs/STATUS.md), while planned work is tracked in
+[`ROADMAP.md`](ROADMAP.md).
 
 ## Architecture
 
@@ -12,7 +14,7 @@ source tree builds one SDL3 application, with tests under `tests/`.
 src/
   main.c      - SDL3 event loop, frame pacing, function-key dispatch
   display.*   - SDL3 window/renderer/texture + CRT controls
-  overlay.*   - F9 options overlay (General/Video/Capture)
+  overlay.*   - F9 options overlay (General/Media/Advanced)
   config.*    - 1986.conf load/save
   kbd.*       - C128 keyboard matrix + SDL scancode mapping
   c128.*      - machine object: owns mem/cpu/z80/vic/vdc/cia/sid
@@ -31,7 +33,7 @@ src/
   paste.*     - clipboard text -> keyboard injection
   monitor.*   - F8 register monitor window
   gifcap.*    - F6 built-in GIF89a encoder (reused from 1984)
-  leds.*      - drive-activity LED bar (reused from 1984)
+  leds.*      - drive and 8502/Z80 activity/frequency footer
   notify.*    - desktop/screen notifications (reused from 1984)
 tests/
   test_cpu.c  - 8502 sanity (adds, branches, stores)
@@ -63,14 +65,17 @@ C128 hardware has been validated with C64 software and C128-enhanced programs,
 the UI can be removed without deleting the dormant, default-disabled core.
 General C64 cartridge compatibility is not part of this work.
 
-CP/M remains in scope as a native advertised use of the C128 hardware.
+CP/M is a working native C128 mode. Reset begins on the Z80, the authentic
+reset BIOS installs the common-RAM handshake, and `$D505` transfers the bus
+between the Z80 and 8502. See [`docs/Z80-CPM.md`](docs/Z80-CPM.md) before
+changing that path or adding native Z80 code.
 
 ## Reuse from siblings
 
-- **Z80** (`z80.c`, `z80.h`, `z80dis.c`) is copied verbatim from 1984. It is
-  self-contained and exposes a `Z80Bus` callback interface wired in
-  `c128.c`. The C128's CP/M mode uses a different Z80 <-> memory banking than
-  the CPC, so the bus callbacks are the seam to adjust.
+- **Z80** (`z80.c`, `z80.h`, `z80dis.c`) originated in the sibling projects.
+  It is self-contained and exposes a `Z80Bus` callback interface wired in
+  `c128.c`. C128 memory/I/O banking, CPU ownership, shared peripheral timing,
+  and the CP/M handoff live on the C128 side of that seam.
 - **display, overlay, gifcap, leds, notify** follow the same conventions as
   1984; the C128-specific constants (`C128_SCREEN_W/H`) are defined in
   `display.h`.
@@ -95,7 +100,7 @@ ported behind the project's `CpuBus` seam:
 - Memory mapping follows VICE's C128 config-register semantics (raw `$D500`
   -> config index -> RAM/ROM per region) in `mem.c`.
 
-## Status: boots to BASIC READY
+## Status: BASIC and CP/M boot
 
 With a real C128DCR ROM set (`roms/kernal.bin`, `roms/basic.bin`,
 `roms/chargen.bin`), the 8502 executes the reset vector (`$FF3D`), runs the
@@ -122,6 +127,15 @@ This is driven by:
   harness loopbacks are not wired by default.
 - The VIC-IIe raster IRQ: `$D012` compare, `$D019` status, `$D01A` mask.
 - Both IRQ sources wired to the CPU, driving the KERNAL's 50 Hz main loop.
+
+At hardware reset, `$D505` gives the bus to the Z80 rather than the 8502. The
+private 4 KiB reset BIOS at Z80 `$0000` initializes the machine, copies the
+dual-CPU trampoline to common RAM at `$FFD0`, and enters its Z80 half at
+`$FFE0`. That half writes `$B1` to I/O port `$D505`; the scheduler stops the
+Z80 at that instruction boundary and begins the waiting 8502 KERNAL. A CP/M
+boot sector later uses the 8502 half at `$FFD0`, which writes `$B0` to `$D505`
+and returns ownership to the Z80. Full invariants and address maps are recorded
+in [`docs/Z80-CPM.md`](docs/Z80-CPM.md).
 
 The CIA1 keyboard scan is wired (port A rows / port B columns). The 40x25
 text renderer draws screen RAM, colour RAM and chargen. The 8502's `$00/$01`
@@ -226,24 +240,9 @@ capture the playback stream with `SDL_AUDIO_DRIVER=disk` and
 
 ## Roadmap
 
-1. **Virtual drive DOS commands** — SCRATCH and RENAME are done; add further
-   write-side commands to the tested D64/D71/D81 logical IEC/media layer.
-2. **True 1571** — implement the independent drive CPU, chips, mechanism and
-   line-level IEC connection.
-3. **Native PLA accuracy** — finish chargen selection and native C128 memory
-   visibility without adding the separate C64 personality.
-4. **VIC-IIe raster** — per-line register effects, border opening and the
-   remaining character/bitmap modes.
-5. **CIA timers + IRQs** — full timer/port emulation (timer B cascade, TOD,
-   serial).
-6. **VDC 8563** — render the 80-column framebuffer.
-7. **SID audio** — three-voice 8580 render + SDL3 audio stream are working;
-   analog filter and combined-waveform fidelity remain to be improved.
-8. **1571 drives** — hardware-level emulation of the integrated drive and the
-   C128's fast serial, separate from image-format support.
-9. **CP/M mode** — switch the bus to the Z80 and map the CP/M RAM bank.
-10. **Media / capture / polish** — snapshots, more keyboard matrix, full
-   keyboard layout, real 2 MHz timing.
+The maintained milestone list is [`ROADMAP.md`](ROADMAP.md). Keeping the plan
+there avoids the implementation guide becoming stale as completed features
+move into [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Build and test
 

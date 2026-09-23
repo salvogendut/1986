@@ -17,7 +17,12 @@ native C128 mode. This temporary test facility is intended for shared-hardware
 validation and C128-enhanced programs which start in C64 mode; broad C64 and
 C64-cartridge compatibility is not guaranteed.
 
-CP/M is a separate C128 operating mode and remains planned.
+CP/M is a separate, supported C128 operating mode. Attach a bootable C128 CP/M
+system disk before reset (or pass it with `--disk`) and allow the machine's
+normal autoboot path to run. The authentic Z80 reset BIOS first hands control
+to the 8502 KERNAL; the boot sector then returns ownership to the Z80 and CP/M
+Plus reaches its `A>` prompt. See [`docs/Z80-CPM.md`](docs/Z80-CPM.md) for the
+technical handoff sequence.
 
 ## Command line
 
@@ -203,7 +208,7 @@ intact, but unsaved in-memory GCR data cannot survive exit.
 
 The bottom bar also includes processor activity. The white 8502 lamp is labeled
 `1MHZ` or `2MHZ` from the current CPU clock, including VIC-IIe `$D030` changes;
-the blue Z80 lamp lights when the Z80 is executing.
+the blue `Z80 2MHZ` lamp lights only while the Z80 is executing.
 
 GEOS 128 from `GEOS128.D64` reaches the Desktop with Real Disk Drive On and
 the 1571CR selected. At the BASIC prompt, use `DLOAD"GEOS128"` and then `RUN`.
