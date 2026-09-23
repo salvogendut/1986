@@ -103,9 +103,9 @@ int main(void) {
     mem->ram[0x0800] = 0xF0;
     mem->ram[0x0000] = 0x80;
     mem->ram[0x0001] = 0x80;
-    vic_latch_raster(&vic, 51);
+    vic_latch_raster(&vic, mem, 51);
     vic_write(&vic, 0xD018, 0x20); /* second scanline: matrix $0800 */
-    vic_latch_raster(&vic, 52);
+    vic_latch_raster(&vic, mem, 52);
     vic_render(&vic, mem, display);
     CHECK(pixel(display, 0, 0) == 0xC46C71 &&
           pixel(display, 0, 1) == 0xB2B2B2,
@@ -189,13 +189,13 @@ int main(void) {
     vic_write(&vic, 0xD018, 0x18); /* matrix $0400, bitmap $2000 */
     mem->ram[0x0400] = 0xA0;
     mem->ram[0x2000] = 0x80;
-    vic_latch_raster(&vic, 51);
+    vic_latch_raster(&vic, mem, 51);
     vic_write(&vic, 0xD011, 0x1B); /* text */
     vic_write(&vic, 0xD018, 0x24); /* matrix $0800, characters $1000 */
     mem->ram[0x0800] = 0x01;
     mem->color_ram[0] = 0x01;
     mem->chargen[0x1009] = 0x40;
-    vic_latch_raster(&vic, 52);
+    vic_latch_raster(&vic, mem, 52);
     vic_render(&vic, mem, display);
     CHECK(pixel(display, 0, 0) == 0xC46C71,
           "a raster line retains bitmap mode and its memory pointers");
@@ -205,13 +205,13 @@ int main(void) {
     vic_reset(&vic);
     clear_video_memory(mem);
     vic_write(&vic, 0xD020, 0x02);
-    vic_latch_raster(&vic, 16);
+    vic_latch_raster(&vic, mem, 16);
     vic_write(&vic, 0xD020, 0x05);
-    vic_latch_raster(&vic, 17);
+    vic_latch_raster(&vic, mem, 17);
     vic_write(&vic, 0xD021, 0x03);
-    vic_latch_raster(&vic, 51);
+    vic_latch_raster(&vic, mem, 51);
     vic_write(&vic, 0xD021, 0x04);
-    vic_latch_raster(&vic, 52);
+    vic_latch_raster(&vic, mem, 52);
     vic_render(&vic, mem, display);
     CHECK(display->pixels[0] == 0x813338 &&
           display->pixels[C128_SCREEN_W] == 0x56AC4D,
@@ -220,25 +220,55 @@ int main(void) {
           pixel(display, 0, 1) == 0x8E3C97,
           "background color changes are preserved per raster line");
 
-    /* Sprite register changes made by a raster routine apply only below the
-     * split, including individual colors. */
+    /* Sprite registers and pointer-table RAM are sampled per raster. Raster
+     * multiplexers rewrite both while earlier sprites are still visible. */
     vic_reset(&vic);
     clear_video_memory(mem);
     vic_write(&vic, 0xD018, 0x14);
     set_sprite_pointer(mem, &vic, 0, 0x20);
     mem->ram[0x0800] = 0x80;
-    mem->ram[0x0803] = 0x80;
     vic_write(&vic, 0xD000, 24);
     vic_write(&vic, 0xD001, 51);
     vic_write(&vic, 0xD015, 0x01);
     vic_write(&vic, 0xD027, 0x02);
-    vic_latch_raster(&vic, 51);
+    vic_latch_raster(&vic, mem, 51);
+    set_sprite_pointer(mem, &vic, 0, 0x21);
+    mem->ram[0x0843] = 0x80;
     vic_write(&vic, 0xD027, 0x05);
-    vic_latch_raster(&vic, 52);
+    vic_latch_raster(&vic, mem, 52);
+    set_sprite_pointer(mem, &vic, 0, 0x22); /* overwritten after the split */
     vic_render(&vic, mem, display);
     CHECK(pixel(display, 0, 0) == 0x813338 &&
           pixel(display, 0, 1) == 0x56AC4D,
-          "sprite state is preserved per raster line");
+          "sprite registers and pointers are preserved per raster line");
+
+    /* VICE's multicolor mask treats pair 01 as background and pairs 10/11
+     * as foreground. A behind-background sprite must remain visible over 01
+     * but disappear behind 10. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD011, 0x1B);
+    vic_write(&vic, 0xD016, 0x18);
+    vic_write(&vic, 0xD018, 0x14);
+    vic_write(&vic, 0xD023, 0x03);
+    mem->ram[0x0400] = 0x01;
+    mem->color_ram[0] = 0x08;
+    mem->chargen[0x1008] = 0x40; /* first pair 01: background */
+    set_sprite_pointer(mem, &vic, 0, 0x20);
+    mem->ram[0x0800] = 0x80;
+    vic_write(&vic, 0xD000, 24);
+    vic_write(&vic, 0xD001, 51);
+    vic_write(&vic, 0xD015, 0x01);
+    vic_write(&vic, 0xD01B, 0x01);
+    vic_write(&vic, 0xD027, 0x02);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x813338,
+          "priority sprite remains visible over multicolor pair 01");
+    mem->chargen[0x1008] = 0x80; /* first pair 10: foreground */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x75CEC8,
+          "priority sprite stays behind multicolor pair 10");
 
     /* Native C128 text mode uses the upper 4K half of the 8K character ROM. */
     vic_reset(&vic);

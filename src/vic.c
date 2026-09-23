@@ -8,7 +8,8 @@ static const u32 VIC_COLORS[16] = {
     0x8E5029, 0x553800, 0xC46C71, 0x4A4A4A, 0x7B7B7B, 0xA9FF9F, 0x706DEB, 0xB2B2B2
 };
 
-static void vic_capture_state(const Vic *v, VicRasterState *state) {
+static void vic_capture_state(const Vic *v, const Mem *m,
+                              VicRasterState *state) {
     state->d011 = v->vmode;
     state->d016 = v->ctrl1;
     state->d018 = v->ctrl2;
@@ -25,13 +26,22 @@ static void vic_capture_state(const Vic *v, VicRasterState *state) {
     memcpy(state->sprite_mc, v->sprite_mc, sizeof(state->sprite_mc));
     memcpy(state->sprite_color, v->sprite_color, sizeof(state->sprite_color));
     state->bank_addr = v->bank_addr;
+    if (m) {
+        u32 screen_base = state->bank_addr + ((state->d018 & 0xF0) << 6);
+        for (unsigned sprite = 0; sprite < VIC_SPRITES; sprite++)
+            state->sprite_pointer[sprite] =
+                m->ram[screen_base + 0x3F8 + sprite];
+    } else {
+        memset(state->sprite_pointer, 0, sizeof(state->sprite_pointer));
+    }
 }
 
-static const VicRasterState *vic_state_for_line(const Vic *v, unsigned line,
+static const VicRasterState *vic_state_for_line(const Vic *v, const Mem *m,
+                                                 unsigned line,
                                                  VicRasterState *fallback) {
     if (line < VIC_RASTER_LINES && v->raster_state_valid[line])
         return &v->raster_state[line];
-    vic_capture_state(v, fallback);
+    vic_capture_state(v, m, fallback);
     return fallback;
 }
 
@@ -229,14 +239,14 @@ bool vic_tick(Vic *v) {
     return (v->irq_status & 0x80) != 0;
 }
 
-void vic_begin_frame(Vic *v) {
+void vic_begin_frame(Vic *v, const Mem *m) {
     memset(v->raster_state_valid, 0, sizeof(v->raster_state_valid));
-    vic_latch_raster(v, 0);
+    vic_latch_raster(v, m, 0);
 }
 
-void vic_latch_raster(Vic *v, unsigned line) {
+void vic_latch_raster(Vic *v, const Mem *m, unsigned line) {
     if (line < VIC_RASTER_LINES) {
-        vic_capture_state(v, &v->raster_state[line]);
+        vic_capture_state(v, m, &v->raster_state[line]);
         v->raster_state_valid[line] = true;
     }
 }
@@ -255,8 +265,8 @@ static void vic_draw_sprites(Vic *v, Mem *m, Display *d, const u8 *foreground) {
     for (int dy = VIC_TEXT_Y; dy < VIC_TEXT_Y + VIC_TEXT_H; dy++) {
         unsigned raster = (unsigned)(dy + VIC_FIRST_VISIBLE_LINE);
         VicRasterState fallback;
-        const VicRasterState *state = vic_state_for_line(v, raster, &fallback);
-        u32 screen_base = state->bank_addr + ((state->d018 & 0xF0) << 6);
+        const VicRasterState *state =
+            vic_state_for_line(v, m, raster, &fallback);
 
         /* Draw 7 first and 0 last: lower-numbered sprites have priority. */
         for (int sprite = VIC_SPRITES - 1; sprite >= 0; sprite--) {
@@ -275,7 +285,7 @@ static void vic_draw_sprites(Vic *v, Mem *m, Display *d, const u8 *foreground) {
                 continue;
             bool multicolor = (state->sprite_multicolor & sprite_bit) != 0;
             bool behind = (state->sprite_priority & sprite_bit) != 0;
-            u8 pointer = m->ram[screen_base + 0x3F8 + (unsigned)sprite];
+            u8 pointer = state->sprite_pointer[sprite];
             u32 data_base = state->bank_addr + ((u32)pointer << 6);
             u32 bits = ((u32)m->ram[data_base + source_y * 3] << 16)
                      | ((u32)m->ram[data_base + source_y * 3 + 1] << 8)
@@ -346,7 +356,8 @@ void vic_render(Vic *v, Mem *m, Display *d) {
     for (int dy = 0; dy < C128_SCREEN_H; dy++) {
         unsigned raster = (unsigned)(dy + VIC_FIRST_VISIBLE_LINE);
         VicRasterState fallback;
-        const VicRasterState *state = vic_state_for_line(v, raster, &fallback);
+        const VicRasterState *state =
+            vic_state_for_line(v, m, raster, &fallback);
         u32 border = VIC_COLORS[state->border_color & 0x0F];
         for (int dx = 0; dx < C128_SCREEN_W; dx++)
             d->pixels[dy * C128_SCREEN_W + dx] = border;
@@ -402,7 +413,8 @@ void vic_render(Vic *v, Mem *m, Display *d) {
                         unsigned off = (unsigned)(dy * C128_SCREEN_W + dx);
                         d->pixels[off] = colors[code];
                         d->pixels[off + 1] = colors[code];
-                        foreground[off] = foreground[off + 1] = code != 0;
+                        foreground[off] = foreground[off + 1] =
+                            (code & 0x02) != 0;
                     }
                 }
             } else if (!bitmap) {
@@ -441,7 +453,8 @@ void vic_render(Vic *v, Mem *m, Display *d) {
                         unsigned off = (unsigned)(dy * C128_SCREEN_W + dx);
                         d->pixels[off] = colors[code];
                         d->pixels[off + 1] = colors[code];
-                        foreground[off] = foreground[off + 1] = code != 0;
+                        foreground[off] = foreground[off + 1] =
+                            (code & 0x02) != 0;
                     }
                 } else {
                     u32 fg = VIC_COLORS[cram];

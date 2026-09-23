@@ -398,7 +398,7 @@ int c128_frame(C128 *c) {
     int cpu_debt = c->cpu_frame_debt;
     c->audio_count = 0;
     c128_update_vic_bank(c);
-    vic_begin_frame(&c->vic);
+    vic_begin_frame(&c->vic, &c->mem);
     while (remaining > 0) {
         int chunk = (remaining > 63) ? 63 : remaining;
         vdc_set_raster_line(&c->vdc,
@@ -442,7 +442,7 @@ int c128_frame(C128 *c) {
         cpu_debt = progressed - target;
         remaining -= chunk;
         c128_update_vic_bank(c);
-        vic_latch_raster(&c->vic,
+        vic_latch_raster(&c->vic, &c->mem,
             (unsigned)((frame_cycles - remaining) * VIC_RASTER_LINES / frame_cycles));
         bool vic_irq = vic_tick(&c->vic);
         cpu_irq(&c->cpu, cia_irq_line(&c->cia1) || vic_irq);

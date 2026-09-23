@@ -37,6 +37,7 @@ typedef struct {
     u8 sprite_x_expand;
     u8 sprite_mc[2];
     u8 sprite_color[VIC_SPRITES];
+    u8 sprite_pointer[VIC_SPRITES];
     u32 bank_addr;
 } VicRasterState;
 
@@ -85,7 +86,7 @@ void vic_set_bank(Vic *v, unsigned bank);
 /* Advance raster/IRQ state and return true if the raster IRQ line is now
  * asserted. Called once per raster-line chunk. */
 bool vic_tick(Vic *v);
-void vic_begin_frame(Vic *v);
-void vic_latch_raster(Vic *v, unsigned line);
+void vic_begin_frame(Vic *v, const Mem *m);
+void vic_latch_raster(Vic *v, const Mem *m, unsigned line);
 /* Render one full frame (raster 0..199) into the display buffer. */
 void vic_render(Vic *v, Mem *m, Display *d);
