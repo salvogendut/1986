@@ -1,6 +1,7 @@
 #include "overlay.h"
 #include "leds.h"
 #include "notify.h"
+#include "snapshot.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -371,6 +372,8 @@ static char *recent_dialog_directory(Config *cfg, OvDialogKind kind) {
         case OV_DIALOG_TAPE:  return cfg->last_tape_dir;
         case OV_DIALOG_CART:  return cfg->last_cart_dir;
         case OV_DIALOG_U36:   return cfg->last_u36_dir;
+        case OV_DIALOG_SNAPSHOT_LOAD:
+        case OV_DIALOG_SNAPSHOT_SAVE: return cfg->last_snapshot_dir;
         default:              return NULL;
     }
 }
@@ -471,6 +474,30 @@ static void open_rom_dialog(Overlay *ov) {
                              false);
 }
 
+static void open_snapshot_dialog(Overlay *ov, bool save) {
+    static const SDL_DialogFileFilter filters[] = {
+        { "VICE C128 snapshot", "vsf;VSF" },
+        { "All files", "*" },
+    };
+    ov->dialog_kind = save ? OV_DIALOG_SNAPSHOT_SAVE : OV_DIALOG_SNAPSHOT_LOAD;
+    ov->dialog_ready = false;
+    ov->dialog_failed = false;
+    ov->dialog_error[0] = '\0';
+    set_dialog_start_location(ov);
+    if (save) {
+        SDL_ShowSaveFileDialog(overlay_file_callback, ov,
+                               ov->c128 ? ov->c128->display.window : NULL,
+                               filters, 2,
+                               ov->dialog_location[0] ? ov->dialog_location : NULL);
+    } else {
+        SDL_ShowOpenFileDialog(overlay_file_callback, ov,
+                               ov->c128 ? ov->c128->display.window : NULL,
+                               filters, 2,
+                               ov->dialog_location[0] ? ov->dialog_location : NULL,
+                               false);
+    }
+}
+
 void overlay_init(Overlay *ov, Config *cfg, C128 *c128) {
     memset(ov, 0, sizeof(*ov));
     ov->cfg  = cfg;
@@ -487,7 +514,7 @@ static bool section_available(const Overlay *ov, OvSection s) {
 /* Number of selectable rows in each section. */
 static int section_rows(const Overlay *ov, OvSection s) {
     switch (s) {
-        case OV_GENERAL:  return 7;   /* display, input ports, Tinker, ROMs, About */
+        case OV_GENERAL:  return 9;   /* display, input ports, Tinker, ROMs, snapshots, About */
         case OV_MEDIA:    return 4 + (ov->cfg->second_drive ? 2 : 0) +
                                  (ov->cfg->real_disk_drive ? 1 + (ov->cfg->second_drive ? 1 : 0) : 0) +
                                  (ov->cfg->tinker ? 1 : 0);
@@ -540,6 +567,10 @@ static void overlay_activate(Overlay *ov) {
                     ov->section = OV_GENERAL;
             } else if (ov->row == 5) {
                 open_rom_dialog(ov);
+            } else if (ov->row == 6) {
+                open_snapshot_dialog(ov, false);
+            } else if (ov->row == 7) {
+                open_snapshot_dialog(ov, true);
             } else {
                 ov->about_visible = true;
             }
@@ -839,6 +870,33 @@ void overlay_tick(Overlay *ov) {
         save_config(ov);
         return;
     }
+    if (kind == OV_DIALOG_SNAPSHOT_LOAD) {
+        SnapshotResult result = snapshot_load(ov->c128, ov->dialog_path);
+        if (result == SNAPSHOT_OK) {
+            notify_post(snapshot_last_load_was_partial()
+                        ? "VICE SNAPSHOT IMPORTED - CORE STATE ONLY"
+                        : "SNAPSHOT LOADED");
+            display_focus_active(&ov->c128->display);
+        } else {
+            notify_post("SNAPSHOT LOAD FAILED: %s", snapshot_result_name(result));
+        }
+        save_config(ov);
+        return;
+    }
+    if (kind == OV_DIALOG_SNAPSHOT_SAVE) {
+        char path[CONFIG_PATH_MAX];
+        snprintf(path, sizeof(path), "%s", ov->dialog_path);
+        const char *slash = strrchr(path, '/');
+        const char *dot = strrchr(path, '.');
+        if ((!dot || (slash && dot < slash)) &&
+            strlen(path) + 4 < sizeof(path))
+            strcat(path, ".vsf");
+        SnapshotResult result = snapshot_save(ov->c128, path);
+        notify_post(result == SNAPSHOT_OK ? "SNAPSHOT SAVED" :
+                    "SNAPSHOT SAVE FAILED: %s", snapshot_result_name(result));
+        save_config(ov);
+        return;
+    }
 
     char *dest = NULL;
     if (kind == OV_DIALOG_ROM) dest = ov->cfg->rom_dir;
@@ -1122,7 +1180,11 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         rom_path_display(ov, rd, sizeof(rd));
         draw_row(r, panel_w, y, "ROMS PATH", rd, ov->row == 5);
         y += OV_LINE_H;
-        draw_row(r, panel_w, y, "About", "Program details", ov->row == 6);
+        draw_row(r, panel_w, y, "Load snapshot", ".vsf", ov->row == 6);
+        y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Save snapshot", ".vsf", ov->row == 7);
+        y += OV_LINE_H;
+        draw_row(r, panel_w, y, "About", "Program details", ov->row == 8);
     } else if (ov->section == OV_MEDIA) {
         for (int i = 0; i < section_rows(ov, OV_MEDIA); i++) {
             int item = media_item(ov, i);

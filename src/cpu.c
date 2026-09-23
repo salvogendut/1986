@@ -460,13 +460,13 @@ int cpu_step_budget(Cpu8502 *cpu, int budget) {
 }
 
 void cpu_irq(Cpu8502 *cpu, bool level) {
-    (void)cpu;
+    if (cpu) cpu->irq_level = level;
     if (maincpu_int_status)
         interrupt_set_irq(maincpu_int_status, 0, level ? 1 : 0, maincpu_clk);
 }
 
 void cpu_nmi(Cpu8502 *cpu, bool level) {
-    (void)cpu;
+    if (cpu) cpu->nmi_level = level;
     if (maincpu_int_status)
         interrupt_set_nmi(maincpu_int_status, 0, level ? 1 : 0, maincpu_clk);
 }
@@ -482,4 +482,56 @@ u64 cpu_cycles(void) {
 
 bool cpu_rmw_active(void) {
     return maincpu_rmw_flag != 0;
+}
+
+void cpu_state_get(const Cpu8502 *cpu, Cpu8502State *state) {
+    if (!cpu || !state) return;
+    state->a = maincpu_regs.a;
+    state->x = maincpu_regs.x;
+    state->y = maincpu_regs.y;
+    state->sp = maincpu_regs.sp;
+    state->p = (u8)MOS6510_REGS_GET_STATUS(&maincpu_regs);
+    state->pc = (u16)maincpu_regs.pc;
+    state->clock = (u64)maincpu_clk;
+    state->cycles = cpu->cycles;
+    state->last_opcode_info = last_opcode_info;
+    state->irq_level = cpu->irq_level;
+    state->nmi_level = cpu->nmi_level;
+    state->fast = cpu->fast;
+    state->io_ddr = cpu->io_ddr;
+    state->io_port = cpu->io_port;
+}
+
+void cpu_state_set(Cpu8502 *cpu, const Cpu8502State *state) {
+    if (!cpu || !state) return;
+    MOS6510_REGS_SET_A(&maincpu_regs, state->a);
+    MOS6510_REGS_SET_X(&maincpu_regs, state->x);
+    MOS6510_REGS_SET_Y(&maincpu_regs, state->y);
+    MOS6510_REGS_SET_SP(&maincpu_regs, state->sp);
+    MOS6510_REGS_SET_PC(&maincpu_regs, state->pc);
+    MOS6510_REGS_SET_STATUS(&maincpu_regs, state->p);
+    reg_pc = state->pc;
+    maincpu_clk = (CLOCK)state->clock;
+    maincpu_clk_limit = 0;
+    maincpu_rmw_flag = 0;
+    last_opcode_info = state->last_opcode_info;
+    if (maincpu_int_status)
+        interrupt_cpu_status_reset(maincpu_int_status);
+
+    cpu->a = state->a;
+    cpu->x = state->x;
+    cpu->y = state->y;
+    cpu->sp = state->sp;
+    cpu->p = state->p;
+    cpu->pc = state->pc;
+    cpu->cycles = state->cycles;
+    cpu->irq_level = false;
+    cpu->nmi_level = false;
+    cpu->fast = state->fast;
+    cpu->io_ddr = state->io_ddr;
+    cpu->io_port = state->io_port;
+    cpu_irq(cpu, state->irq_level);
+    cpu_nmi(cpu, state->nmi_level);
+    cpu->irq_level = state->irq_level;
+    cpu->nmi_level = state->nmi_level;
 }

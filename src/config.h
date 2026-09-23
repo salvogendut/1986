@@ -49,6 +49,7 @@ typedef struct {
     char       last_tape_dir[CONFIG_PATH_MAX];
     char       last_cart_dir[CONFIG_PATH_MAX];
     char       last_u36_dir[CONFIG_PATH_MAX];
+    char       last_snapshot_dir[CONFIG_PATH_MAX];
 
     /* Disk drive (Commodore 1571). */
     int        drive_unit;        /* IEC device number (8-11) */

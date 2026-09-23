@@ -13,6 +13,7 @@
 #include "monitor.h"
 #include "gifcap.h"
 #include "notify.h"
+#include "snapshot.h"
 #include "leds.h"
 #include "compat_win.h"
 #include "startup_debug.h"
@@ -128,6 +129,8 @@ static void usage(const char *argv0) {
         "  --tape-play      press Play on a mounted TAP at launch\n"
         "  --tape-play-at N press Play at emulated frame N\n"
         "  --cart PATH      attach a generic C128 CRT or raw function ROM\n"
+        "  --snapshot PATH  load a VICE C128 .vsf snapshot at launch\n"
+        "  --save-snapshot PATH save a .vsf snapshot before exit\n"
         "  --gif-out PATH   start recording a GIF at launch\n"
         "  --paste TEXT     inject text through the keyboard matrix\n"
         "  --paste-at N     delay --paste until emulated frame N\n"
@@ -162,6 +165,8 @@ int main(int argc, char **argv) {
     long tape_play_frame = 0;
     const char *cart_path = NULL;
     const char *gif_out = NULL;
+    const char *snapshot_path = NULL;
+    const char *save_snapshot_path = NULL;
     const char *paste_arg = NULL;
     long paste_frame = 0;
     long frames_arg = -1;
@@ -182,6 +187,8 @@ int main(int argc, char **argv) {
         }
         else if (!strcmp(argv[i], "--cart") && i + 1 < argc) cart_path = argv[++i];
         else if (!strcmp(argv[i], "--gif-out") && i + 1 < argc) gif_out = argv[++i];
+        else if (!strcmp(argv[i], "--snapshot") && i + 1 < argc) snapshot_path = argv[++i];
+        else if (!strcmp(argv[i], "--save-snapshot") && i + 1 < argc) save_snapshot_path = argv[++i];
         else if (!strcmp(argv[i], "--paste") && i + 1 < argc) paste_arg = argv[++i];
         else if (!strcmp(argv[i], "--paste-at") && i + 1 < argc) paste_frame = atol(argv[++i]);
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames_arg = atol(argv[++i]);
@@ -385,6 +392,20 @@ int main(int argc, char **argv) {
         cpu_install_iec_traps(c.mem.kernal, &iec);
         if (mem_c64_roms_loaded(&c.mem))
             cpu_install_c64_iec_traps(c.mem.c64_kernal, &iec);
+    }
+
+    if (snapshot_path) {
+        SnapshotResult result = snapshot_load(&c, snapshot_path);
+        if (result != SNAPSHOT_OK) {
+            fprintf(stderr, "1986: could not load snapshot '%s': %s\n",
+                    snapshot_path, snapshot_result_name(result));
+            display_destroy(&c.display);
+            return 1;
+        }
+        fprintf(stderr, "1986: loaded %s snapshot '%s'%s\n",
+                snapshot_last_load_was_partial() ? "partial VICE" : "full",
+                snapshot_path,
+                snapshot_last_load_was_partial() ? " (unsupported devices reset)" : "");
     }
 
     Overlay overlay;
@@ -785,6 +806,12 @@ int main(int argc, char **argv) {
     if (sfx_stream) SDL_DestroyAudioStream(sfx_stream);
     if (sfx_buf) SDL_free(sfx_buf);
     if (audio_stream) SDL_DestroyAudioStream(audio_stream);
+    if (save_snapshot_path) {
+        SnapshotResult result = snapshot_save(&c, save_snapshot_path);
+        if (result != SNAPSHOT_OK)
+            fprintf(stderr, "1986: could not save snapshot '%s': %s\n",
+                    save_snapshot_path, snapshot_result_name(result));
+    }
     if (!config_save_column_mode(cfg_path, c.col_mode_80))
         fprintf(stderr, "1986: could not save display mode to '%s'\n", cfg_path);
     paste_free(&paste);

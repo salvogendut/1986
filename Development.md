@@ -229,6 +229,18 @@ recorded signal: two C128 KERNAL tape routines are trapped only while a T64
 is mounted, then restored for TAP playback/ejection. T64 has no waveform or
 audio; recording to either format is not implemented.
 
+Snapshot files use VICE 3.10's VSF container framing: the 19-byte magic,
+machine/version header, 16-byte module names, per-module versions, and
+little-endian inclusive lengths. `snapshot.c` imports VICE `MAINCPU` and
+`C128MEM` modules as a guarded core-only projection. Full 1986 round trips use
+the versioned `1986STATE` module because VICE's C128 writer does not serialize
+the Z80 and its 40-column path does not serialize VDC state. The private
+module excludes all host pointers and framebuffer allocations; mounted media
+remain external, and active drive transactions are not yet serialized. A
+1986-authored VSF deliberately omits incomplete standard
+VICE peripheral modules, so x128 rejects it before partially mutating state.
+See [`docs/SNAPSHOTS.md`](docs/SNAPSHOTS.md).
+
 Visual check (saves a PPM at frame 60):
 ```bash
 SDL_VIDEODRIVER=dummy C128_SAVE_PPM=/tmp/boot.ppm ./1986 --rom roms

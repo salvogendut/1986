@@ -20,6 +20,8 @@ typedef enum {
     OV_DIALOG_CART,   /* .crt, .bin, or .rom */
     OV_DIALOG_U36,    /* internal function ROM .bin or .rom */
     OV_DIALOG_ROM,    /* ROM directory (folder picker) */
+    OV_DIALOG_SNAPSHOT_LOAD,
+    OV_DIALOG_SNAPSHOT_SAVE,
 } OvDialogKind;
 
 typedef struct {

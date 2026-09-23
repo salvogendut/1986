@@ -1,6 +1,7 @@
 #include "overlay.h"
 #include "leds.h"
 #include "notify.h"
+#include "snapshot.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +24,16 @@ void leds_set_enabled(LedId id, bool enabled) {
 }
 void notify_set_mode(NotifyMode mode) { (void)mode; }
 void notify_post(const char *fmt, ...) { (void)fmt; }
+SnapshotResult snapshot_save(C128 *c, const char *path) {
+    (void)c; (void)path; return SNAPSHOT_OK;
+}
+SnapshotResult snapshot_load(C128 *c, const char *path) {
+    (void)c; (void)path; return SNAPSHOT_OK;
+}
+const char *snapshot_result_name(SnapshotResult result) {
+    (void)result; return "OK";
+}
+bool snapshot_last_load_was_partial(void) { return false; }
 void display_set_smoothing(Display *d, bool smooth) { (void)d; (void)smooth; }
 void display_set_crt(Display *d, bool enabled, int scanlines, int brightness,
                      int contrast, int red, int green, int blue) {
@@ -68,6 +79,7 @@ void iec_bus_enable_second(IecBus *bus, bool enabled) {
 static char picker_location[CONFIG_PATH_MAX];
 static char picker_filter[128];
 static bool picker_was_folder;
+static bool picker_was_save;
 static bool cancel_next_picker;
 void SDL_ShowOpenFileDialog(SDL_DialogFileCallback callback, void *userdata,
                             SDL_Window *window, const SDL_DialogFileFilter *filters,
@@ -75,6 +87,7 @@ void SDL_ShowOpenFileDialog(SDL_DialogFileCallback callback, void *userdata,
                             bool allow_many) {
     (void)callback; (void)userdata; (void)window; (void)allow_many;
     picker_was_folder = false;
+    picker_was_save = false;
     snprintf(picker_filter, sizeof(picker_filter), "%s",
              filters && nfilters ? filters[0].pattern : "");
     snprintf(picker_location, sizeof(picker_location), "%s",
@@ -90,6 +103,18 @@ void SDL_ShowOpenFolderDialog(SDL_DialogFileCallback callback, void *userdata,
                               bool allow_many) {
     (void)callback; (void)userdata; (void)window; (void)allow_many;
     picker_was_folder = true;
+    picker_was_save = false;
+    snprintf(picker_location, sizeof(picker_location), "%s",
+             default_location ? default_location : "");
+}
+void SDL_ShowSaveFileDialog(SDL_DialogFileCallback callback, void *userdata,
+                            SDL_Window *window, const SDL_DialogFileFilter *filters,
+                            int nfilters, const char *default_location) {
+    (void)callback; (void)userdata; (void)window;
+    picker_was_folder = false;
+    picker_was_save = true;
+    snprintf(picker_filter, sizeof(picker_filter), "%s",
+             filters && nfilters ? filters[0].pattern : "");
     snprintf(picker_location, sizeof(picker_location), "%s",
              default_location ? default_location : "");
 }
@@ -294,7 +319,7 @@ int main(void) {
     key(&ov, SDL_SCANCODE_LEFT);
     CHECK(ov.section == OV_GENERAL && ov.row == 0,
           "General opens with first selectable row");
-    for (int i = 0; i < 6; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 8; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.about_visible, "General About opens program details");
     key(&ov, SDL_SCANCODE_RIGHT);
@@ -307,6 +332,22 @@ int main(void) {
     CHECK(ov.about_visible, "Enter reopens About");
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!ov.about_visible && ov.visible, "Enter dismisses About");
+
+    snprintf(cfg.last_snapshot_dir, sizeof(cfg.last_snapshot_dir), "%s", temp_home);
+    ov.row = 6;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.dialog_kind == OV_DIALOG_SNAPSHOT_LOAD && !picker_was_save &&
+          !strcmp(picker_filter, "vsf;VSF") && !strcmp(picker_location, temp_home),
+          "General opens VICE snapshot loader in its remembered directory");
+    snprintf(ov.dialog_path, sizeof(ov.dialog_path), "%s/state.vsf", temp_home);
+    ov.dialog_ready = true;
+    overlay_tick(&ov);
+    ov.row = 7;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(ov.dialog_kind == OV_DIALOG_SNAPSHOT_SAVE && picker_was_save &&
+          !strcmp(picker_location, temp_home),
+          "General opens VICE snapshot saver in its remembered directory");
+    ov.dialog_kind = OV_DIALOG_NONE; /* model cancelling the native dialog */
 
     key(&ov, SDL_SCANCODE_RIGHT);
     key(&ov, SDL_SCANCODE_RIGHT);
