@@ -66,23 +66,24 @@ static const char *const keyboard_map_lines[] = {
 #define ADV_ONE_DISPLAY         3
 #define ADV_DISPLAY_CHANGE_RESET 4
 #define ADV_VDC_RAM             5
-#define ADV_REAL_DISK_DRIVE     6
-#define ADV_DRIVE_AUDIO         7
-#define ADV_DRIVE_VISUAL        8
-#define ADV_SECOND_DRIVE        9
-#define ADV_GIF_WIDTH           10
-#define ADV_GIF_FPS             11
-#define ADV_GIF_ENCODER         12
-#define ADV_TAPE_AUDIO          13
-#define ADV_TAPE_VIDEO          14
-#define ADV_NOTIFICATIONS       15
-#define ADV_DEBUG               16
-#define ADV_JOY_HIDAPI          17
-#define ADV_KEYBOARD_MAP        18
-#define ADV_C64_TEST            19
-#define ADV_RESET               20
-#define ADV_VERSION             21
-#define ADV_ROWS                22
+#define ADV_DOUBLE_Z80          6
+#define ADV_REAL_DISK_DRIVE     7
+#define ADV_DRIVE_AUDIO         8
+#define ADV_DRIVE_VISUAL        9
+#define ADV_SECOND_DRIVE        10
+#define ADV_GIF_WIDTH           11
+#define ADV_GIF_FPS             12
+#define ADV_GIF_ENCODER         13
+#define ADV_TAPE_AUDIO          14
+#define ADV_TAPE_VIDEO          15
+#define ADV_NOTIFICATIONS       16
+#define ADV_DEBUG               17
+#define ADV_JOY_HIDAPI          18
+#define ADV_KEYBOARD_MAP        19
+#define ADV_C64_TEST            20
+#define ADV_RESET               21
+#define ADV_VERSION             22
+#define ADV_ROWS                23
 
 static int cycle_gif_width(int width) {
     switch (width) {
@@ -601,6 +602,16 @@ static void overlay_activate(Overlay *ov) {
                                 ov->cfg->vdc_ram_kb);
                     save_config(ov);
                     break;
+                case ADV_DOUBLE_Z80:
+                    ov->cfg->double_z80_frequency =
+                        !ov->cfg->double_z80_frequency;
+                    ov->c128->z80_peripheral_remainder = 0;
+                    leds_set_z80_frequency(
+                        ov->cfg->double_z80_frequency ? 4 : 2);
+                    notify_post(ov->cfg->double_z80_frequency
+                        ? "Z80 EFFECTIVE FREQUENCY: 4 MHZ"
+                        : "Z80 EFFECTIVE FREQUENCY: 2 MHZ");
+                    break;
                 case ADV_REAL_DISK_DRIVE:
                     ov->cfg->real_disk_drive = !ov->cfg->real_disk_drive;
                     notify_post("DRIVE MODE CHANGED - RESTART TO APPLY");
@@ -1036,16 +1047,17 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
     int rw, rh;
     if (!SDL_GetRenderOutputSize(r, &rw, &rh))
         SDL_GetWindowSize(ov->c128->display.window, &rw, &rh);
+    int rows = ov->section == OV_ADVANCED ? ADV_ROWS :
+               ov->section == OV_MEDIA ? section_rows(ov, OV_MEDIA) : 11;
+    int panel_h = 48 + rows * OV_LINE_H + 42;
+    float min_logical_h = panel_h + 8 > 510 ? (float)(panel_h + 8) : 510.0f;
     float scale = OV_SCALE;
     if ((float)rw / scale < 840.0f) scale = (float)rw / 840.0f;
-    if ((float)rh / scale < 510.0f) scale = (float)rh / 510.0f;
+    if ((float)rh / scale < min_logical_h) scale = (float)rh / min_logical_h;
     if (scale <= 0.0f) return;
     SDL_SetRenderScale(r, scale, scale);
     int lw = (int)(rw / scale);
     int panel_w = lw - 20 < 820 ? lw - 20 : 820;
-    int rows = ov->section == OV_ADVANCED ? ADV_ROWS :
-               ov->section == OV_MEDIA ? section_rows(ov, OV_MEDIA) : 11;
-    int panel_h = 48 + rows * OV_LINE_H + 42;
 
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(r, 0, 0, 0, 90);
@@ -1161,6 +1173,9 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, panel_w, y, "VDC RAM",
                  ov->cfg->vdc_ram_kb == 16 ? "16K" : "64K",
                  ov->row == ADV_VDC_RAM); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Double Z80 Frequency",
+                 ov->cfg->double_z80_frequency ? "On (4 MHz)" : "Off (2 MHz)",
+                 ov->row == ADV_DOUBLE_Z80); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Real Disk Drive",
                  ov->cfg->real_disk_drive ? "On" : "Off",
                  ov->row == ADV_REAL_DISK_DRIVE); y += OV_LINE_H;

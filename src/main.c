@@ -273,6 +273,7 @@ int main(int argc, char **argv) {
     leds_set_enabled(LED_CPU_8502, true);
     leds_set_enabled(LED_CPU_Z80, true);
     leds_set_cpu_frequency(cfg.fast ? 2 : 1);
+    leds_set_z80_frequency(cfg.double_z80_frequency ? 4 : 2);
 
     /* Load ROMs into the machine (optional at this stage). Default to the
      * executable's directory's "roms" subdirectory when no ROM dir is

@@ -13,7 +13,8 @@ disk access and an experimental ROM-backed 1571CR path.
 
 ## Highlights
 
-- MOS 8502 at 1/2 MHz and Z80 at 2 MHz, with MMU-controlled CPU arbitration.
+- MOS 8502 at 1/2 MHz and Z80 at an effective 2 MHz, with MMU-controlled CPU
+  arbitration and an optional effective 4 MHz Z80 modification for CP/M.
 - VIC-IIe text, bitmap, sprites and raster effects; VDC text and 640x200 bitmap
   output with 16/64 KiB video RAM selection.
 - Three-voice 8580 SID audio, CIA timers/interrupts, keyboard, joysticks, and

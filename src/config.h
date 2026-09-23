@@ -31,6 +31,7 @@ typedef struct {
     bool       fast;               /* run the 8502 at 2 MHz (C128 fast mode) */
     bool       col_mode_80;        /* latched 40/80 key: VDC vs VIC-II */
     int        vdc_ram_kb;         /* fitted VDC RAM: 16 or 64 (DCR default) */
+    bool       double_z80_frequency; /* optional effective 4 MHz Z80 mod */
     int        gif_width;          /* F6 GIF capture width */
     int        gif_fps;            /* F6 GIF capture fps */
     bool       gif_ffmpeg;         /* optimize GIF via ffmpeg if present */
