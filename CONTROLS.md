@@ -14,7 +14,7 @@ media, and configuration are covered in [`USAGE.md`](USAGE.md).
 | F5  | Reset |
 | F6  | Toggle animated GIF recording |
 | F7  | Pause or resume |
-| F8  | Monitor/disassembler |
+| F8  | Open/close the multiprocessor ML monitor |
 | F9  | Open / save-and-close the options overlay |
 | F10 | Switch between 40-column VIC-II and 80-column VDC |
 | F11 | Toggle fullscreen |
@@ -26,6 +26,15 @@ Shift+F1 sends the C128 F1 key instead of swapping host input ports.
 
 These mirror the sibling projects (1983, 1984, 1985): F9 owns the overlay,
 F6 owns capture, F12 quits.
+
+## ML monitor
+
+F8 opens an 80x25 machine-language monitor with separate MOS 8502 and Z80
+contexts. Tab switches the selected CPU; F7 pauses or resumes. The monitor
+provides CPU-aware disassembly, registers, MMU-visible memory dump/edit,
+instruction stepping, and CPU-tagged breakpoints. See
+[`docs/ML-MONITOR.md`](docs/ML-MONITOR.md) for the command reference and the
+C128 bus-ownership rules.
 
 ## Options overlay
 

@@ -62,7 +62,8 @@ handoff rather than bypassing it with host traps.
 - Compact F9 options overlay with General, Media, and Advanced sections.
 - Persistent configuration and per-picker last-used directories.
 - PPM screenshots, built-in GIF capture, fullscreen/scaling, function-key
-  reminder, notifications, and a monitor/disassembler.
+  reminder, notifications, and an MMU-aware 8502/Z80 ML monitor with
+  instruction stepping and CPU-tagged breakpoints.
 - Per-drive activity LEDs and optional drive/tape audio and visual monitors.
 
 ## C128-first product scope
