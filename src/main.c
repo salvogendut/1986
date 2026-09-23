@@ -18,6 +18,7 @@
 #include "compat_win.h"
 #include "startup_debug.h"
 #include "shutter_wav.h"
+#include "frame_pacer.h"
 
 /* notify.c forward-declares this debug master switch (defined in the
  * machine file in the reference tree); provide it here so the module links. */
@@ -427,9 +428,11 @@ int main(int argc, char **argv) {
     SDL_Gamepad *gamepad = open_first_gamepad();
     bool pc_shift_held = false;
     bool startup_focus_placed = false;
-    uint64_t next_frame = 0;
+    FramePacer frame_pacer;
+    frame_pacer_init(&frame_pacer, SDL_GetTicksNS());
 
     while (running) {
+        uint64_t emulated_frame_ns = c128_cycles_to_ns(&c, 0);
         /* --- Event processing --- */
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
@@ -728,7 +731,7 @@ int main(int argc, char **argv) {
                 release_mouse(&mouse_captured, &c.joyports);
             if (c.paused && audio_stream)
                 SDL_ClearAudioStream(audio_stream);
-            uint64_t emulated_frame_ns = c128_cycles_to_ns(&c, cycles);
+            emulated_frame_ns = c128_cycles_to_ns(&c, cycles);
             drive_monitor_mix(&c.drive_monitor, c.audio_frame, c.audio_count,
                               cfg.drive_audio_monitor && c.drive_raw_iec);
             drive_monitor_mix(&c.drive2_monitor, c.audio_frame, c.audio_count,
@@ -761,15 +764,6 @@ int main(int argc, char **argv) {
                         cpu->pc, cpu->sp, cpu->p,
                         c.z80.pc, c.z80.sp, c.mem.mmu.mcr, c.mem.mmu.mcr5,
                         c128_is_c64_mode(&c) ? 1 : 0);
-            }
-
-            /* Pace to the emulated frame time. */
-            uint64_t now = SDL_GetTicksNS();
-            if (next_frame == 0) next_frame = now;
-            if (!no_throttle) {
-                if (now < next_frame)
-                    SDL_Delay((Uint32)((next_frame - now) / 1000000ULL));
-                next_frame += emulated_frame_ns;
             }
 
             if (g_videocap_gif && videocap_gif_due(emulated_frame_ns))
@@ -808,6 +802,14 @@ int main(int argc, char **argv) {
             display_focus_active(&c.display);
             startup_focus_placed = true;
         }
+
+        /* A paused machine still needs a modestly paced host loop so events
+         * and the monitor remain responsive without busy-spinning. Rebase
+         * after long host stalls instead of attempting an unbounded catch-up. */
+        uint64_t wait_ns = frame_pacer_schedule(
+            &frame_pacer, SDL_GetTicksNS(), emulated_frame_ns,
+            !no_throttle || c.paused);
+        if (wait_ns) SDL_DelayNS(wait_ns);
     }
 
     release_mouse(&mouse_captured, &c.joyports);
