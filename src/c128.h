@@ -39,7 +39,7 @@ typedef struct {
     Sid     sid;
     s16     audio_frame[C128_AUDIO_FRAME_CAPACITY];
     int     audio_count;
-    int     sid_fast_remainder;
+    int     peripheral_fast_remainder; /* half-cycle carried while 8502 is at 2 MHz */
     Kbd     kbd;
     JoyPorts joyports;
     Tape    tape;

@@ -76,6 +76,7 @@ typedef struct {
     u8  sprite_color[VIC_SPRITES];   /* individual colours $D027-$D02E */
     u32 bank_addr;          /* MMU/CIA2-selected 16K VIC RAM window */
     unsigned prev_raster; /* previous raster line (for wrap detection) */
+    unsigned current_raster; /* video-clock raster, independent of 8502 speed */
     u64  cycles;       /* raster cycle counter */
     VicRasterState raster_state[VIC_RASTER_LINES];
     bool raster_state_valid[VIC_RASTER_LINES];
@@ -96,6 +97,7 @@ void vic_write_rmw(Vic *v, u16 addr, u8 val);
 u8   vic_read(Vic *v, u16 addr);
 /* Select one of the eight 16K VIC windows in the C128's 128K RAM. */
 void vic_set_bank(Vic *v, unsigned bank);
+void vic_set_raster_line(Vic *v, unsigned line);
 /* Advance raster/IRQ state and return true if the raster IRQ line is now
  * asserted. Called once per raster-line chunk. */
 bool vic_tick(Vic *v);
