@@ -1,15 +1,15 @@
 # 1986 machine ROMs
 #
 # Drop the machine ROM images into this directory (or point --rom at a
-# directory that holds them) and the emulator loads them by name. A full
-# C128DCR set is two 32K dumps:
+# directory that holds them) and the emulator loads them by name. A native
+# C128DCR set uses these images:
 #
 #   kernal.bin   0x4000 bytes — KERNAL + EDITOR + Z80-BIOS (VICE-split)
 #                 from the C128DCR ROM chip (e.g. MAME 318022-02.u34):
 #                   [0x0000..0x0FFF]  EDITOR    -> $C000-$CFFF
 #                   [0x1000..0x1FFF]  Z80-BIOS  -> $D000-$DFFF (CP/M)
 #                   [0x2000..0x3FFF]  KERNAL    -> $E000-$FFFF
-#   basic.bin    0x4000 bytes — BASIC 7.0 low + high halves
+#   basic.bin    0x8000 bytes — BASIC 7.0 low + high halves
 #                 from the C128DCR ROM chip (e.g. MAME 318023-02.u32):
 #                   [0x0000..0x3FFF]  BASIC low -> $4000-$7FFF
 #                   [0x4000..0x7FFF]  BASIC high-> $8000-$BFFF
@@ -27,7 +27,7 @@
 # machine or using a MAME/VICE set). The emulator runs and renders its test
 # pattern without them.
 #
-# Current status: the 8502 core executes the reset vector and runs into the
-# C128 memory space (it reaches BASIC's address area), but a stable boot
-# needs the full VICE 8502 core and the real C128 MMU banking — see
-# DEVELOPMENT.md.
+# The Z80 BIOS is extracted from the middle 4 KiB of kernal.bin; no separate
+# z80bios.bin is needed. Current status: the authentic Z80 reset path hands
+# the bus to the 8502 for BASIC startup and boots CP/M system disks back on
+# the Z80. See docs/Z80-CPM.md.

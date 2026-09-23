@@ -7,6 +7,7 @@ media, and configuration are covered in [`USAGE.md`](USAGE.md).
 
 | Key | Action |
 |-----|--------|
+| F1  | Swap the host joystick/mouse between C128 control ports |
 | F2  | Tape Play/Stop |
 | F3  | Rewind tape |
 | F4  | Save a PPM screenshot |
@@ -21,6 +22,8 @@ media, and configuration are covered in [`USAGE.md`](USAGE.md).
 | Ctrl++ / Ctrl+- | Adjust window scale |
 | Ctrl+V | Paste host clipboard into the C128 |
 
+Shift+F1 sends the C128 F1 key instead of swapping host input ports.
+
 These mirror the sibling projects (1983, 1984, 1985): F9 owns the overlay,
 F6 owns capture, F12 quits.
 
@@ -30,10 +33,10 @@ Left/Right change section, Up/Down select, Enter toggles, F9 saves and
 closes, Escape closes (offering to discard if there are unsaved changes).
 Sections:
 
-- **General** - fullscreen, smoothing, fast (2 MHz) mode, model, scale,
-  reset to defaults.
-- **Video** - CRT effect, scanlines, brightness, contrast.
-- **Capture** - GIF width/fps, ffmpeg optimization, save & close.
+- **General** — display, scaling, CRT, input, 40/80 key, Tinker, and About.
+- **Media** — drive images/units/types, tape, cartridge, and optional U36 ROM.
+- **Advanced** — second/real drives, VDC RAM, monitors, diagnostics, C64 test
+  gate, keyboard map, and capture settings.
 
 ## GIF capture
 

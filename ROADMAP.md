@@ -7,7 +7,7 @@ the Z80 core for CP/M mode, and VICE's 8502 (6510-core) instruction set.
 This document is the forward plan. The current status and technical notes are
 in [Development.md](Development.md); controls are in [CONTROLS.md](CONTROLS.md).
 
-The roadmap targets the C128 platform and eventual CP/M support. A temporary,
+The roadmap targets the C128 platform, including its working CP/M mode. A temporary,
 default-Off C64-personality gate exists only to validate hardware shared with
 the C128 and C128-enhanced software which starts in C64 mode; general C64
 emulation remains out of scope.

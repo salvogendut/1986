@@ -130,7 +130,8 @@ dist_icon512_DATA  = icons/512x512/apps/io.github.salvogendut.Emulator1986.png
 
 # Files shipped in the dist tarball but not built (license, docs, examples).
 EXTRA_DIST = LICENSE README.md Development.md USAGE.md CONTROLS.md INSTALL.md \
-	ROADMAP.md 1986.conf.example 1986_logo.png 1986.png 1986.spec \
+	ROADMAP.md docs/STATUS.md docs/DRIVES.md docs/Z80-CPM.md \
+	1986.conf.example 1986_logo.png 1986.png 1986.spec \
 	screenshots/vicii-basic.png screenshots/vdc-basic.png \
 	screenshots/rocky-horror-staircase.png screenshots/rocky-horror-room.png \
 	screenshots/ludo.png \
