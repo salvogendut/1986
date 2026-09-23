@@ -118,12 +118,17 @@ void SDL_ShowSaveFileDialog(SDL_DialogFileCallback callback, void *userdata,
              default_location ? default_location : "");
 }
 
-static void key(Overlay *ov, SDL_Scancode sc) {
+static void key_mod(Overlay *ov, SDL_Scancode sc, SDL_Keymod mod) {
     SDL_Event event;
     memset(&event, 0, sizeof(event));
     event.type = SDL_EVENT_KEY_DOWN;
     event.key.scancode = sc;
+    event.key.mod = mod;
     overlay_handle_event(ov, &event);
+}
+
+static void key(Overlay *ov, SDL_Scancode sc) {
+    key_mod(ov, sc, SDL_KMOD_NONE);
 }
 
 static bool overlay_draws_after_one_f9(const Overlay *ov) {
@@ -411,6 +416,29 @@ int main(void) {
           strcmp(cfg.last_disk_dir, disk_a) == 0,
           "cancelling a picker preserves its last-used directory");
 
+    ov.row = 1;
+    key_mod(&ov, SDL_SCANCODE_N, SDL_KMOD_CTRL);
+    CHECK(ov.dialog_kind == OV_DIALOG_DISK_CREATE && picker_was_save &&
+          strstr(picker_filter, "d64") && strcmp(picker_location, disk_a) == 0,
+          "Ctrl+N on Drive 1 opens a blank-disk Save dialog");
+    char blank1[CONFIG_PATH_MAX - 4], blank1_final[CONFIG_PATH_MAX];
+    snprintf(blank1, sizeof(blank1), "%s/overlay-blank", disk_a);
+    snprintf(blank1_final, sizeof(blank1_final), "%s.d64", blank1);
+    snprintf(ov.dialog_path, sizeof(ov.dialog_path), "%s", blank1);
+    ov.dialog_ready = true;
+    overlay_tick(&ov);
+    DiskImage blank_disk;
+    memset(&blank_disk, 0, sizeof(blank_disk));
+    char blank_name[17], blank_id[2];
+    int blank_free = -1;
+    CHECK(strcmp(cfg.disk_path, blank1_final) == 0 && c->drive.disk_attached &&
+          disk_image_open(&blank_disk, blank1_final) == 0 &&
+          disk_image_read_bam(&blank_disk, blank_name, sizeof(blank_name),
+                              blank_id, NULL, &blank_free) == 0 &&
+          strcmp(blank_name, "OVERLAY-BLANK") == 0 && blank_free == 664,
+          "Drive 1 blank defaults to D64, is formatted, and is inserted");
+    if (blank_disk.data) disk_image_close(&blank_disk);
+
     cfg.second_drive = true;
     snprintf(cfg.last_disk2_dir, sizeof(cfg.last_disk2_dir), "%s", disk_b);
     ov.row = 3;
@@ -418,6 +446,18 @@ int main(void) {
     CHECK(ov.dialog_kind == OV_DIALOG_DISK2 &&
           strcmp(picker_location, disk_b) == 0,
           "Drive 2 keeps an independent picker directory");
+    ov.dialog_kind = OV_DIALOG_NONE;
+    key_mod(&ov, SDL_SCANCODE_N, SDL_KMOD_CTRL);
+    CHECK(ov.dialog_kind == OV_DIALOG_DISK2_CREATE && picker_was_save,
+          "Ctrl+N targets Drive 2 when its image row is selected");
+    char blank2[CONFIG_PATH_MAX];
+    snprintf(blank2, sizeof(blank2), "%s/second.d81", disk_b);
+    snprintf(ov.dialog_path, sizeof(ov.dialog_path), "%s", blank2);
+    ov.dialog_ready = true;
+    overlay_tick(&ov);
+    CHECK(strcmp(cfg.disk2_path, blank2) == 0 && c->drive2.disk_attached &&
+          c->drive2.image.format == DISK_FORMAT_D81,
+          "Drive 2 blank honors the D81 extension and is inserted");
     ov.row = 4;
     snprintf(ov.dialog_path, sizeof(ov.dialog_path), "%s/demo.tap", disk_a);
     ov.dialog_kind = OV_DIALOG_TAPE;
@@ -700,6 +740,8 @@ int main(void) {
     unlink(cart_file);
     unlink(prg_file);
     unlink(u36_file);
+    unlink(blank1_final);
+    unlink(blank2);
     unlink(config_file);
     rmdir(disk_a);
     rmdir(disk_b);

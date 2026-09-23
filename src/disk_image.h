@@ -66,6 +66,11 @@ const char *disk_image_format_name(const DiskImage *d);
  * Returns 0 on success, -1 on unsupported size or I/O error. */
 int  disk_image_open(DiskImage *d, const char *path);
 
+/* Create and DOS-format a blank D64, D71, or D81 image. The disk label is
+ * derived from the destination filename and the image is replaced atomically
+ * if the platform's Save dialog approved an existing path. */
+DiskSaveResult disk_image_create_blank(const char *path, DiskFormat format);
+
 /* Free the image. */
 void disk_image_close(DiskImage *d);
 

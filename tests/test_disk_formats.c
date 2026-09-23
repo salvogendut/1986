@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int failures;
@@ -324,9 +325,71 @@ static void test_format(DiskFormat format) {
     }
 }
 
+static void test_blank_image(DiskFormat format, const char *extension,
+                             int expected_free, u8 expected_dos_type) {
+    char directory[] = "/tmp/1986-blank-disks-XXXXXX";
+    int marker = mkstemp(directory);
+    if (marker < 0 || close(marker) != 0 || unlink(directory) != 0 ||
+        mkdir(directory, 0700) != 0) {
+        CHECK(false, "create blank-image test directory");
+        return;
+    }
+
+    char path[256];
+    snprintf(path, sizeof(path), "%s/My Blank%s", directory, extension);
+    CHECK(disk_image_create_blank(path, format) == DISK_SAVE_OK,
+          "create blank disk image");
+
+    DiskImage disk;
+    CHECK(disk_image_open(&disk, path) == 0, "open newly created disk image");
+    if (disk.data) {
+        char name[17], id[2];
+        u8 dos_type = 0;
+        int free_blocks = -1;
+        DiskDirEntry entries[8];
+        CHECK(disk.format == format && disk.writable,
+              "blank disk has selected format and is writable");
+        CHECK(disk_image_read_directory_entries(&disk, entries, 8) == 0,
+              "blank disk directory is empty");
+        CHECK(disk_image_read_bam(&disk, name, sizeof(name), id, &dos_type,
+                                  &free_blocks) == 0 &&
+              strcmp(name, "MY BLANK") == 0 && id[0] == '0' && id[1] == '0' &&
+              dos_type == expected_dos_type && free_blocks == expected_free,
+              "blank disk has a valid label, ID, DOS type, and BAM");
+        if (format == DISK_FORMAT_D81) {
+            const u8 *bam1 = disk.data + sector_offset(format, 40, 1);
+            const u8 *bam2 = disk.data + sector_offset(format, 40, 2);
+            CHECK(bam1[0] == 40 && bam1[1] == 2 && bam2[0] == 0 &&
+                  bam2[1] == 0xFF && bam1[6] == 0xC0 && bam2[6] == 0xC0,
+                  "D81 BAM chain and format flags match CBM DOS");
+        }
+
+        const u8 program[] = { 1, 0x1C, 0x42 };
+        CHECK(disk_image_save_prg(&disk, "HELLO", program, sizeof(program),
+                                  false) == DISK_SAVE_OK,
+              "new blank disk accepts a PRG write");
+        DiskDirEntry entry;
+        u8 loaded[sizeof(program)];
+        CHECK(disk_image_find_file(&disk, "HELLO", &entry) == 0 &&
+              disk_image_read_file(&disk, &entry, loaded, sizeof(loaded)) ==
+                  (int)sizeof(loaded) &&
+              memcmp(loaded, program, sizeof(program)) == 0,
+              "new blank disk reads back its first PRG");
+        disk_image_close(&disk);
+    }
+    unlink(path);
+    rmdir(directory);
+}
+
 int main(void) {
     test_format(DISK_FORMAT_D71);
     test_format(DISK_FORMAT_D81);
+    test_blank_image(DISK_FORMAT_D64, ".d64", 664, '2');
+    test_blank_image(DISK_FORMAT_D71, ".d71", 1328, '2');
+    test_blank_image(DISK_FORMAT_D81, ".d81", 3160, '3');
+    CHECK(disk_image_create_blank("/tmp/not-a-disk.prg", DISK_FORMAT_PRG) ==
+          DISK_SAVE_TYPE_MISMATCH,
+          "blank creator rejects non-disk formats");
     if (failures == 0) { puts("test-disk-formats: OK"); return 0; }
     printf("test-disk-formats: %d failure(s)\n", failures);
     return 1;

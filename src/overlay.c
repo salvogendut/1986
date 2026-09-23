@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <ctype.h>
 #include <sys/stat.h>
 
 #define OV_SCALE      1.25f
@@ -370,8 +371,10 @@ static bool file_parent_directory(const char *path, char *out, size_t size) {
 
 static char *recent_dialog_directory(Config *cfg, OvDialogKind kind) {
     switch (kind) {
-        case OV_DIALOG_DISK:  return cfg->last_disk_dir;
-        case OV_DIALOG_DISK2: return cfg->last_disk2_dir;
+        case OV_DIALOG_DISK:
+        case OV_DIALOG_DISK_CREATE:  return cfg->last_disk_dir;
+        case OV_DIALOG_DISK2:
+        case OV_DIALOG_DISK2_CREATE: return cfg->last_disk2_dir;
         case OV_DIALOG_TAPE:  return cfg->last_tape_dir;
         case OV_DIALOG_CART:  return cfg->last_cart_dir;
         case OV_DIALOG_U36:   return cfg->last_u36_dir;
@@ -383,8 +386,10 @@ static char *recent_dialog_directory(Config *cfg, OvDialogKind kind) {
 
 static const char *selected_dialog_path(const Config *cfg, OvDialogKind kind) {
     switch (kind) {
-        case OV_DIALOG_DISK:  return cfg->disk_path;
-        case OV_DIALOG_DISK2: return cfg->disk2_path;
+        case OV_DIALOG_DISK:
+        case OV_DIALOG_DISK_CREATE:  return cfg->disk_path;
+        case OV_DIALOG_DISK2:
+        case OV_DIALOG_DISK2_CREATE: return cfg->disk2_path;
         case OV_DIALOG_TAPE:  return cfg->tape_path;
         case OV_DIALOG_CART:  return cfg->cart_path;
         case OV_DIALOG_U36:   return cfg->u36_path;
@@ -462,6 +467,52 @@ static void open_media_dialog(Overlay *ov, int row) {
                            filters, 2,
                            ov->dialog_location[0] ? ov->dialog_location : NULL,
                            false);
+}
+
+static void open_blank_disk_dialog(Overlay *ov, int row) {
+    static const SDL_DialogFileFilter filters[] = {
+        { "Blank D64/D71/D81 disk image", "d64;D64;d71;D71;d81;D81" },
+        { "All files", "*" },
+    };
+    ov->dialog_kind = row == MEDIA_DISK2
+        ? OV_DIALOG_DISK2_CREATE : OV_DIALOG_DISK_CREATE;
+    ov->dialog_ready = false;
+    ov->dialog_failed = false;
+    ov->dialog_error[0] = '\0';
+    set_dialog_start_location(ov);
+    SDL_ShowSaveFileDialog(overlay_file_callback, ov,
+                           ov->c128 ? ov->c128->display.window : NULL,
+                           filters, 2,
+                           ov->dialog_location[0] ? ov->dialog_location : NULL);
+}
+
+static bool extension_is(const char *extension, const char *wanted) {
+    while (*extension && *wanted) {
+        if (tolower((unsigned char)*extension++) !=
+            tolower((unsigned char)*wanted++)) return false;
+    }
+    return *extension == '\0' && *wanted == '\0';
+}
+
+static bool blank_disk_path(const char *selected, char *path, size_t size,
+                            DiskFormat *format) {
+    if (!selected || strlen(selected) >= size) return false;
+    snprintf(path, size, "%s", selected);
+    const char *slash = strrchr(path, '/');
+    const char *backslash = strrchr(path, '\\');
+    if (!slash || (backslash && backslash > slash)) slash = backslash;
+    char *dot = strrchr(path, '.');
+    if (!dot || (slash && dot < slash)) {
+        if (strlen(path) + 4 >= size) return false;
+        strcat(path, ".d64");
+        *format = DISK_FORMAT_D64;
+        return true;
+    }
+    if (extension_is(dot, ".d64")) *format = DISK_FORMAT_D64;
+    else if (extension_is(dot, ".d71")) *format = DISK_FORMAT_D71;
+    else if (extension_is(dot, ".d81")) *format = DISK_FORMAT_D81;
+    else return false;
+    return true;
 }
 
 /* Folder picker for the ROM directory (General section). */
@@ -805,6 +856,16 @@ bool overlay_handle_event(Overlay *ov, SDL_Event *ev) {
         return true;
     }
 
+    if (sc == SDL_SCANCODE_N && (ev->key.mod & SDL_KMOD_CTRL) &&
+        ov->section == OV_MEDIA) {
+        int item = media_item(ov, ov->row);
+        if (item == MEDIA_DISK1 || item == MEDIA_DISK2)
+            open_blank_disk_dialog(ov, item);
+        else
+            notify_post("SELECT A DRIVE IMAGE ROW TO CREATE A BLANK DISK");
+        return true;
+    }
+
     switch (sc) {
         case SDL_SCANCODE_LEFT:
         case SDL_SCANCODE_RIGHT:
@@ -847,6 +908,30 @@ void overlay_tick(Overlay *ov) {
     OvDialogKind kind = ov->dialog_kind;
     ov->dialog_kind = OV_DIALOG_NONE;
     remember_dialog_directory(ov, kind, ov->dialog_path);
+
+    if (kind == OV_DIALOG_DISK_CREATE || kind == OV_DIALOG_DISK2_CREATE) {
+        char path[CONFIG_PATH_MAX];
+        DiskFormat format;
+        if (!blank_disk_path(ov->dialog_path, path, sizeof(path), &format)) {
+            notify_post("BLANK DISK NEEDS .D64, .D71 OR .D81");
+            return;
+        }
+        int which = kind == OV_DIALOG_DISK2_CREATE ? 2 : 1;
+        Drive *drive = which == 2 ? &ov->c128->drive2 : &ov->c128->drive;
+        char *configured = which == 2 ? ov->cfg->disk2_path :
+                                        ov->cfg->disk_path;
+        if ((drive->disk_attached || configured[0]) &&
+            !replace_disk_image(ov, which, NULL)) return;
+        DiskSaveResult result = disk_image_create_blank(path, format);
+        if (result != DISK_SAVE_OK) {
+            fprintf(stderr, "1986: could not create blank disk '%s'\n", path);
+            notify_post("COULD NOT CREATE BLANK DISK IMAGE");
+            return;
+        }
+        remember_dialog_directory(ov, kind, path);
+        replace_disk_image(ov, which, path);
+        return;
+    }
 
     if (kind == OV_DIALOG_DISK || kind == OV_DIALOG_DISK2) {
         replace_disk_image(ov, kind == OV_DIALOG_DISK2 ? 2 : 1,
@@ -1294,7 +1379,7 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
     /* Footer. */
     SDL_SetRenderDrawColor(r, 0xAA, 0xAA, 0xAA, 255);
     const char *footer = ov->section == OV_MEDIA
-        ? "Left/Right section  Up/Down select  Enter choose  Del clear  F9/Esc close"
+        ? "Left/Right section  Up/Down select  Enter choose  Ctrl+N blank  Del clear  F9/Esc close"
         : "Left/Right section  Up/Down select  Enter toggle/choose  F9/Esc close";
     SDL_RenderDebugText(r, 20,
                         (float)(panel_h - 20), footer);
