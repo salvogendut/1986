@@ -131,6 +131,115 @@ int main(void) {
     CHECK(pixel(display, 6, 0) == 0x706DEB && pixel(display, 7, 0) == 0x706DEB,
           "multicolor 11 uses colour RAM");
 
+    /* Multicolor text is selected per character by color RAM bit 3. Each
+     * two-bit glyph pair selects background 0/1/2 or the low three bits of
+     * the character color. COMMANDO relies heavily on this VIC-II mode. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD011, 0x1B);
+    vic_write(&vic, 0xD016, 0x18);
+    vic_write(&vic, 0xD018, 0x14);
+    vic_write(&vic, 0xD021, 0x02);
+    vic_write(&vic, 0xD022, 0x03);
+    vic_write(&vic, 0xD023, 0x04);
+    mem->ram[0x0400] = 0x01;
+    mem->color_ram[0] = 0x0D;
+    mem->chargen[0x1008] = 0x1B; /* 00, 01, 10, 11 */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x813338 &&
+          pixel(display, 1, 0) == 0x813338,
+          "multicolor text 00 uses background 0");
+    CHECK(pixel(display, 2, 0) == 0x75CEC8 &&
+          pixel(display, 3, 0) == 0x75CEC8,
+          "multicolor text 01 uses background 1");
+    CHECK(pixel(display, 4, 0) == 0x8E3C97 &&
+          pixel(display, 5, 0) == 0x8E3C97,
+          "multicolor text 10 uses background 2");
+    CHECK(pixel(display, 6, 0) == 0x56AC4D &&
+          pixel(display, 7, 0) == 0x56AC4D,
+          "multicolor text 11 uses the character color");
+
+    /* Extended-color text uses the character's upper two bits to select one
+     * of four backgrounds and its lower six bits for the glyph. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD011, 0x5B);
+    vic_write(&vic, 0xD016, 0x08);
+    vic_write(&vic, 0xD018, 0x14);
+    vic_write(&vic, 0xD024, 0x07);
+    mem->ram[0x0400] = 0xC1;
+    mem->color_ram[0] = 0x01;
+    mem->chargen[0x1008] = 0x80;
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xFFFFFF,
+          "extended-color text retains the foreground color");
+    CHECK(pixel(display, 1, 0) == 0xEDF171,
+          "extended-color text selects its background from the character");
+
+    /* Video mode, memory pointers, and colors are sampled per raster line.
+     * A final-state renderer would render both rows in only one of these
+     * modes and colors. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD011, 0x3B); /* bitmap */
+    vic_write(&vic, 0xD016, 0x08);
+    vic_write(&vic, 0xD018, 0x18); /* matrix $0400, bitmap $2000 */
+    mem->ram[0x0400] = 0xA0;
+    mem->ram[0x2000] = 0x80;
+    vic_latch_raster(&vic, 51);
+    vic_write(&vic, 0xD011, 0x1B); /* text */
+    vic_write(&vic, 0xD018, 0x24); /* matrix $0800, characters $1000 */
+    mem->ram[0x0800] = 0x01;
+    mem->color_ram[0] = 0x01;
+    mem->chargen[0x1009] = 0x40;
+    vic_latch_raster(&vic, 52);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xC46C71,
+          "a raster line retains bitmap mode and its memory pointers");
+    CHECK(pixel(display, 1, 1) == 0xFFFFFF,
+          "the following raster line can switch to text mode");
+
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    vic_write(&vic, 0xD020, 0x02);
+    vic_latch_raster(&vic, 16);
+    vic_write(&vic, 0xD020, 0x05);
+    vic_latch_raster(&vic, 17);
+    vic_write(&vic, 0xD021, 0x03);
+    vic_latch_raster(&vic, 51);
+    vic_write(&vic, 0xD021, 0x04);
+    vic_latch_raster(&vic, 52);
+    vic_render(&vic, mem, display);
+    CHECK(display->pixels[0] == 0x813338 &&
+          display->pixels[C128_SCREEN_W] == 0x56AC4D,
+          "border color changes are preserved per raster line");
+    CHECK(pixel(display, 0, 0) == 0x75CEC8 &&
+          pixel(display, 0, 1) == 0x8E3C97,
+          "background color changes are preserved per raster line");
+
+    /* Sprite register changes made by a raster routine apply only below the
+     * split, including individual colors. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    vic_write(&vic, 0xD018, 0x14);
+    set_sprite_pointer(mem, &vic, 0, 0x20);
+    mem->ram[0x0800] = 0x80;
+    mem->ram[0x0803] = 0x80;
+    vic_write(&vic, 0xD000, 24);
+    vic_write(&vic, 0xD001, 51);
+    vic_write(&vic, 0xD015, 0x01);
+    vic_write(&vic, 0xD027, 0x02);
+    vic_latch_raster(&vic, 51);
+    vic_write(&vic, 0xD027, 0x05);
+    vic_latch_raster(&vic, 52);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x813338 &&
+          pixel(display, 0, 1) == 0x56AC4D,
+          "sprite state is preserved per raster line");
+
     /* Native C128 text mode uses the upper 4K half of the 8K character ROM. */
     vic_reset(&vic);
     mem->ram[0x0400] = 0x01;

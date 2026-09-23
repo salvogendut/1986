@@ -13,6 +13,18 @@ static bool drive_probe_active(const C128 *c) {
     return c->drive_raw_iec;
 }
 
+static void c128_update_vic_bank(C128 *c) {
+    /* $D506 bit 6 selects the VIC's 64K RAM bank on a 128K machine; CIA2
+     * port A bits 0-1 select the inverted 16K window inside it. Input pins
+     * float high, matching the 6526's (PRA | ~DDRA) effective port value. */
+    u8 cia2_pa = c->cia2.pra | (u8)~c->cia2.ddra;
+    unsigned vic_bank = mem_c64_mode(&c->mem)
+        ? (unsigned)c->mem.mmu.c64_ram_bank << 2
+        : ((unsigned)(c->mem.mmu.rcr >> 6) & 0x01) << 2;
+    vic_bank |= (unsigned)(~cia2_pa) & 0x03;
+    vic_set_bank(&c->vic, vic_bank);
+}
+
 /* The 8502 core calls I/O handlers during an instruction, at the bus cycle
  * of the access. Synchronize the 1571 before sampling or changing IEC lines:
  * advancing only after the instruction can miss GEOS fast-serial edges. */
@@ -385,6 +397,8 @@ int c128_frame(C128 *c) {
     int total = 0;
     int cpu_debt = c->cpu_frame_debt;
     c->audio_count = 0;
+    c128_update_vic_bank(c);
+    vic_begin_frame(&c->vic);
     while (remaining > 0) {
         int chunk = (remaining > 63) ? 63 : remaining;
         vdc_set_raster_line(&c->vdc,
@@ -427,6 +441,7 @@ int c128_frame(C128 *c) {
         }
         cpu_debt = progressed - target;
         remaining -= chunk;
+        c128_update_vic_bank(c);
         vic_latch_raster(&c->vic,
             (unsigned)((frame_cycles - remaining) * VIC_RASTER_LINES / frame_cycles));
         bool vic_irq = vic_tick(&c->vic);
@@ -515,16 +530,6 @@ int c128_frame(C128 *c) {
                 c->integrated_drive.gcr.write_events,
                 c->integrated_drive.cpu.jammed ? " JAMMED" : "");
     }
-
-    /* $D506 bit 6 selects the VIC's 64K RAM bank on a 128K machine; CIA2
-     * port A bits 0-1 select the inverted 16K window inside it. Input pins
-     * float high, matching the 6526's (PRA | ~DDRA) effective port value. */
-    u8 cia2_pa = c->cia2.pra | (u8)~c->cia2.ddra;
-    unsigned vic_bank = mem_c64_mode(&c->mem)
-        ? (unsigned)c->mem.mmu.c64_ram_bank << 2
-        : ((unsigned)(c->mem.mmu.rcr >> 6) & 0x01) << 2;
-    vic_bank |= (unsigned)(~cia2_pa) & 0x03;
-    vic_set_bank(&c->vic, vic_bank);
 
     /* Render both video devices. The latched physical 40/80 key selects the
      * visible output; $00D7 is a KERNAL software flag and can disagree with

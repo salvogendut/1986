@@ -17,6 +17,29 @@
 #define VIC_RASTER_LINES  312   /* PAL: 312 raster lines per frame */
 #define VIC_SPRITES  8
 
+/* Registers which the VIC-II samples while producing a raster line.  Keeping
+ * these values per line lets the frame renderer reproduce the mode, colour,
+ * bank, and sprite splits used by software instead of painting the complete
+ * frame from the register values left behind at the end of the frame. */
+typedef struct {
+    u8 d011;
+    u8 d016;
+    u8 d018;
+    u8 border_color;
+    u8 bg_color[4];
+    u8 sprite_x[VIC_SPRITES];
+    u8 sprite_y[VIC_SPRITES];
+    u8 sprite_x_msb;
+    u8 sprite_enable;
+    u8 sprite_y_expand;
+    u8 sprite_priority;
+    u8 sprite_multicolor;
+    u8 sprite_x_expand;
+    u8 sprite_mc[2];
+    u8 sprite_color[VIC_SPRITES];
+    u32 bank_addr;
+} VicRasterState;
+
 typedef struct {
     u8  border_color;
     u8  bg_color[4];
@@ -47,8 +70,8 @@ typedef struct {
     u32 bank_addr;          /* MMU/CIA2-selected 16K VIC RAM window */
     unsigned prev_raster; /* previous raster line (for wrap detection) */
     u64  cycles;       /* raster cycle counter */
-    u8   raster_ctrl2[VIC_RASTER_LINES]; /* $D018 at each raster line */
-    bool raster_ctrl2_valid;
+    VicRasterState raster_state[VIC_RASTER_LINES];
+    bool raster_state_valid[VIC_RASTER_LINES];
     bool fast_mode;     /* VIC-IIe $D030 bit 0: 8502 requests 2 MHz */
 } Vic;
 
@@ -62,6 +85,7 @@ void vic_set_bank(Vic *v, unsigned bank);
 /* Advance raster/IRQ state and return true if the raster IRQ line is now
  * asserted. Called once per raster-line chunk. */
 bool vic_tick(Vic *v);
+void vic_begin_frame(Vic *v);
 void vic_latch_raster(Vic *v, unsigned line);
 /* Render one full frame (raster 0..199) into the display buffer. */
 void vic_render(Vic *v, Mem *m, Display *d);
