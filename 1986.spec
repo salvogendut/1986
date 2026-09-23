@@ -1,5 +1,5 @@
 Name:           1986
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        Commodore C128DCR emulator
 
@@ -50,5 +50,9 @@ appstream-util validate-relax --nonet %{buildroot}%{_datadir}/metainfo/io.github
 %{_datadir}/%{name}/roms/README
 
 %changelog
+* Wed Sep 23 2026 Salvatore Bognanni <salvogendut@gmail.com> - 0.2.0-1
+- Add browser support, snapshots, multiprocessor monitor, improved tape controls,
+  and full machine power cycling.
+
 * Mon Sep 21 2026 Salvatore Bognanni <salvogendut@gmail.com> - 0.1.0-1
 - Add branded icons and cross-platform release packaging.

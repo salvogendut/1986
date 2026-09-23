@@ -14,6 +14,7 @@
   <launchable type="desktop-id">io.github.salvogendut.Emulator1986.desktop</launchable>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.0" date="2026-09-23"/>
     <release version="0.1.0" date="2026-09-19"/>
   </releases>
   <categories>

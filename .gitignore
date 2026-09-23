@@ -32,7 +32,7 @@ roms/*
 
 # dist tarballs produced by `make dist`
 /1986-*.tar.gz
-/1986-0.1.0/
+/1986-[0-9]*/
 /dist/
 /web/build/
 /web/dist/
