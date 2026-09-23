@@ -164,10 +164,12 @@ either enabled drive has 1581 selected, both use the fast virtual backend;
 mixed real/virtual IEC mode is not supported. Selecting 1581 hardware does not
 imply that its hardware is emulated.
 The bottom bar shows a separately labeled activity LED for each enabled drive,
-in both the 40-column and 80-column windows. In true-drive mode, each LED
-follows its own drive-ROM LED state and lights on motor, head, and actual byte
-activity; neither blinks on a timer. Advanced > Drive Audio Monitor (default
-Off) adds motor and head sounds from both 1571s to the SID output. The
+in both the 40-column and 80-column windows. It also shows a white 8502 lamp
+whose label follows the active 1 MHz/2 MHz clock and a blue Z80 lamp; each
+brightens only while its processor is being clocked. In true-drive mode, each
+drive LED follows its own drive-ROM LED state and lights on motor, head, and
+actual byte activity; neither blinks on a timer. Advanced > Drive Audio Monitor
+(default Off) adds motor and head sounds from both 1571s to the SID output. The
 recordings come from VICE 3.10's GPL-licensed 1541-family drive-sound module,
 so they are an approximation of a 1571CR rather than a 1571CR recording.
 The independent Drive Visual Monitor toggle (also default Off) shows actual

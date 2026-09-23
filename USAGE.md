@@ -201,6 +201,10 @@ Drive 1's. The audio monitor mixes both drives' mechanism sounds.
 If a write error appears, resolve it before quitting: the original image stays
 intact, but unsaved in-memory GCR data cannot survive exit.
 
+The bottom bar also includes processor activity. The white 8502 lamp is labeled
+`1MHZ` or `2MHZ` from the current CPU clock, including VIC-IIe `$D030` changes;
+the blue Z80 lamp lights when the Z80 is executing.
+
 GEOS 128 from `GEOS128.D64` reaches the Desktop with Real Disk Drive On and
 the 1571CR selected. At the BASIC prompt, use `DLOAD"GEOS128"` and then `RUN`.
 Its loader uploads drive code with `M-W`/`M-E`, so the fast virtual drive cannot

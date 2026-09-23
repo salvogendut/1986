@@ -113,6 +113,22 @@ bool c128_mount_tape(C128 *c, const char *path) {
 
 /* --- CPU bus: route CPU reads/writes through memory + I/O. --- */
 
+u8 c128_vdc_port_read(C128 *c, u16 addr) {
+    vdc_set_bus_clock(&c->vdc, cpu_cycles(),
+                      c->fast || c->vic.fast_mode);
+    return (addr & 1) == 0 ? vdc_read_status(&c->vdc)
+                           : vdc_read_data(&c->vdc);
+}
+
+void c128_vdc_port_write(C128 *c, u16 addr, u8 val) {
+    vdc_set_bus_clock(&c->vdc, cpu_cycles(),
+                      c->fast || c->vic.fast_mode);
+    if ((addr & 1) == 0)
+        vdc_write_index(&c->vdc, val);
+    else
+        vdc_write_data(&c->vdc, val);
+}
+
 static u8 io_read(C128 *c, u16 addr) {
     u8 v;
     if (addr >= 0xD000 && addr < 0xD400) v = vic_read(&c->vic, addr);
@@ -175,12 +191,13 @@ static u8 io_read(C128 *c, u16 addr) {
                      iec_bus_host_inputs(&c->iec_bus));
         } else v = cia_read(&c->cia2, addr);
     }
-    else if (!mem_c64_mode(&c->mem) && addr >= 0xD600 && addr < 0xD700) {
-        vdc_set_bus_clock(&c->vdc, cpu_cycles(), c->fast);
-        v = ((addr & 1) == 0) ? vdc_read_status(&c->vdc) : vdc_read_data(&c->vdc);
+    else if (addr >= 0xD600 && addr < 0xD700) {
+        /* The VDC remains mapped in the C128's C64 personality. Software
+         * such as Elite128 probes and uses it there; VICE likewise registers
+         * the $D600-$D6FF device independently of the active personality. */
+        v = c128_vdc_port_read(c, addr);
     }
     else v = 0xFF;
-
     return v;
 }
 
@@ -224,10 +241,8 @@ static void io_write(C128 *c, u16 addr, u8 val) {
             iec_bus_set_host(&c->iec_bus, c->cia2.pra, c->cia2.ddra);
         return;
     }
-    if (!mem_c64_mode(&c->mem) && addr >= 0xD600 && addr < 0xD700) {
-        vdc_set_bus_clock(&c->vdc, cpu_cycles(), c->fast);
-        if ((addr & 1) == 0) vdc_write_index(&c->vdc, val);   /* $D600 */
-        else                 vdc_write_data(&c->vdc, val);    /* $D601 */
+    if (addr >= 0xD600 && addr < 0xD700) {
+        c128_vdc_port_write(c, addr, val);
         return;
     }
 }
@@ -341,7 +356,7 @@ void c128_reset(C128 *c) {
     cia_reset(&c->cia2);
     sid_reset(&c->sid);
     c->audio_count = 0;
-    c->sid_fast_remainder = 0;
+    c->peripheral_fast_remainder = 0;
     kbd_reset(&c->kbd);
     c->restore_down = false;
     joyports_reset(&c->joyports);
@@ -385,25 +400,39 @@ int c128_frame(C128 *c) {
                              &c->second_real_drive.via2);
         c->drive2_media_generation = c->drive2.media_generation;
     }
-    /* Run the 8502 in raster-line chunks (63 cycles each), ticking the VIC
-     * between chunks so the raster IRQ fires when the raster crosses the
-     * compare line (VICE's alarm-based timing). */
-    bool fast_now = c->fast || c->vic.fast_mode;
-    c->cpu.fast = fast_now;
-    int frame_cycles = fast_now ? 2 * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
-    c->drive_clock_denominator = (unsigned)frame_cycles;
+    /* The PAL video clock always has 312 lines of 63 one-MHz cycles. D030 may
+     * switch the 8502 between one and two CPU cycles per video cycle at a
+     * raster interrupt, as Elite128 does to use 2 MHz only in the borders. */
     c->drive_host_cycle_synced = cpu_cycles();
-    int remaining = frame_cycles;
     int total = 0;
     int cpu_debt = c->cpu_frame_debt;
+    bool debt_fast = c->cpu.fast;
     c->audio_count = 0;
     c128_update_vic_bank(c);
+    vic_set_raster_line(&c->vic, 0);
     vic_begin_frame(&c->vic, &c->mem);
-    while (remaining > 0) {
-        int chunk = (remaining > 63) ? 63 : remaining;
-        vdc_set_raster_line(&c->vdc,
-            (unsigned)((frame_cycles - remaining) * 312 / frame_cycles));
-        int target = chunk - cpu_debt;
+    for (unsigned video_line = 0; video_line < VIC_RASTER_LINES; video_line++) {
+        bool fast_now = c->fast || c->vic.fast_mode;
+        if (fast_now != debt_fast) {
+            cpu_debt = fast_now ? cpu_debt * 2 : (cpu_debt + 1) / 2;
+            debt_fast = fast_now;
+        }
+        c->cpu.fast = fast_now;
+        leds_set_cpu_frequency(fast_now ? 2 : 1);
+        unsigned drive_denominator = fast_now
+            ? 2u * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
+        if (c->drive_clock_denominator &&
+            c->drive_clock_denominator != drive_denominator) {
+            c->drive_clock_fraction = (unsigned)(
+                (u64)c->drive_clock_fraction * drive_denominator /
+                c->drive_clock_denominator);
+            c->drive2_clock_fraction = (unsigned)(
+                (u64)c->drive2_clock_fraction * drive_denominator /
+                c->drive_clock_denominator);
+        }
+        c->drive_clock_denominator = drive_denominator;
+        vdc_set_raster_line(&c->vdc, video_line);
+        int target = 63 * (fast_now ? 2 : 1) - cpu_debt;
         int progressed = 0;
         while (progressed < target) {
             /* A full raster-line gap can swallow an IEC bit transition.
@@ -417,22 +446,25 @@ int c128_frame(C128 *c) {
             int elapsed = ran;
             total += ran;
             progressed += ran;
-            cia_tick(&c->cia1, elapsed);
-            cia_tick(&c->cia2, elapsed);
             drive_sync_to_cpu(c);
-            /* Fast mode doubles CPU cycles per frame, not the SID clock. */
-            int sid_cycles = elapsed;
+            /* CIA, SID and tape retain the one-MHz peripheral clock while
+             * the 8502 runs twice as many cycles in fast mode. */
+            int peripheral_cycles = elapsed;
             if (fast_now) {
-                sid_cycles += c->sid_fast_remainder;
-                c->sid_fast_remainder = sid_cycles & 1;
-                sid_cycles /= 2;
+                peripheral_cycles += c->peripheral_fast_remainder;
+                c->peripheral_fast_remainder = peripheral_cycles & 1;
+                peripheral_cycles /= 2;
+            } else {
+                c->peripheral_fast_remainder = 0;
             }
-            tape_advance(&c->tape, (unsigned)sid_cycles,
+            cia_tick(&c->cia1, peripheral_cycles);
+            cia_tick(&c->cia2, peripheral_cycles);
+            tape_advance(&c->tape, (unsigned)peripheral_cycles,
                          tape_read_pulse, &c->cia1);
             if (c->tape.play_button)
                 cpu_irq(&c->cpu, cia_irq_line(&c->cia1) ||
                         (c->vic.irq_status & 0x80));
-            int produced = sid_clock(&c->sid, sid_cycles,
+            int produced = sid_clock(&c->sid, peripheral_cycles,
                 c->audio_frame + c->audio_count,
                 C128_AUDIO_FRAME_CAPACITY - c->audio_count);
             tape_mix_audio(&c->tape, c->audio_frame + c->audio_count,
@@ -440,15 +472,18 @@ int c128_frame(C128 *c) {
             c->audio_count += produced;
         }
         cpu_debt = progressed - target;
-        remaining -= chunk;
         c128_update_vic_bank(c);
-        vic_latch_raster(&c->vic, &c->mem,
-            (unsigned)((frame_cycles - remaining) * VIC_RASTER_LINES / frame_cycles));
+        unsigned next_line = video_line + 1;
+        vic_set_raster_line(&c->vic, next_line);
+        if (next_line < VIC_RASTER_LINES)
+            vic_latch_raster(&c->vic, &c->mem, next_line);
         bool vic_irq = vic_tick(&c->vic);
         cpu_irq(&c->cpu, cia_irq_line(&c->cia1) || vic_irq);
         cpu_nmi(&c->cpu, cia_irq_line(&c->cia2) || c->restore_down);
     }
     c->cpu_frame_debt = cpu_debt;
+    if (total > 0)
+        leds_ping(LED_CPU_8502);
     /* The 6526 TOD input follows the PAL 50 Hz mains signal, not the 8502
      * clock (which may run at 2 MHz). One completed PAL frame is one pulse. */
     cia_tod_tick(&c->cia1);
@@ -542,8 +577,9 @@ int c128_frame(C128 *c) {
 }
 
 u64 c128_cycles_to_ns(const C128 *c, int cycles) {
-    u64 hz = (c->fast || c->vic.fast_mode) ? 2000000ULL : 1000000ULL;
-    return ((u64)(uint64_t)cycles * 1000000000ULL) / hz;
+    (void)c;
+    (void)cycles;
+    return ((u64)CPU_PAL_FRAME_CYCLES * 1000000000ULL) / 1000000ULL;
 }
 
 bool c128_set_c64_test_mode(C128 *c, bool enabled) {

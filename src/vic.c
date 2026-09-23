@@ -1,5 +1,4 @@
 #include "vic.h"
-#include "cpu.h"
 #include <string.h>
 
 /* C64/C128 colour palette (RGB). */
@@ -88,6 +87,7 @@ void vic_reset(Vic *v) {
     memset(v->sprite_color, 0, sizeof(v->sprite_color));
     v->bank_addr = 0;
     v->prev_raster = 0;
+    v->current_raster = 0;
     v->cycles = 0;
     memset(v->raster_state, 0, sizeof(v->raster_state));
     memset(v->raster_state_valid, 0, sizeof(v->raster_state_valid));
@@ -175,11 +175,10 @@ void vic_write_rmw(Vic *v, u16 addr, u8 val) {
     vic_write(v, addr, val);
 }
 
-/* Current raster line, derived from the CPU cycle counter so it advances as
- * the CPU executes (one raster line per 63 cycles). */
+/* The video-clock raster is advanced by the machine scheduler. It must not
+ * be derived from CPU cycles because D030 can switch the 8502 to 2 MHz. */
 static unsigned vic_raster(const Vic *v) {
-    (void)v;
-    return (unsigned)((cpu_cycles() / 63) % VIC_RASTER_LINES);
+    return v->current_raster % VIC_RASTER_LINES;
 }
 
 u8 vic_read(Vic *v, u16 addr) {
@@ -230,6 +229,10 @@ u8 vic_read(Vic *v, u16 addr) {
 
 void vic_set_bank(Vic *v, unsigned bank) {
     v->bank_addr = (u32)(bank & 0x07) << 14;
+}
+
+void vic_set_raster_line(Vic *v, unsigned line) {
+    v->current_raster = line % VIC_RASTER_LINES;
 }
 
 /* Advance raster/IRQ state. Called each raster-line chunk; asserts the raster

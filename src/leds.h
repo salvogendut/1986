@@ -6,6 +6,8 @@
  *
  * Categories (color coded):
  *   FDC drives (A, B)      - dark red / bright red
+ *   8502 CPU               - grey / white, with 1/2 MHz label
+ *   Z80 CPU                - dark blue / bright blue
  *   IDE (Symbiface/Cyboard) - dark green / bright green
  *   USB/SD (Albireo, M4)   - dark blue / bright blue
  *
@@ -20,6 +22,8 @@
 typedef enum {
     LED_FDC_A = 0,
     LED_FDC_B,
+    LED_CPU_8502,
+    LED_CPU_Z80,
     LED_IDE,
     LED_USB,
     LED_SD,
@@ -34,6 +38,8 @@ typedef enum {
 void leds_set_enabled(LedId id, bool enabled);
 /* Keep each drive lamp's visible IEC device number in sync with Media. */
 void leds_set_drive_unit(LedId id, int unit);
+/* Update the frequency printed beside the 8502 activity lamp. */
+void leds_set_cpu_frequency(unsigned mhz);
 
 /* Signal one frame of activity for the given LED. */
 void leds_ping(LedId id);

@@ -11,7 +11,7 @@ else
 GC_SECTIONS_LDFLAGS = -Wl,--gc-sections
 endif
 
-TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-vic test-vdc
+TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-joyport test-c128-keyboard test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc
 
 .PHONY: all check clean
 
@@ -49,10 +49,10 @@ test-joyport: test_joyport.c ../src/joyport.c ../src/joyport.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_joyport.c ../src/joyport.c -o $@
 
-test-c128-keyboard: test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/c128.h ../src/kbd.h
+test-c128-keyboard: test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c ../src/c128.h ../src/kbd.h ../src/vdc.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra \
 		-ffunction-sections -fdata-sections $(GC_SECTIONS_LDFLAGS) -I../src \
-		test_c128_keyboard.c ../src/c128.c ../src/kbd.c $(SDL3_LIBS) -o $@
+		test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c $(SDL3_LIBS) -o $@
 
 test-gifcap: test_gifcap.c ../src/gifcap.c ../src/gifcap.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
@@ -119,6 +119,10 @@ test-display-footer: test_display_footer.c ../src/display.c ../src/display.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_display_footer.c ../src/display.c $(SDL3_LIBS) -o $@
 
+test-leds: test_leds.c ../src/leds.c ../src/leds.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
+		test_leds.c ../src/leds.c $(SDL3_LIBS) -o $@
+
 test-vic: test_vic.c ../src/vic.c ../src/vic.h ../src/display.h ../src/mem.c ../src/mem.h ../src/mmu.c ../src/mmu.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_vic.c ../src/vic.c ../src/mem.c ../src/mmu.c -o $@
@@ -153,6 +157,7 @@ check: $(TESTS)
 	./test-vdrive-blocks
 	./test-overlay
 	./test-display-footer
+	./test-leds
 	./test-vic
 	./test-vdc
 
