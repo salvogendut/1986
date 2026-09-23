@@ -24,7 +24,7 @@ all: $(DIST_DIR)/1986.js $(addprefix $(DIST_DIR)/,$(WEB_ASSETS)) $(DIST_DIR)/bra
 $(DIST_DIR)/1986.js: $(OBJS) $(ROM_FILES) | $(DIST_DIR)
 	$(EMCC) $(CFLAGS) $(OBJS) -o $@ -lm \
 	  -sMODULARIZE -sEXPORT_NAME=create1986 -sALLOW_MEMORY_GROWTH=1 \
-	  -sINITIAL_MEMORY=100663296 -sSTACK_SIZE=1048576 \
+	  -sINITIAL_MEMORY=100663296 -Wl,-z,stack-size=1048576 \
 	  -sEXPORTED_FUNCTIONS='_poc_init,_poc_reset,_poc_step,_poc_pixels,_poc_width,_poc_height,_poc_display,_poc_set_display,_poc_key,_poc_joy,_poc_load_disk,_poc_eject_disk,_poc_load_tape,_poc_eject_tape,_poc_tape_control,_poc_load_cart,_poc_eject_cart,_poc_set_real_drive,_poc_real_drive,_poc_activity,_poc_audio_avail,_poc_audio_read_pos,_poc_audio_buffer,_poc_audio_advance,_poc_audio_reset,_malloc,_free' \
 	  -sEXPORTED_RUNTIME_METHODS='HEAPU8,HEAPU32,HEAP16,FS,ccall,cwrap' \
 	  --embed-file $(ROM_DIR)/basic.bin@/roms/basic.bin \
