@@ -1063,10 +1063,12 @@ void overlay_render_tape_scope(const Overlay *ov, SDL_Renderer *r) {
 
     char status[128];
     if (t->kind == TAPE_TAP) {
-        unsigned percent = t->payload_end > 20
-            ? (unsigned)((t->position - 20) * 100 / (t->payload_end - 20)) : 0;
+        unsigned percent = t->cycle_counter_total
+            ? (unsigned)(t->cycle_counter * 100 / t->cycle_counter_total) : 0;
+        if (percent > 100) percent = 100;
         snprintf(status, sizeof(status),
-                 "TAPE TAP  %s  MOTOR %s  %u%%  PULSES %u  AUDIO %s",
+                 "TAPE TAP  COUNTER %03u  %s  MOTOR %s  %u%%  PULSES %u  AUDIO %s",
+                 tape_counter(t),
                  t->play_button ? "PLAY" : "STOP", t->motor_on ? "ON" : "OFF",
                  percent, t->frame_edges,
                  ov->cfg->tape_audio_monitor ? "ON" : "OFF");

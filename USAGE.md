@@ -147,8 +147,10 @@ points. Tape recording is not implemented.
 
 With Tinker enabled, **Advanced > Tape Audio Monitor** plays the TAP signal
 itself through the normal audio output, without artificial motor or button
-sounds. **Tape Video Monitor** shows Play/motor state, position, and recent
-pulses above the footer; it stacks above the drive monitor if both are on.
+sounds. **Tape Video Monitor** shows Play/motor state, position, a three-digit
+mechanical-style tape counter, and recent pulses above the footer; it stacks
+above the drive monitor if both are on. The counter advances with the recorded
+TAP signal and follows the same changing-reel-circumference model as VICE.
 T64 has no recorded waveform, so audio remains silent and the visual panel
 shows its file status instead.
 

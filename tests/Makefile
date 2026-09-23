@@ -88,7 +88,7 @@ test-drive-monitor: test_drive_monitor.c ../src/drive_monitor.c ../src/drive_mon
 
 test-tape: test_tape.c ../src/tape.c ../src/tape.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
-		test_tape.c ../src/tape.c -o $@
+		test_tape.c ../src/tape.c -lm -o $@
 
 test-gcr-drive: test_gcr_drive.c ../src/gcr_drive.c ../src/gcr_drive.h ../src/disk_image.c ../src/via6522.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
@@ -114,10 +114,10 @@ test-vdrive-blocks: test_vdrive_blocks.c ../src/virtual_drive.c ../src/virtual_d
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_vdrive_blocks.c ../src/virtual_drive.c ../src/disk_image.c -o $@
 
-test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c ../src/drive_monitor.c ../src/drive_sound_samples.h
+test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c ../src/drive_monitor.c ../src/drive_sound_samples.h ../src/tape.c ../src/tape.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_overlay.c ../src/overlay.c ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c \
-		../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c ../src/drive_monitor.c $(SDL3_LIBS) -lm -o $@
+		../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c ../src/drive_monitor.c ../src/tape.c $(SDL3_LIBS) -lm -o $@
 
 test-display-footer: test_display_footer.c ../src/display.c ../src/display.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
@@ -135,9 +135,9 @@ test-vdc: test_vdc.c ../src/vdc.c ../src/vdc.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_vdc.c ../src/vdc.c -o $@
 
-test-snapshot: test_snapshot.c ../src/snapshot.c ../src/snapshot.h
+test-snapshot: test_snapshot.c ../src/snapshot.c ../src/snapshot.h ../src/tape.c ../src/tape.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
-		test_snapshot.c ../src/snapshot.c -o $@
+		test_snapshot.c ../src/snapshot.c ../src/tape.c -lm -o $@
 
 check: $(TESTS)
 	./test-cpu

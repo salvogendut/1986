@@ -2,9 +2,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #define TAPE_MAX_SIZE (64u * 1024u * 1024u)
 #define TAPE_ZERO_GAP 2500u /* VICE DatasetteZeroGapDelay default. */
+#define TAPE_PAL_CLOCK_HZ 982800.0
+
+/* VICE's datasette counter models changing reel circumference rather than
+ * mapping linearly over the image. These are its physical tape constants. */
+#define DS_PI      3.1415926535
+#define DS_D       1.27e-5
+#define DS_R       1.07e-2
+#define DS_V_PLAY  4.76e-2
+#define DS_G       0.525
 
 static u16 le16(const u8 *p) { return (u16)(p[0] | ((u16)p[1] << 8)); }
 static u32 le32(const u8 *p) {
@@ -28,11 +38,18 @@ static bool validate_tap(Tape *t) {
     if (!declared || declared > t->size - 20) return false;
     t->payload_end = 20u + declared;
     for (size_t p = 20; p < t->payload_end;) {
-        if (t->data[p++]) continue;
+        u8 encoded = t->data[p++];
+        if (encoded) {
+            t->cycle_counter_total += (u64)encoded * 8u;
+            continue;
+        }
         if (t->version != 0) {
             if (t->payload_end - p < 3) return false;
+            u32 gap = (u32)t->data[p] | ((u32)t->data[p + 1] << 8) |
+                      ((u32)t->data[p + 2] << 16);
+            t->cycle_counter_total += gap ? gap : TAPE_ZERO_GAP;
             p += 3;
-        }
+        } else t->cycle_counter_total += TAPE_ZERO_GAP;
     }
     t->kind = TAPE_TAP;
     t->position = 20;
@@ -113,7 +130,10 @@ void tape_rewind(Tape *t) {
     t->pulse_total = t->pulse_remaining = 0;
     t->frame_edges = 0;
     t->scope_head = t->scope_count = 0;
-    if (t->kind == TAPE_TAP) t->position = 20;
+    if (t->kind == TAPE_TAP) {
+        t->position = 20;
+        t->cycle_counter = 0;
+    }
     if (t->kind == TAPE_T64) {
         t->next_file = 0;
         t->current_file = (size_t)-1;
@@ -125,6 +145,36 @@ void tape_set_motor(Tape *t, bool motor_on) { t->motor_on = motor_on; }
 bool tape_running(const Tape *t) {
     return t->kind == TAPE_TAP && t->play_button && t->motor_on &&
            (t->pulse_remaining || t->position < t->payload_end);
+}
+
+unsigned tape_counter(const Tape *t) {
+    if (!t || t->kind != TAPE_TAP) return 0;
+    double seconds = (double)t->cycle_counter / TAPE_PAL_CLOCK_HZ;
+    double turns = DS_G *
+        (sqrt(seconds * DS_V_PLAY / DS_D / DS_PI +
+              (DS_R * DS_R) / (DS_D * DS_D)) - DS_R / DS_D);
+    if (turns <= 0.0) return 0;
+    return (unsigned)turns % 1000u;
+}
+
+void tape_restore_counter(Tape *t) {
+    if (!t || t->kind != TAPE_TAP || !t->data) return;
+    u64 elapsed = 0;
+    size_t stop = t->position < t->payload_end ? t->position : t->payload_end;
+    for (size_t p = 20; p < stop;) {
+        u8 encoded = t->data[p++];
+        if (encoded) elapsed += (u64)encoded * 8u;
+        else if (t->version == 0) elapsed += TAPE_ZERO_GAP;
+        else {
+            if (stop - p < 3) break;
+            u32 gap = (u32)t->data[p] | ((u32)t->data[p + 1] << 8) |
+                      ((u32)t->data[p + 2] << 16);
+            elapsed += gap ? gap : TAPE_ZERO_GAP;
+            p += 3;
+        }
+    }
+    t->cycle_counter = elapsed >= t->pulse_remaining
+        ? elapsed - t->pulse_remaining : 0;
 }
 
 static u32 next_gap(Tape *t) {
@@ -151,6 +201,7 @@ void tape_advance(Tape *t, unsigned cycles, void (*pulse)(void *), void *ctx) {
         unsigned used = cycles < t->pulse_remaining ? cycles : t->pulse_remaining;
         cycles -= used;
         t->pulse_remaining -= used;
+        t->cycle_counter += used;
         if (!t->pulse_remaining) {
             t->frame_edges++;
             if (pulse) pulse(ctx);

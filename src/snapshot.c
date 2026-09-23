@@ -200,6 +200,7 @@ static void read_tape_state(Reader *r, Tape *t) {
         if (position <= t->payload_end) t->position = position;
         t->pulse_total = pulse_total;
         t->pulse_remaining = pulse_remaining;
+        tape_restore_counter(t);
         t->play_button = play;
         t->motor_on = motor;
         if (next <= t->file_count) t->next_file = next;
