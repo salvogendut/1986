@@ -23,6 +23,7 @@ void config_set_defaults(Config *cfg) {
     cfg->fast = false;
     cfg->col_mode_80 = true;
     cfg->vdc_ram_kb = 64;
+    cfg->double_z80_frequency = false;
     cfg->gif_width = 320;
     cfg->gif_fps = 25;
     cfg->gif_ffmpeg = false;
@@ -114,6 +115,7 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "fast"))          cfg->fast = atoi(value) != 0;
     else if (!strcasecmp(key, "display_columns")) cfg->col_mode_80 = atoi(value) != 40;
     else if (!strcasecmp(key, "vdc_ram_kb")) cfg->vdc_ram_kb = atoi(value);
+    else if (!strcasecmp(key, "double_z80_frequency")) cfg->double_z80_frequency = atoi(value) != 0;
     else if (!strcasecmp(key, "gif_width"))     cfg->gif_width = atoi(value);
     else if (!strcasecmp(key, "gif_fps"))       cfg->gif_fps = atoi(value);
     else if (!strcasecmp(key, "gif_ffmpeg"))    cfg->gif_ffmpeg = atoi(value) != 0;
@@ -212,6 +214,7 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "fast = %d\n", cfg->fast ? 1 : 0);
     fprintf(f, "display_columns = %d\n", cfg->col_mode_80 ? 80 : 40);
     fprintf(f, "vdc_ram_kb = %d\n", cfg->vdc_ram_kb);
+    fprintf(f, "double_z80_frequency = %d\n", cfg->double_z80_frequency ? 1 : 0);
     fprintf(f, "gif_width = %d\n", cfg->gif_width);
     fprintf(f, "gif_fps = %d\n", cfg->gif_fps);
     fprintf(f, "gif_ffmpeg = %d\n", cfg->gif_ffmpeg ? 1 : 0);

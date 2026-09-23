@@ -75,14 +75,19 @@ the MMU/common-RAM assumptions around the handoff block.
 
 ## Timing and interrupts
 
-The Z80 is scheduled at two T-states per 1 MHz PAL video/bus cycle. CIA, SID,
-tape, VDC bus time, and other one-MHz peripherals continue from the shared bus
-clock while the Z80 owns the machine. Instruction overrun is carried between
-raster slices rather than truncating an instruction.
+The stock Z80 is scheduled at two T-states per 1 MHz PAL video/bus cycle.
+**Advanced > Double Z80 Frequency** models the
+[C128 8 MHz Z80 daughterboard](https://github.com/ytmytm/c128-z80-8mhz): it
+supplies four T-states during the same available CPU phase, producing an
+effective 4 MHz execution rate. CIA, SID, tape, VDC bus time, and other
+one-MHz peripherals remain driven from the shared bus clock in either mode.
+Instruction overrun is carried between raster slices rather than truncating
+an instruction.
 
 CIA1/VIC maskable interrupt state is presented to the active processor. The
-blue `Z80 2MHZ` footer lamp is updated only by actual Z80 execution; the white
-8502 lamp and its live 1/2 MHz label are accounted independently.
+blue Z80 footer lamp is updated only by actual Z80 execution and reports the
+configured effective `2MHZ` or `4MHZ` rate; the white 8502 lamp and its live
+1/2 MHz label are accounted independently.
 
 ## Validation baseline
 

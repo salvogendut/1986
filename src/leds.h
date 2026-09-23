@@ -40,6 +40,8 @@ void leds_set_enabled(LedId id, bool enabled);
 void leds_set_drive_unit(LedId id, int unit);
 /* Update the frequency printed beside the 8502 activity lamp. */
 void leds_set_cpu_frequency(unsigned mhz);
+/* Update the effective frequency printed beside the Z80 activity lamp. */
+void leds_set_z80_frequency(unsigned mhz);
 
 /* Signal one frame of activity for the given LED. */
 void leds_ping(LedId id);

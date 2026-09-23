@@ -472,6 +472,7 @@ void c128_reset(C128 *c) {
     sid_reset(&c->sid);
     c->audio_count = 0;
     c->peripheral_fast_remainder = 0;
+    c->z80_peripheral_remainder = 0;
     kbd_reset(&c->kbd);
     c->restore_down = false;
     joyports_reset(&c->joyports);
@@ -497,6 +498,7 @@ void c128_reset(C128 *c) {
     c->z80_frame_debt = 0;
     c->bus_cycles = 0;
     leds_set_cpu_frequency(1);
+    leds_set_z80_frequency(c->cfg && c->cfg->double_z80_frequency ? 4 : 2);
     /* Preserve the 40/80 column choice across resets. */
     c->mem.mmu.col4080 = !c->col_mode_80;
     display_set_vdc_active(&c->display, c->col_mode_80);
@@ -536,21 +538,24 @@ int c128_frame(C128 *c) {
         vdc_set_raster_line(&c->vdc, video_line);
         bool z80_line = !mmu_cpu_is_8502(&c->mem.mmu);
         if (z80_line) {
-            /* The C128 feeds the Z80 two T-states per one-MHz video cycle.
-             * Keep instruction overrun as T-state debt across raster lines. */
-            int target = 126 - z80_debt;
+            /* A stock C128 feeds the Z80 two T-states per one-MHz video
+             * cycle.  The optional dot-clock modification supplies four
+             * during the same CPU phase, doubling effective Z80 throughput
+             * without accelerating the shared bus or peripherals. */
+            int z80_ratio = c->cfg && c->cfg->double_z80_frequency ? 4 : 2;
+            int target = 63 * z80_ratio - z80_debt;
             int progressed = 0;
             while (progressed < target &&
                    !mmu_cpu_is_8502(&c->mem.mmu)) {
                 int ran = z80_step(&c->z80, &c->z80_bus);
                 if (ran <= 0) break;
                 progressed += ran;
-                total += ran / 2;
                 ran_z80 = true;
 
-                int peripheral_cycles = ran + c->peripheral_fast_remainder;
-                c->peripheral_fast_remainder = peripheral_cycles & 1;
-                peripheral_cycles /= 2;
+                int peripheral_cycles = ran + c->z80_peripheral_remainder;
+                c->z80_peripheral_remainder = peripheral_cycles % z80_ratio;
+                peripheral_cycles /= z80_ratio;
+                total += peripheral_cycles;
                 c->bus_cycles += (u64)peripheral_cycles;
                 cia_tick(&c->cia1, peripheral_cycles);
                 cia_tick(&c->cia2, peripheral_cycles);

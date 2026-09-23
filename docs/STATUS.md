@@ -9,13 +9,16 @@ below describe working paths, not a claim of cycle-exact compatibility.
 
 - VICE-derived 8502/6510 instruction core with native C128 MMU and PLA maps.
 - 1 MHz and 2 MHz 8502 operation, including VIC-IIe `$D030` changes.
-- Z80 execution at its effective 2 MHz rate, with `$D505` CPU ownership,
+- Z80 execution at its stock effective 2 MHz rate, with `$D505` CPU ownership,
   native Z80 memory/I/O mapping, and shared-RAM handoff to and from the 8502.
+  **Advanced > Double Z80 Frequency** optionally models the dot-clock hardware
+  modification's effective 4 MHz rate while leaving the shared bus at 1 MHz.
 - CP/M Plus boot from a C128 CP/M system disk.
 - Two 64 KiB system RAM banks and selectable 16/64 KiB VDC RAM. The C128DCR
   default is 64 KiB.
-- White 8502 and blue Z80 footer indicators. The 8502 label follows its live
-  1/2 MHz state; each lamp brightens only while that processor is clocked.
+- White 8502 and blue Z80 footer indicators. Their labels follow the active
+  1/2 MHz 8502 and configured 2/4 MHz Z80 rates; each lamp brightens only while
+  that processor is clocked.
 
 The reset and cross-CPU protocol is documented separately in
 [Z80-CPM.md](Z80-CPM.md) so future native Z80 work preserves the hardware

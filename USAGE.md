@@ -61,6 +61,13 @@ to the 80-column VDC display. With Unified Display enabled, the shared window
 shows the selected output. With Unified Display disabled, both output windows
 open and the selected output receives window focus.
 
+With Tinker enabled, **Advanced > Double Z80 Frequency** changes the Z80 from
+its stock effective 2 MHz rate to an effective 4 MHz. It models the C128
+dot-clock daughterboard modification by giving the Z80 four T-states per
+1 MHz bus cycle while leaving video, CIA, SID, tape, and other shared-bus
+timing unchanged. The setting defaults to Off, applies immediately, persists
+as `double_z80_frequency`, and is reflected by the blue Z80 footer label.
+
 To switch between the C128 upper/graphics and upper/lowercase character sets,
 press host Shift+Alt (the C128 Shift+C= chord). If the desktop intercepts that
 combination, press Caps Lock once as a shortcut for the same C128 chord. This

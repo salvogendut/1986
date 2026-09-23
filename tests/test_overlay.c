@@ -15,6 +15,8 @@ static int failures;
 /* Only the keyboard-driven overlay state is exercised here. */
 void leds_ping(LedId id) { (void)id; }
 void leds_set_drive_unit(LedId id, int unit) { (void)id; (void)unit; }
+static unsigned z80_led_mhz = 2;
+void leds_set_z80_frequency(unsigned mhz) { z80_led_mhz = mhz; }
 static bool second_led_enabled;
 void leds_set_enabled(LedId id, bool enabled) {
     if (id == LED_FDC_B) second_led_enabled = enabled;
@@ -256,6 +258,10 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.vdc_ram_kb == 64 && c->vdc.address_mask == 0xFFFF,
           "Advanced VDC RAM switches back to 64K");
+    key(&ov, SDL_SCANCODE_DOWN);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.double_z80_frequency && z80_led_mhz == 4,
+          "Advanced doubles the effective Z80 frequency and footer label");
     for (int i = 0; i < 4; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.second_drive && second_led_enabled,
@@ -277,7 +283,7 @@ int main(void) {
     CHECK(ov.row == 6, "Tinker Media includes U36 with Drive 2 enabled");
 
     key(&ov, SDL_SCANCODE_RIGHT);
-    for (int i = 0; i < 9; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 10; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!cfg.second_drive && !second_led_enabled,
           "Second Drive toggle disables its device and LED");
@@ -306,7 +312,7 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RIGHT);
     CHECK(ov.section == OV_ADVANCED && ov.row == 0,
           "Advanced opens at its first row for keyboard map");
-    for (int i = 0; i < 18; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 19; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.keyboard_map_visible, "Advanced opens the keyboard map");
     key(&ov, SDL_SCANCODE_LEFT);
@@ -324,7 +330,7 @@ int main(void) {
     CHECK(ov.visible, "reopen options for subsequent media checks");
 
     ov.section = OV_ADVANCED;
-    ov.row = 19;
+    ov.row = 20;
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!cfg.c64_test_mode && !c->mem.mmu.c64_enabled,
           "C64 test gate refuses to arm without optional C64 ROMs");
@@ -541,13 +547,13 @@ int main(void) {
     /* Real-drive hardware type lives in Media, separately for each unit.
      * The fast-drive layout above remains unchanged while the gate is off. */
     ov.section = OV_ADVANCED;
-    ov.row = 6;
-    key(&ov, SDL_SCANCODE_RETURN);
-    CHECK(cfg.real_disk_drive, "Advanced enables real-drive preference");
     ov.row = 7;
     key(&ov, SDL_SCANCODE_RETURN);
-    CHECK(cfg.drive_audio_monitor, "Advanced enables drive audio monitor");
+    CHECK(cfg.real_disk_drive, "Advanced enables real-drive preference");
     ov.row = 8;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.drive_audio_monitor, "Advanced enables drive audio monitor");
+    ov.row = 9;
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.drive_visual_monitor, "Advanced enables drive visual monitor");
     key(&ov, SDL_SCANCODE_F9); /* persist the Advanced change on close */
@@ -562,7 +568,7 @@ int main(void) {
     CHECK(config_load(&saved, config_file) && saved.drive_type == 1581,
           "drive 1 hardware selection persists");
     ov.section = OV_ADVANCED;
-    ov.row = 9;
+    ov.row = 10;
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.second_drive, "enable second drive for independent type selection");
     ov.section = OV_MEDIA;
@@ -571,7 +577,7 @@ int main(void) {
     CHECK(cfg.drive2_type == 1581 && cfg.drive_type == 1581,
           "Media exposes a separate hardware type for drive 2");
     ov.section = OV_ADVANCED;
-    ov.row = 6;
+    ov.row = 7;
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!cfg.real_disk_drive, "Advanced disables real-drive preference");
     ov.section = OV_MEDIA;
@@ -605,9 +611,10 @@ int main(void) {
               "create overlay preview renderer");
         if (renderer) {
             c->display.window = window;
+            ov.visible = true;
             if (getenv("C128_OVERLAY_PREVIEW_KEYBOARD")) {
                 ov.section = OV_ADVANCED;
-                ov.row = 18;
+                ov.row = 19;
                 ov.keyboard_map_visible = true;
             } else if (getenv("C128_OVERLAY_PREVIEW_ABOUT")) {
                 ov.section = OV_GENERAL;
@@ -615,7 +622,7 @@ int main(void) {
                 ov.about_visible = true;
             } else {
                 ov.section = OV_ADVANCED;
-                ov.row = 9;
+                ov.row = 10;
             }
             SDL_SetRenderDrawColor(renderer, 0x20, 0x40, 0x20, 255);
             SDL_RenderClear(renderer);

@@ -39,6 +39,7 @@ static const LedPalette palette_m4_net   = { 70, 70, 70,  240, 240, 240 };
 static bool   g_enabled  [LED_COUNT];
 static int    g_drive_unit[2] = { 8, 9 };
 static unsigned g_cpu_mhz = 1;
+static unsigned g_z80_mhz = 2;
 static Uint64 g_last_ms  [LED_COUNT];   /* Generic, also used for LED_USIFAC RX half */
 static Uint64 g_last_ms_b[LED_COUNT];   /* Only used for split LEDs (TX half) */
 static bool   g_mouse_inside;
@@ -132,7 +133,9 @@ static void update_hover(int x, int y, int w, int h) {
                 snprintf(label, sizeof(label), "8502 CPU (%u MHz)", g_cpu_mhz);
                 set_hover_label(label, cx, this_w, y);
             } else if (i == LED_CPU_Z80) {
-                set_hover_label("Z80 CPU (2 MHz)", cx, this_w, y);
+                char label[32];
+                snprintf(label, sizeof(label), "Z80 CPU (%u MHz)", g_z80_mhz);
+                set_hover_label(label, cx, this_w, y);
             } else {
                 set_hover_label(led_label((LedId)i), cx, this_w, y);
             }
@@ -154,6 +157,10 @@ void leds_set_drive_unit(LedId id, int unit) {
 
 void leds_set_cpu_frequency(unsigned mhz) {
     g_cpu_mhz = mhz >= 2 ? 2 : 1;
+}
+
+void leds_set_z80_frequency(unsigned mhz) {
+    g_z80_mhz = mhz >= 4 ? 4 : 2;
 }
 
 void leds_ping(LedId id) {
@@ -282,7 +289,7 @@ void leds_render(SDL_Renderer *r, int x, int y, int w, int h) {
             } else if (i == LED_CPU_8502) {
                 snprintf(label, sizeof(label), "8502 %uMHZ", g_cpu_mhz);
             } else {
-                snprintf(label, sizeof(label), "Z80 2MHZ");
+                snprintf(label, sizeof(label), "Z80 %uMHZ", g_z80_mhz);
             }
             SDL_SetRenderDrawColor(r, 205, 205, 205, 255);
             SDL_RenderDebugText(r, (float)(cx + 20), (float)(cy + 1), label);

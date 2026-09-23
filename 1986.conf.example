@@ -17,6 +17,8 @@ crt_blue = 100
 # Machine
 model = 0
 fast = 0
+# Optional dot-clock Z80 modification: 0 = effective 2 MHz, 1 = 4 MHz
+double_z80_frequency = 0
 # Last selected VIC-II (40) or VDC (80) display mode
 display_columns = 80
 

@@ -14,6 +14,7 @@ int main(void) {
     CHECK(cfg.model == C128_MODEL_DCR, "default model DCR");
     CHECK(cfg.col_mode_80, "default display is 80 columns");
     CHECK(cfg.vdc_ram_kb == 64, "C128DCR defaults to 64K VDC RAM");
+    CHECK(!cfg.double_z80_frequency, "doubled Z80 frequency defaults off");
     CHECK(!cfg.real_disk_drive, "real drive defaults off");
     CHECK(!cfg.drive_audio_monitor, "drive audio monitor defaults off");
     CHECK(!cfg.drive_visual_monitor, "drive visual monitor defaults off");
@@ -39,6 +40,8 @@ int main(void) {
           "config without display mode defaults to 80 columns");
     CHECK(!legacy_cfg.real_disk_drive,
           "config without real-drive selection defaults off");
+    CHECK(!legacy_cfg.double_z80_frequency,
+          "legacy config keeps stock Z80 frequency");
     CHECK(!legacy_cfg.second_drive && legacy_cfg.drive2_unit == 9,
           "legacy config defaults the second drive off at unit 9");
 
@@ -47,6 +50,7 @@ int main(void) {
     cfg.crt_enabled = true;
     cfg.col_mode_80 = false;
     cfg.vdc_ram_kb = 16;
+    cfg.double_z80_frequency = true;
     cfg.real_disk_drive = true;
     cfg.drive_audio_monitor = true;
     cfg.drive_visual_monitor = true;
@@ -75,6 +79,7 @@ int main(void) {
     CHECK(back.crt_enabled, "crt roundtrip");
     CHECK(!back.col_mode_80, "40-column mode roundtrip");
     CHECK(back.vdc_ram_kb == 16, "16K VDC RAM setting roundtrip");
+    CHECK(back.double_z80_frequency, "doubled Z80 frequency roundtrip");
     CHECK(back.real_disk_drive, "real-drive preference roundtrip");
     CHECK(back.drive_audio_monitor, "drive audio monitor roundtrip");
     CHECK(back.drive_visual_monitor, "drive visual monitor roundtrip");
@@ -105,6 +110,8 @@ int main(void) {
     CHECK(config_load(&back, path), "reload 80-column mode");
     CHECK(back.col_mode_80, "80-column mode persisted");
     CHECK(back.vdc_ram_kb == 16, "mode-only save preserves VDC RAM size");
+    CHECK(back.double_z80_frequency,
+          "mode-only save preserves doubled Z80 frequency");
     CHECK(back.scale == 3, "mode-only save preserves other settings");
     CHECK(strcmp(back.disk_path, "keep-me.d64") == 0,
           "mode-only save preserves media settings");
