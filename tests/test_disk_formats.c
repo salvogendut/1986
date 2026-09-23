@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int failures;
@@ -327,7 +328,9 @@ static void test_format(DiskFormat format) {
 static void test_blank_image(DiskFormat format, const char *extension,
                              int expected_free, u8 expected_dos_type) {
     char directory[] = "/tmp/1986-blank-disks-XXXXXX";
-    if (!mkdtemp(directory)) {
+    int marker = mkstemp(directory);
+    if (marker < 0 || close(marker) != 0 || unlink(directory) != 0 ||
+        mkdir(directory, 0700) != 0) {
         CHECK(false, "create blank-image test directory");
         return;
     }
