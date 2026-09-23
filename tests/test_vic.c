@@ -220,6 +220,36 @@ int main(void) {
           pixel(display, 0, 1) == 0x8E3C97,
           "background color changes are preserved per raster line");
 
+    /* $D011 YSCROLL chooses the first badline. Advancing it by one moves
+     * character row zero down by one physical scanline instead of jumping a
+     * complete character row. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_write(&vic, 0xD018, 0x14);
+    vic_write(&vic, 0xD020, 0x02);
+    mem->ram[0x0400] = 0x01;
+    mem->color_ram[0] = 0x01;
+    mem->chargen[0x1008] = 0x80;
+    vic_write(&vic, 0xD011, 0x1B); /* 25 rows, YSCROLL 3 */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0xFFFFFF,
+          "YSCROLL 3 starts glyph row zero on raster 51");
+    vic_write(&vic, 0xD011, 0x1C); /* YSCROLL 4 */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x000000 &&
+          pixel(display, 0, 1) == 0xFFFFFF,
+          "incrementing YSCROLL moves graphics down one scanline");
+
+    /* RSEL's 24-row window starts four lines lower. COMMANDO uses this with
+     * YSCROLL 7 for its playfield and lower status/text split. */
+    vic_write(&vic, 0xD011, 0x17); /* 24 rows, YSCROLL 7 */
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x813338,
+          "24-row mode keeps raster 51 in the border");
+    CHECK(pixel(display, 0, 4) == 0xFFFFFF,
+          "24-row mode starts glyph row zero on raster 55");
+
     /* Sprite registers and pointer-table RAM are sampled per raster. Raster
      * multiplexers rewrite both while earlier sprites are still visible. */
     vic_reset(&vic);

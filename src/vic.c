@@ -362,16 +362,27 @@ void vic_render(Vic *v, Mem *m, Display *d) {
         for (int dx = 0; dx < C128_SCREEN_W; dx++)
             d->pixels[dy * C128_SCREEN_W + dx] = border;
 
-        if (dy < VIC_TEXT_Y || dy >= VIC_TEXT_Y + VIC_TEXT_H ||
+        /* RSEL selects a 25-row window on raster lines 51..250 or a 24-row
+         * window on 55..246. The low three $D011 bits select the first
+         * badline (48 + YSCROLL), which is where character row 0 / glyph
+         * line 0 is fetched. Keeping that relationship makes a changing
+         * YSCROLL move the picture one scanline at a time. */
+        unsigned display_first = (state->d011 & 0x08) ? 51u : 55u;
+        unsigned display_last = (state->d011 & 0x08) ? 251u : 247u;
+        if (raster < display_first || raster >= display_last ||
             !(state->d011 & 0x10))
             continue;
 
-        int graphics_y = dy - VIC_TEXT_Y;
-        int cy = graphics_y >> 3;
-        int py = graphics_y & 7;
         u32 bg = VIC_COLORS[state->bg_color[0] & 0x0F];
         for (int dx = VIC_TEXT_X; dx < VIC_TEXT_X + VIC_TEXT_W; dx++)
             d->pixels[dy * C128_SCREEN_W + dx] = bg;
+        int graphics_y = (int)raster - (48 + (state->d011 & 0x07));
+        if (graphics_y < 0)
+            continue;
+        int cy = graphics_y >> 3;
+        int py = graphics_y & 7;
+        if (cy >= VIC_CHARS_Y)
+            continue;
 
         u32 screen_base = state->bank_addr + ((state->d018 & 0xF0) << 6);
         u32 bitmap_addr = state->bank_addr +
