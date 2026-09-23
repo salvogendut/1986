@@ -24,6 +24,7 @@ typedef struct {
     bool play_button;
     bool motor_on;
     u32 pulse_total, pulse_remaining;
+    u64 cycle_counter, cycle_counter_total;
     unsigned frame_edges;
     u32 scope[TAPE_SCOPE_SAMPLES];
     size_t scope_head, scope_count;
@@ -39,6 +40,10 @@ void tape_stop(Tape *t);
 void tape_rewind(Tape *t);
 void tape_set_motor(Tape *t, bool motor_on);
 bool tape_running(const Tape *t);
+/* Three-digit mechanical-style counter modelled after VICE's datasette. */
+unsigned tape_counter(const Tape *t);
+/* Reconstruct elapsed cycles after restoring the persisted transport fields. */
+void tape_restore_counter(Tape *t);
 void tape_advance(Tape *t, unsigned cycles, void (*pulse)(void *), void *ctx);
 void tape_mix_audio(const Tape *t, s16 *samples, int count, bool enabled);
 /* T64 uses KERNAL tape traps; it contains files, not a recorded waveform. */

@@ -42,6 +42,8 @@ int main(void) {
     tape_init(&t);
     CHECK(tape_mount(&t, path) && t.kind == TAPE_TAP && t.position == 20,
           "mount version-1 TAP with short and extended gaps");
+    CHECK(t.cycle_counter_total == 4152 && tape_counter(&t) == 0,
+          "TAP mount measures recorded duration for the tape counter");
     tape_play(&t);
     tape_advance(&t, 1000, pulse, &pulses);
     CHECK(!pulses && t.position == 20, "motor-off tape does not advance");
@@ -59,6 +61,8 @@ int main(void) {
     tape_advance(&t, 1500, pulse, &pulses);
     CHECK(t.pulse_total == 3000 && t.pulse_remaining == 1500,
           "v1 extended gap retains its 24-bit cycle count");
+    CHECK(t.cycle_counter == 1884,
+          "tape counter advances by consumed recording cycles");
     tape_stop(&t);
     tape_advance(&t, 5000, pulse, &pulses);
     CHECK(pulses == 1 && t.pulse_remaining == 1500,
@@ -68,8 +72,17 @@ int main(void) {
     CHECK(pulses == 3 && !t.play_button,
           "play resumes, emits both remaining edges and stops at tape end");
     tape_rewind(&t);
-    CHECK(t.position == 20 && !t.play_button && !t.scope_count,
+    CHECK(t.position == 20 && !t.play_button && !t.scope_count &&
+          t.cycle_counter == 0,
           "rewind returns TAP transport to the start");
+    t.cycle_counter = 60u * 982800u;
+    CHECK(tape_counter(&t) == 21,
+          "mechanical counter follows VICE's reel-circumference model");
+    t.position = 25;
+    t.pulse_remaining = 1500;
+    tape_restore_counter(&t);
+    CHECK(t.cycle_counter == 1884,
+          "snapshot transport restores the elapsed counter position");
 
     tap[16] = 5; /* cuts off the extension, must be rejected */
     write_fixture(path, tap, 23);
