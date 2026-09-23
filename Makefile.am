@@ -151,3 +151,13 @@ EXTRA_DIST = LICENSE README.md Development.md USAGE.md CONTROLS.md INSTALL.md \
 	tests/test_drive.c tests/test_drive1571cr.c tests/test_drive_monitor.c tests/test_tape.c tests/test_gcr_drive.c tests/test_gcr_write.c tests/test_via6522.c tests/test_iec_bus.c tests/test_prg_drive.c tests/test_vdrive_blocks.c tests/test_overlay.c \
 	tests/test_display_footer.c tests/test_leds.c tests/test_vic.c tests/test_vdc.c \
 	tests/test_snapshot.c
+
+# Browser sources are shipped but the WASM bundle is built separately with
+# Emscripten (`make -C web`). ROM dumps and generated web/build + web/dist
+# directories remain excluded.
+EXTRA_DIST += web/Makefile web/README.md web/index.html web/styles.css \
+	web/theme-c128-dcr.css web/theme-retro-crt.css web/theme-sapporo.css \
+	web/theme-sapporo-dark.css web/app.js web/gamepad.js web/media-url.js \
+	web/poc_main.c web/stubs.c web/compat/SDL3/SDL.h \
+	web/test_gamepad.js web/test_media_url.js web/test_ui_contract.js \
+	web/test_wasm_smoke.js

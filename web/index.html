@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en" data-theme="c128-dcr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#c8c0ad">
+  <title>Javascript 1986 — Commodore C128DCR</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="theme-c128-dcr.css">
+  <link rel="stylesheet" href="theme-retro-crt.css">
+  <link rel="stylesheet" href="theme-sapporo.css">
+  <link rel="stylesheet" href="theme-sapporo-dark.css">
+</head>
+<body>
+<main class="workbench">
+  <header class="masthead">
+    <div class="brand"><img src="brand-1986.png" alt=""><div><small>C128DCR emulator</small><h1>Javascript <b>1986</b></h1></div></div>
+    <div class="head-controls">
+      <label>Theme <select id="theme"><option value="c128-dcr">C128 DCR</option><option value="retro-crt">Retro CRT</option><option value="sapporo">Sapporo</option><option value="sapporo-dark">Sapporo Dark</option></select></label>
+      <span class="power"><i class="lamp green on"></i> Power</span>
+    </div>
+  </header>
+
+  <section class="machine" aria-label="Commodore C128DCR emulator">
+    <div class="status-deck">
+      <div><small>Display</small><b id="displayState">40-column VIC-IIe</b></div>
+      <div class="status" id="status" role="status">Loading emulator…</div>
+      <div class="lamps" aria-label="Activity">
+        <span><i id="driveLed" class="lamp red"></i>Drive 8</span>
+        <span><i id="cpuLed" class="lamp white"></i>8502</span>
+        <span><i id="z80Led" class="lamp blue"></i>Z80</span>
+      </div>
+    </div>
+
+    <div class="screen-stage" id="screenStage">
+      <div class="screen-bezel">
+        <canvas id="screen" width="384" height="272" tabindex="0" aria-label="C128 display"></canvas>
+        <div class="scanlines" aria-hidden="true"></div>
+        <div id="screenHint">Click the display to type</div>
+      </div>
+    </div>
+
+    <div class="c128-fascia" aria-hidden="true">
+      <div class="rainbow"><i></i><i></i><i></i><i></i></div>
+      <strong>commodore 128D</strong><span>personal computer</span>
+      <div class="drive-face"><i></i><b>1571</b><span></span></div>
+    </div>
+
+    <div class="controls">
+      <section>
+        <h2>System</h2>
+        <div class="button-row">
+          <button id="reset">Reset</button><button id="switchDisplay">40 / 80</button><button id="fullscreen">Fullscreen</button><button id="keyboardToggle" aria-expanded="false">Keyboard</button>
+        </div>
+        <label class="toggle"><input id="realDrive" type="checkbox"><span></span><b>Real 1571 drive</b><small>Fast virtual drive is the default</small></label>
+      </section>
+
+      <section class="media-deck">
+        <h2>Media</h2>
+        <article><div class="media-icon floppy">D</div><div><b>Drive 8</b><span id="diskName">No disk</span></div><label for="diskFile">Load</label><button id="diskEject" disabled>Eject</button><input id="diskFile" type="file" accept=".d64,.d71,.d81,.prg" hidden></article>
+        <article><div class="media-icon tape">T</div><div><b>Datasette</b><span id="tapeName">No tape</span></div><label for="tapeFile">Load</label><button id="tapePlay" disabled>Play</button><button id="tapeRewind" disabled>Rewind</button><button id="tapeEject" disabled>Eject</button><input id="tapeFile" type="file" accept=".tap,.t64" hidden></article>
+        <article><div class="media-icon cart">C</div><div><b>Cartridge</b><span id="cartName">No cartridge</span></div><label for="cartFile">Load</label><button id="cartEject" disabled>Eject</button><input id="cartFile" type="file" accept=".crt,.bin,.rom" hidden></article>
+      </section>
+    </div>
+
+    <section id="keyboard" class="keyboard" hidden aria-label="C128 keyboard">
+      <div class="keyrow function-row">
+        <button data-scan="58">F1</button><button data-scan="59">F2</button><button data-scan="60">F3</button><button data-scan="61">F4</button><button data-scan="62">F5</button><button data-scan="63">F6</button><button data-scan="64">F7</button><button data-scan="65">F8</button><button data-action="display">40/80</button><button data-scan="75">RESTORE</button>
+      </div>
+      <div class="keyrow"><button data-scan="41">RUN/STOP</button><button data-scan="53">←</button><button data-scan="30">1</button><button data-scan="31">2</button><button data-scan="32">3</button><button data-scan="33">4</button><button data-scan="34">5</button><button data-scan="35">6</button><button data-scan="36">7</button><button data-scan="37">8</button><button data-scan="38">9</button><button data-scan="39">0</button><button data-scan="42">DEL</button></div>
+      <div class="keyrow"><button data-scan="43">TAB</button><button data-scan="20">Q</button><button data-scan="26">W</button><button data-scan="8">E</button><button data-scan="21">R</button><button data-scan="23">T</button><button data-scan="28">Y</button><button data-scan="24">U</button><button data-scan="12">I</button><button data-scan="18">O</button><button data-scan="19">P</button><button data-scan="47">@</button><button data-scan="48">*</button></div>
+      <div class="keyrow"><button data-scan="224" data-modifier>CTRL</button><button data-scan="4">A</button><button data-scan="22">S</button><button data-scan="7">D</button><button data-scan="9">F</button><button data-scan="10">G</button><button data-scan="11">H</button><button data-scan="13">J</button><button data-scan="14">K</button><button data-scan="15">L</button><button data-scan="51">:</button><button data-scan="52">;</button><button data-scan="40" class="wide">RETURN</button></div>
+      <div class="keyrow"><button data-scan="225" data-modifier>SHIFT</button><button data-scan="29">Z</button><button data-scan="27">X</button><button data-scan="6">C</button><button data-scan="25">V</button><button data-scan="5">B</button><button data-scan="17">N</button><button data-scan="16">M</button><button data-scan="54">,</button><button data-scan="55">.</button><button data-scan="56">/</button><button data-scan="229" data-modifier>SHIFT</button><button data-scan="82">↑</button><button data-scan="81">↓</button></div>
+      <div class="keyrow"><button data-scan="226" data-modifier>C=</button><button data-scan="44" class="space">SPACE</button><button data-scan="80">←</button><button data-scan="79">→</button><button data-scan="74">HOME</button></div>
+    </section>
+  </section>
+  <footer>F10 switches VIC/VDC · Esc is RUN/STOP · Page Up is RESTORE · Alt is Commodore · Gamepad controls joystick port 2</footer>
+</main>
+<div id="toast" role="status"></div>
+<script src="gamepad.js"></script><script src="media-url.js"></script><script src="1986.js"></script><script src="app.js"></script>
+</body>
+</html>

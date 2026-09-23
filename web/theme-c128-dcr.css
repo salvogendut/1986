@@ -1,0 +1,3 @@
+html[data-theme="c128-dcr"]{--bg:#252725;--panel:#d2cab8;--panel2:#aaa392;--ink:#26251f;--edge:#665f52;--key:#e3ded0;--keyink:#25241f;--screen:#050606}
+html[data-theme="c128-dcr"] .machine{background-image:linear-gradient(115deg,#ded7c7,#aaa391)}
+html[data-theme="c128-dcr"] .screen-stage{background:linear-gradient(145deg,#373735,#20201f)}
