@@ -510,6 +510,154 @@ static void bam_mark(const DiskImage *d, u8 *image, int track, int sector,
     image[count] = (u8)free_count;
 }
 
+static void blank_disk_label(u8 *header, size_t offset, const char *path) {
+    const char *name = host_basename(path);
+    const char *end = strrchr(name, '.');
+    if (!end) end = name + strlen(name);
+    memset(header + offset, 0xA0, 16);
+    size_t length = (size_t)(end - name);
+    while (length && name[length - 1] == ' ') --length;
+    if (length > 16) length = 16;
+    if (!length) {
+        memcpy(header + offset, "BLANK DISK", 10);
+        return;
+    }
+    for (size_t i = 0; i < length; ++i) {
+        unsigned char c = (unsigned char)name[i];
+        header[offset + i] = c >= 0x20 && c < 0x7f && c != '"' &&
+                             c != '*' && c != '?' && c != ':' &&
+                             c != ',' && c != '/' && c != '\\'
+            ? (u8)toupper(c) : (u8)'_';
+    }
+}
+
+static int write_new_image(const char *path, const u8 *data, size_t size) {
+    size_t path_len = strlen(path);
+#ifdef _WIN32
+    char *temp = malloc(path_len + 32);
+    if (!temp) return -1;
+    HANDLE out = INVALID_HANDLE_VALUE;
+    for (unsigned attempt = 0; attempt < 100; ++attempt) {
+        snprintf(temp, path_len + 32, "%s.tmp%lu.%u", path,
+                 (unsigned long)GetCurrentProcessId(), attempt);
+        out = CreateFileA(temp, GENERIC_WRITE, 0, NULL, CREATE_NEW,
+                          FILE_ATTRIBUTE_NORMAL, NULL);
+        if (out != INVALID_HANDLE_VALUE || GetLastError() != ERROR_FILE_EXISTS)
+            break;
+    }
+    if (out == INVALID_HANDLE_VALUE) { free(temp); return -1; }
+    size_t written = 0;
+    int ok = 1;
+    while (written < size && ok) {
+        DWORD count = 0;
+        DWORD chunk = (DWORD)(size - written);
+        ok = WriteFile(out, data + written, chunk, &count, NULL) &&
+             count == chunk;
+        written += count;
+    }
+    if (ok) ok = FlushFileBuffers(out) != 0;
+    if (!CloseHandle(out)) ok = 0;
+    if (ok) ok = MoveFileExA(temp, path,
+                            MOVEFILE_REPLACE_EXISTING |
+                            MOVEFILE_WRITE_THROUGH) != 0;
+    if (!ok) DeleteFileA(temp);
+    free(temp);
+    return ok ? 0 : -1;
+#else
+    char *temp = malloc(path_len + sizeof(".tmpXXXXXX"));
+    if (!temp) return -1;
+    memcpy(temp, path, path_len);
+    memcpy(temp + path_len, ".tmpXXXXXX", sizeof(".tmpXXXXXX"));
+    int fd = mkstemp(temp);
+    if (fd < 0) { free(temp); return -1; }
+    struct stat previous;
+    mode_t mode = stat(path, &previous) == 0 ? previous.st_mode & 0777 : 0644;
+    int ok = fchmod(fd, mode) == 0;
+    FILE *out = fdopen(fd, "wb");
+    if (!out) { close(fd); unlink(temp); free(temp); return -1; }
+    if (ok) ok = fwrite(data, 1, size, out) == size;
+    if (ok) ok = fflush(out) == 0;
+    if (ok) ok = fsync(fd) == 0;
+    if (fclose(out) != 0) ok = 0;
+    if (ok) ok = rename(temp, path) == 0;
+    if (!ok) unlink(temp);
+    free(temp);
+    return ok ? 0 : -1;
+#endif
+}
+
+DiskSaveResult disk_image_create_blank(const char *path, DiskFormat format) {
+    if (!path || !path[0]) return DISK_SAVE_BAD_NAME;
+    if (format != DISK_FORMAT_D64 && format != DISK_FORMAT_D71 &&
+        format != DISK_FORMAT_D81)
+        return DISK_SAVE_TYPE_MISMATCH;
+
+    DiskImage disk;
+    memset(&disk, 0, sizeof(disk));
+    disk.format = format;
+    disk.tracks = format == DISK_FORMAT_D64 ? 35 :
+                  format == DISK_FORMAT_D71 ? 70 : 80;
+    disk.size = format == DISK_FORMAT_D64 ? 174848u :
+                format == DISK_FORMAT_D71 ? 349696u : 819200u;
+    disk.data = calloc(1, disk.size);
+    if (!disk.data) return DISK_SAVE_IO_ERROR;
+
+    int system_track = format == DISK_FORMAT_D81 ? 40 : 18;
+    int first_directory = format == DISK_FORMAT_D81 ? 3 : 1;
+    u8 *header = sector_in(&disk, disk.data, system_track, 0);
+    header[0] = (u8)system_track;
+    header[1] = (u8)first_directory;
+    if (format == DISK_FORMAT_D81) {
+        header[2] = 'D';
+        memset(header + 0x04, 0xA0, 25);
+        blank_disk_label(header, 0x04, path);
+        header[0x16] = '0'; header[0x17] = '0';
+        header[0x18] = 0xA0;
+        header[0x19] = '3'; header[0x1A] = 'D';
+        u8 *bam1 = sector_in(&disk, disk.data, 40, 1);
+        u8 *bam2 = sector_in(&disk, disk.data, 40, 2);
+        bam1[0] = 40; bam1[1] = 2;
+        bam2[0] = 0;  bam2[1] = 0xFF;
+        bam1[2] = bam2[2] = 'D';
+        bam1[3] = bam2[3] = (u8)~'D';
+        bam1[4] = bam2[4] = '0';
+        bam1[5] = bam2[5] = '0';
+        bam1[6] = bam2[6] = 0xC0;
+    } else {
+        header[2] = 'A';
+        header[3] = format == DISK_FORMAT_D71 ? 0x80 : 0;
+        memset(header + 0x90, 0xA0, 27);
+        blank_disk_label(header, 0x90, path);
+        header[0xA2] = '0'; header[0xA3] = '0';
+        header[0xA4] = 0xA0;
+        header[0xA5] = '2'; header[0xA6] = 'A';
+        header[0xA7] = header[0xA8] = 0xA0;
+    }
+
+    for (int track = 1; track <= disk.tracks; ++track)
+        for (int sector = 0; sector < disk_image_track_sectors(&disk, track);
+             ++sector)
+            bam_mark(&disk, disk.data, track, sector, true);
+
+    bam_mark(&disk, disk.data, system_track, 0, false);
+    if (format == DISK_FORMAT_D81) {
+        bam_mark(&disk, disk.data, 40, 1, false);
+        bam_mark(&disk, disk.data, 40, 2, false);
+        bam_mark(&disk, disk.data, 40, 3, false);
+    } else {
+        bam_mark(&disk, disk.data, 18, 1, false);
+        if (format == DISK_FORMAT_D71)
+            bam_mark(&disk, disk.data, 53, 0, false);
+    }
+
+    u8 *directory = sector_in(&disk, disk.data, system_track, first_directory);
+    directory[0] = 0;
+    directory[1] = 0xFF;
+    int result = write_new_image(path, disk.data, disk.size);
+    free(disk.data);
+    return result == 0 ? DISK_SAVE_OK : DISK_SAVE_IO_ERROR;
+}
+
 static void sector_error_ok(const DiskImage *d, u8 *image, int track, int sector) {
     if (!d->has_errors) return;
     size_t error_index = (size_t)disk_image_track_offset(d, d->tracks + 1) +

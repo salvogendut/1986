@@ -40,6 +40,9 @@ C128 bus-ownership rules.
 
 Left/Right change section, Up/Down select, Enter toggles, F9 saves and
 closes, Escape closes (offering to discard if there are unsaved changes).
+On either drive-image row, Ctrl+N creates and inserts a blank floppy image;
+the Save dialog's `.d64`, `.d71`, or `.d81` extension selects its format, and
+an omitted extension defaults to `.d64`. Del ejects the selected medium.
 Sections:
 
 - **General** — display, scaling, CRT, input, 40/80 key, Tinker, and About.

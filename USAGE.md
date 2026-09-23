@@ -94,6 +94,10 @@ a D64, D71, D81, or standalone `.prg` file. Choosing another file immediately
 ejects the current medium and inserts the new one, so the next `DIRECTORY`
 reads the new content without an application restart. Press Del on a populated
 image row to eject that drive's medium. Press F9 or Esc to close the overlay.
+Press Ctrl+N on either drive-image row to open a Save dialog and create a
+formatted blank floppy. A `.d64`, `.d71`, or `.d81` filename creates that
+format; a filename without an extension becomes `.d64`. The new image is
+inserted into the selected drive immediately, replacing its previous medium.
 For a standalone PRG, the drive presents a single read-only directory entry
 named after the host file (without `.prg`, uppercased and limited to 16
 characters). For BASIC PRGs, use `DIRECTORY`, then `DLOAD "NAME"` or
