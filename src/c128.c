@@ -141,6 +141,17 @@ static void c128_refresh_interrupt_lines(C128 *c) {
     }
 }
 
+u8 c128_keyboard_port_b(const C128 *c, u8 base_row_select) {
+    u8 columns = 0xFF;
+    for (int row = 0; row < KBD_BASE_ROWS; ++row)
+        if ((base_row_select & (1u << row)) == 0)
+            columns &= kbd_matrix(&c->kbd, row);
+    for (int row = 0; row < KBD_EXT_ROWS; ++row)
+        if ((c->vic.keyboard_select & (1u << row)) == 0)
+            columns &= kbd_matrix(&c->kbd, KBD_BASE_ROWS + row);
+    return columns;
+}
+
 static u8 io_read(C128 *c, u16 addr) {
     u8 v;
     if (addr >= 0xD000 && addr < 0xD400) v = vic_read(&c->vic, addr);
@@ -174,9 +185,7 @@ static u8 io_read(C128 *c, u16 addr) {
             u8 rowsel = (c->cia1.pra | ~c->cia1.ddra) &
                 joyports_digital(&c->joyports, 1,
                                  c->cfg->joy_port_mode[1] == JOYPORT_MOUSE);
-            u8 cols = 0xFF;
-            for (int row = 0; row < KBD_ROWS; row++)
-                if ((rowsel & (1 << row)) == 0) cols &= kbd_matrix(&c->kbd, row);
+            u8 cols = c128_keyboard_port_b(c, rowsel);
             v = cols & (c->cia1.prb | ~c->cia1.ddrb) &
                 joyports_digital(&c->joyports, 0,
                                  c->cfg->joy_port_mode[0] == JOYPORT_MOUSE);
@@ -185,7 +194,9 @@ static u8 io_read(C128 *c, u16 addr) {
                 joyports_digital(&c->joyports, 0,
                                  c->cfg->joy_port_mode[0] == JOYPORT_MOUSE);
             u8 rows = 0xff;
-            for (int row = 0; row < KBD_ROWS; ++row)
+            /* Only the base rows are wired back to CIA1 port A. The three
+             * C128-only rows are output selectors at $D02F, not PA inputs. */
+            for (int row = 0; row < KBD_BASE_ROWS; ++row)
                 if ((kbd_matrix(&c->kbd, row) & colsel) != colsel)
                     rows &= (u8)~(1u << row);
             v = rows & (c->cia1.pra | ~c->cia1.ddra) &
@@ -275,18 +286,24 @@ static void pla_update(C128 *c) {
     mem_set_processor_port(&c->mem, c->cpu.io_ddr, c->cpu.io_port);
 }
 
+u8 c128_cpu_port_value(const C128 *c) {
+    u8 value = c->cpu.io_port;
+    if (!(c->cpu.io_ddr & 0x10)) {
+        value |= 0x10; /* unpressed cassette switch is pulled high */
+        if (c->tape.play_button) value &= (u8)~0x10;
+    }
+    if (!(c->cpu.io_ddr & 0x40)) {
+        value |= 0x40; /* released CAPS/ASCII-DIN switch is pulled high */
+        if (c->kbd.caps_lock) value &= (u8)~0x40;
+    }
+    return value;
+}
+
 u8 c128_mem_read(void *ctx, u16 addr) {
     C128 *c = ctx;
     /* 8502 on-chip I/O port at $0000 (DDR) and $0001 (port) drives the MMU. */
     if (addr == 0x0000) return c->cpu.io_ddr;
-    if (addr == 0x0001) {
-        u8 value = c->cpu.io_port;
-        if (!(c->cpu.io_ddr & 0x10)) {
-            value |= 0x10; /* unpressed cassette switch is pulled high */
-            if (c->tape.play_button) value &= (u8)~0x10;
-        }
-        return value;
-    }
+    if (addr == 0x0001) return c128_cpu_port_value(c);
     if (!mem_c64_mode(&c->mem) && addr >= 0xFF00 && addr <= 0xFF04)
         return mmu_ffxx_read(&c->mem.mmu, addr);
     if (addr >= 0xD000 && addr < 0xE000 && mem_io_visible(&c->mem))
@@ -635,6 +652,7 @@ void c128_init(C128 *c, Config *cfg) {
 }
 
 static void c128_reset_internal(C128 *c, bool power_cycle) {
+    bool caps_lock = c->kbd.caps_lock;
     mem_reset(&c->mem);
     cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
     cpu_reset(&c->cpu);
@@ -648,6 +666,7 @@ static void c128_reset_internal(C128 *c, bool power_cycle) {
     c->peripheral_fast_remainder = 0;
     c->z80_peripheral_remainder = 0;
     kbd_reset(&c->kbd);
+    c->kbd.caps_lock = caps_lock; /* physical locking switch survives RESET */
     c->restore_down = false;
     joyports_reset(&c->joyports);
     tape_set_motor(&c->tape, false);
@@ -1037,11 +1056,17 @@ void c128_key_event(C128 *c, int scancode, bool down) {
         c->restore_down = down;
         return;
     }
+    if (scancode == SDL_SCANCODE_CAPSLOCK) {
+        if (down && !c->kbd.caps_key_down)
+            c->kbd.caps_lock = !c->kbd.caps_lock;
+        c->kbd.caps_key_down = down;
+        return;
+    }
     int row, col;
     bool shift;
     if (!kbd_map_scancode(scancode, &row, &col, &shift)) return;
-    /* Up/Left are the Shifted Down/Right C128 keys: press Shift alongside so
-     * the four PC arrow keys work independently. */
+    /* Some positional mappings, such as even-numbered function keys, require
+     * a virtual C128 Shift alongside their matrix position. */
     if (shift) kbd_set(&c->kbd, KBD_SHIFT_ROW, KBD_SHIFT_COL, down);
     kbd_set(&c->kbd, row, col, down);
 }

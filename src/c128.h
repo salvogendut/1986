@@ -116,6 +116,8 @@ void c128_reset(C128 *c);
 void c128_power_cycle(C128 *c);
 int  c128_frame(C128 *c);      /* run one frame; returns CPU cycles consumed */
 u64  c128_cycles_to_ns(const C128 *c, int cycles);
+u8   c128_keyboard_port_b(const C128 *c, u8 base_row_select);
+u8   c128_cpu_port_value(const C128 *c);
 void c128_key_event(C128 *c, int scancode, bool down);
 void c128_set_4080(C128 *c, bool col80); /* set the latched 40/80 key and active display */
 void c128_switch_4080(C128 *c);   /* toggle 40-column VIC <-> 80-column VDC */

@@ -77,7 +77,7 @@ at `READY.` without the former stack overflow.
 - [x] Shift+C= upper/graphics versus upper/lowercase switching on VIC and VDC,
   with a Caps Lock host shortcut, RUN/STOP and RESTORE mappings, and an
   Advanced keyboard-map dialog.
-- [ ] Add the C128-specific keys (40/80 column toggle, `HELP`, `CAPS`, `ALT`,
+- [x] Add the C128-specific keys (40/80 column toggle, `HELP`, `CAPS`, `ALT`,
   `ESC`, `TAB`, `-`, `=`, `@`, `£`, etc.).
 - [ ] Complete host-layout translation and keyboard auto-repeat behavior.
 

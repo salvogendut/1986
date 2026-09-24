@@ -21,8 +21,10 @@ static bool pressed(const Kbd *kbd, int row, int col) {
 
 int main(void) {
     C128 *c = calloc(1, sizeof(*c));
+    Config cfg = {0};
     CHECK(c != NULL, "allocate keyboard test machine");
     if (!c) return 1;
+    c->cfg = &cfg;
     kbd_reset(&c->kbd);
 
     c128_key_event(c, SDL_SCANCODE_LSHIFT, true);
@@ -35,22 +37,50 @@ int main(void) {
     CHECK(!pressed(&c->kbd, KBD_LSHIFT_ROW, KBD_LSHIFT_COL) &&
           !pressed(&c->kbd, 7, 5), "Shift+C= releases cleanly");
 
+    CHECK((c128_cpu_port_value(c) & 0x40) != 0,
+          "released CAPS switch reads high at the 8502 port");
     c128_key_event(c, SDL_SCANCODE_CAPSLOCK, true);
-    CHECK(pressed(&c->kbd, KBD_SHIFT_ROW, KBD_SHIFT_COL) &&
-          pressed(&c->kbd, 7, 5),
-          "CapsLock convenience key sends native Shift+C= chord");
+    CHECK(c->kbd.caps_lock && (c128_cpu_port_value(c) & 0x40) == 0,
+          "CapsLock toggles the active-low physical CAPS switch");
+    c128_key_event(c, SDL_SCANCODE_CAPSLOCK, true);
+    CHECK(c->kbd.caps_lock, "repeated CapsLock keydown does not toggle again");
     c128_key_event(c, SDL_SCANCODE_CAPSLOCK, false);
-    CHECK(!pressed(&c->kbd, KBD_SHIFT_ROW, KBD_SHIFT_COL) &&
-          !pressed(&c->kbd, 7, 5), "CapsLock chord releases cleanly");
+    CHECK(c->kbd.caps_lock, "CAPS switch remains latched after key release");
+    c128_key_event(c, SDL_SCANCODE_CAPSLOCK, true);
+    CHECK(!c->kbd.caps_lock && (c128_cpu_port_value(c) & 0x40) != 0,
+          "second CapsLock press releases the physical switch");
+    c128_key_event(c, SDL_SCANCODE_CAPSLOCK, false);
+
+    c128_key_event(c, SDL_SCANCODE_TAB, true);
+    c128_key_event(c, SDL_SCANCODE_KP_9, true);
+    c128_key_event(c, SDL_SCANCODE_RIGHT, true);
+    CHECK(pressed(&c->kbd, 8, 3) && pressed(&c->kbd, 9, 6) &&
+          pressed(&c->kbd, 10, 6),
+          "host extended keys occupy the three C128-only matrix rows");
+    c128_key_event(c, SDL_SCANCODE_TAB, false);
+    c128_key_event(c, SDL_SCANCODE_KP_9, false);
+    c128_key_event(c, SDL_SCANCODE_RIGHT, false);
+
+    kbd_set(&c->kbd, 8, 3, true);
+    c->vic.keyboard_select = 0xFE;
+    CHECK((c128_keyboard_port_b(c, 0xFF) & (1u << 3)) == 0,
+          "$D02F row 8 selection reaches CIA1 port B");
+    c->vic.keyboard_select = 0xFF;
+    CHECK(c128_keyboard_port_b(c, 0xFF) == 0xFF,
+          "deselecting $D02F extended rows releases CIA1 port B");
+    kbd_set(&c->kbd, 8, 3, false);
 
     c128_key_event(c, SDL_SCANCODE_ESCAPE, true);
     c128_key_event(c, SDL_SCANCODE_PAGEUP, true);
-    CHECK(pressed(&c->kbd, 7, 7) && c->restore_down,
-          "Escape+PageUp supplies RUN/STOP and RESTORE NMI");
+    CHECK(pressed(&c->kbd, 9, 0) && c->restore_down,
+          "Escape+PageUp supplies C128 ESC and RESTORE NMI");
     c128_key_event(c, SDL_SCANCODE_PAGEUP, false);
     c128_key_event(c, SDL_SCANCODE_ESCAPE, false);
-    CHECK(!pressed(&c->kbd, 7, 7) && !c->restore_down,
-          "RUN/STOP and RESTORE release cleanly");
+    CHECK(!pressed(&c->kbd, 9, 0) && !c->restore_down,
+          "C128 ESC and RESTORE release cleanly");
+    c128_key_event(c, SDL_SCANCODE_END, true);
+    CHECK(pressed(&c->kbd, 7, 7), "End supplies RUN/STOP");
+    c128_key_event(c, SDL_SCANCODE_END, false);
 
     /* F10 without a reset selects an output, but must not copy one screen
      * into the other's independent video memory or change VDC geometry. */
