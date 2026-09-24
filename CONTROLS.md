@@ -22,7 +22,29 @@ media, and configuration are covered in [`USAGE.md`](USAGE.md).
 | Ctrl++ / Ctrl+- | Adjust window scale |
 | Ctrl+V | Paste host clipboard into the C128 |
 
-Shift+F1 sends the C128 F1 key instead of swapping host input ports.
+Shift+F1-F8 send the corresponding C128 function key instead of invoking the
+emulator shortcut.
+
+## C128 keyboard
+
+The ordinary alphanumeric block uses a positional C128 mapping. The native
+C128-only keys are available as follows:
+
+| Host key | C128 key |
+|----------|----------|
+| Caps Lock | Locking CAPS (ASCII/DIN) switch |
+| Left Alt | Commodore |
+| Right Alt | ALT |
+| Escape | ESC |
+| End | RUN/STOP |
+| Page Up | RESTORE |
+| Page Down | HELP |
+| Tab | TAB |
+| Arrow keys | Dedicated C128 cursor keys |
+| Pause | LINE FEED |
+| Numeric keypad | C128 numeric keypad |
+| Keypad `*` | NO SCROLL |
+| Shift+Print Screen | Hold the 40/80 DISPLAY key |
 
 These mirror the sibling projects (1983, 1984, 1985): F9 owns the overlay,
 F6 owns capture, F12 quits.
@@ -57,6 +79,6 @@ framebuffer. The Capture section sets resolution and frame rate.
 
 ## Clipboard paste
 
-Ctrl+V replays the host clipboard into the C128 keyboard one key at a time.
-The ASCII->matrix map is a scaffold subset; it will grow with the keyboard
-module.
+Ctrl+V replays printable ASCII through the keyboard matrix one key at a time.
+Host-layout-aware symbolic translation and typematic refinement remain future
+work; live punctuation currently follows the physical/positional map.

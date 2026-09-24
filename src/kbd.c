@@ -10,6 +10,7 @@ void kbd_init(Kbd *k) {
 void kbd_reset(Kbd *k) {
     memset(k->matrix, 0xFF, sizeof(k->matrix));   /* active-low: all released */
     k->shift = k->ctrl = k->alt = k->caps_lock = false;
+    k->caps_key_down = false;
 }
 
 void kbd_set(Kbd *k, int row, int col, bool down) {
@@ -24,7 +25,7 @@ u8 kbd_matrix(const Kbd *k, int row) {
 }
 
 /*
- * Map an SDL scancode onto the C128 keyboard matrix (8 rows x 8 cols).
+ * Map an SDL scancode onto the complete C128 keyboard matrix.
  *
  * Row/column positions match VICE's C128 sdl_pos.vkm exactly. The KERNAL's
  * SCNKEY converts the scanned (row,col) into the correct screen code, so the
@@ -105,9 +106,12 @@ bool kbd_map_scancode(int scancode, int *row, int *col, bool *shift) {
         case SDL_SCANCODE_LCTRL:    *row = 7; *col = 2; return true;    /* CONTROL */
         case SDL_SCANCODE_RCTRL:    *row = 7; *col = 2; return true;    /* CONTROL */
         case SDL_SCANCODE_LALT:     *row = 7; *col = 5; return true;    /* Commodore (CBM) */
-        case SDL_SCANCODE_RALT:     *row = 7; *col = 5; return true;    /* Commodore (CBM) */
-        case SDL_SCANCODE_CAPSLOCK: *row = 7; *col = 5; *shift = true; return true; /* reliable Shift+C= shortcut */
-        case SDL_SCANCODE_ESCAPE:   *row = 7; *col = 7; return true;    /* RUN/STOP */
+        case SDL_SCANCODE_RALT:     *row = 10; *col = 0; return true;   /* C128 ALT */
+        case SDL_SCANCODE_ESCAPE:   *row = 9; *col = 0; return true;    /* C128 ESC */
+        case SDL_SCANCODE_END:      *row = 7; *col = 7; return true;    /* RUN/STOP */
+        case SDL_SCANCODE_TAB:      *row = 8; *col = 3; return true;
+        case SDL_SCANCODE_PAGEDOWN: *row = 8; *col = 0; return true;    /* HELP */
+        case SDL_SCANCODE_PAUSE:    *row = 9; *col = 3; return true;    /* LINE FEED */
         case SDL_SCANCODE_F1:       *row = 0; *col = 4; return true;    /* C128 F1 */
         case SDL_SCANCODE_F2:       *row = 0; *col = 4; *shift = true; return true;    /* C128 F2 (shifted F1) */
         case SDL_SCANCODE_F3:       *row = 0; *col = 5; return true;    /* C128 F3 */
@@ -116,11 +120,26 @@ bool kbd_map_scancode(int scancode, int *row, int *col, bool *shift) {
         case SDL_SCANCODE_F6:       *row = 0; *col = 6; *shift = true; return true;    /* C128 F6 */
         case SDL_SCANCODE_F7:       *row = 0; *col = 3; return true;    /* C128 F7 */
         case SDL_SCANCODE_F8:       *row = 0; *col = 3; *shift = true; return true;    /* C128 F8 */
-        case SDL_SCANCODE_UP:       *row = 0; *col = 7; *shift = true; return true;    /* cursor up (shifted Down) */
-        case SDL_SCANCODE_DOWN:     *row = 0; *col = 7; return true;                   /* cursor down */
-        case SDL_SCANCODE_LEFT:     *row = 0; *col = 2; *shift = true; return true;    /* cursor left (shifted Right) */
-        case SDL_SCANCODE_RIGHT:    *row = 0; *col = 2; return true;                   /* cursor right */
+        case SDL_SCANCODE_UP:       *row = 10; *col = 3; return true;
+        case SDL_SCANCODE_DOWN:     *row = 10; *col = 4; return true;
+        case SDL_SCANCODE_LEFT:     *row = 10; *col = 5; return true;
+        case SDL_SCANCODE_RIGHT:    *row = 10; *col = 6; return true;
         case SDL_SCANCODE_HOME:     *row = 6; *col = 3; return true;    /* CLR/HOME */
+        case SDL_SCANCODE_KP_8:     *row = 8; *col = 1; return true;
+        case SDL_SCANCODE_KP_5:     *row = 8; *col = 2; return true;
+        case SDL_SCANCODE_KP_2:     *row = 8; *col = 4; return true;
+        case SDL_SCANCODE_KP_4:     *row = 8; *col = 5; return true;
+        case SDL_SCANCODE_KP_7:     *row = 8; *col = 6; return true;
+        case SDL_SCANCODE_KP_1:     *row = 8; *col = 7; return true;
+        case SDL_SCANCODE_KP_PLUS:  *row = 9; *col = 1; return true;
+        case SDL_SCANCODE_KP_MINUS: *row = 9; *col = 2; return true;
+        case SDL_SCANCODE_KP_ENTER: *row = 9; *col = 4; return true;
+        case SDL_SCANCODE_KP_6:     *row = 9; *col = 5; return true;
+        case SDL_SCANCODE_KP_9:     *row = 9; *col = 6; return true;
+        case SDL_SCANCODE_KP_3:     *row = 9; *col = 7; return true;
+        case SDL_SCANCODE_KP_0:     *row = 10; *col = 1; return true;
+        case SDL_SCANCODE_KP_PERIOD: *row = 10; *col = 2; return true;
+        case SDL_SCANCODE_KP_MULTIPLY: *row = 10; *col = 7; return true; /* NO SCROLL */
         default: return false;
     }
 }

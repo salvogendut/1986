@@ -85,6 +85,7 @@ void vic_reset(Vic *v) {
     v->sprite_background_collision = 0;
     v->sprite_mc[0] = v->sprite_mc[1] = 0;
     memset(v->sprite_color, 0, sizeof(v->sprite_color));
+    v->keyboard_select = 0xFF;
     v->bank_addr = 0;
     v->prev_raster = 0;
     v->current_raster = 0;
@@ -160,6 +161,7 @@ void vic_write(Vic *v, u16 addr, u8 val) {
         case 0x2B: case 0x2C: case 0x2D: case 0x2E:
             v->sprite_color[reg - 0x27] = val & 0x0F;
             break;
+        case 0x2F: v->keyboard_select = val; break;
         case 0x30: v->fast_mode = (val & 0x01) != 0; break;
         default: break;
     }
@@ -222,6 +224,7 @@ u8 vic_read(Vic *v, u16 addr) {
         case 0x27: case 0x28: case 0x29: case 0x2A:
         case 0x2B: case 0x2C: case 0x2D: case 0x2E:
             return v->sprite_color[reg - 0x27];
+        case 0x2F: return v->keyboard_select;
         case 0x30: return (u8)(0xFC | (v->fast_mode ? 1 : 0));
         default: return 0xFF;
     }

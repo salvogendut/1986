@@ -74,6 +74,7 @@ typedef struct {
     u8  sprite_background_collision; /* $D01F, cleared by read */
     u8  sprite_mc[2];       /* shared colours $D025/$D026 */
     u8  sprite_color[VIC_SPRITES];   /* individual colours $D027-$D02E */
+    u8  keyboard_select;    /* $D02F: active-low C128 extended keyboard rows */
     u32 bank_addr;          /* MMU/CIA2-selected 16K VIC RAM window */
     unsigned prev_raster; /* previous raster line (for wrap detection) */
     unsigned current_raster; /* video-clock raster, independent of 8502 speed */

@@ -39,9 +39,11 @@ handoff rather than bypassing it with host traps.
 
 - Three-voice 8580 SID output through SDL3, with waveforms, envelopes, routing,
   and a basic filter approximation.
-- CIA timers, TOD, serial/FLAG interrupt paths, VIC raster IRQs, keyboard matrix,
+- CIA timers, TOD, serial/FLAG interrupt paths, VIC raster IRQs, the complete
+  11-row C128 keyboard matrix (including VIC-IIe `$D02F` selection),
   clipboard paste, joysticks, gamepad input, and 1351 mouse input.
-- Shift+C= character-set switching, RUN/STOP and RESTORE mappings, plus an
+- Physical CAPS/ASCII-DIN switch input, Shift+C= character-set switching,
+  C128 extended keys, RUN/STOP and RESTORE mappings, plus an
   on-screen host keyboard map.
 - TAP pulse playback and T64 file-container loading. Tape recording is not
   implemented.

@@ -44,6 +44,11 @@ int main(void) {
     vic_write(&vic, 0xD030, 0x01);
     CHECK(vic.fast_mode && (vic_read(&vic, 0xD030) & 1),
           "$D030 bit 0 selects VIC-IIe 2 MHz mode");
+    CHECK(vic_read(&vic, 0xD02F) == 0xFF,
+          "$D02F deselects all extended keyboard rows after reset");
+    vic_write(&vic, 0xD02F, 0xFA);
+    CHECK(vic_read(&vic, 0xD02F) == 0xFA,
+          "$D02F extended keyboard selector reads back");
     vic_reset(&vic);
     vic_write(&vic, 0xD01A, 0x01);
     vic.irq_status = 0x81;
