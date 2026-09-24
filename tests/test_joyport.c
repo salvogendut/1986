@@ -7,6 +7,7 @@ static int failures;
 
 int main(void) {
     JoyPorts ports;
+    JoyAnalogGate gate;
     joyports_reset(&ports);
     CHECK(joyports_digital(&ports, 0, false) == 0xff &&
           joyports_digital(&ports, 1, false) == 0xff, "both ports start released");
@@ -33,6 +34,14 @@ int main(void) {
     joyports_mouse_button(&ports, 0, true, false);
     CHECK(joyports_digital(&ports, 0, true) == 0xff,
           "release clears 1351 buttons");
+    joyports_analog_gate_reset(&gate);
+    CHECK(joyports_analog_directions(&gate, -32768, -32768) == 0,
+          "endpoint startup axes do not assert joystick lines");
+    CHECK(joyports_analog_directions(&gate, 0, 0) == 0,
+          "centred axes arm analog joystick input");
+    CHECK(joyports_analog_directions(&gate, -20000, 20000) ==
+          (JOY_LEFT | JOY_DOWN),
+          "armed analog axes report directions beyond the dead zone");
     if (!failures) puts("joyport: ok");
     return failures ? 1 : 0;
 }

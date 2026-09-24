@@ -44,15 +44,36 @@ static SDL_Gamepad *open_first_gamepad(void) {
     return pad;
 }
 
-static u8 poll_gamepad(SDL_Gamepad *pad) {
+typedef struct {
+    SDL_Gamepad *pad;
+    JoyAnalogGate analog;
+} GamepadAxes;
+
+static u8 poll_gamepad(GamepadAxes *axes, SDL_Gamepad *pad) {
     if (!pad) return 0;
+    if (axes->pad != pad) {
+        axes->pad = pad;
+        joyports_analog_gate_reset(&axes->analog);
+    }
     u8 pressed = 0;
     Sint16 x = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX);
     Sint16 y = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY);
-    bool up = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_UP) || y < -16000;
-    bool down = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_DOWN) || y > 16000;
-    bool left = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_LEFT) || x < -16000;
-    bool right = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT) || x > 16000;
+    /* Some controllers (notably a PS3 pad through SDL's Linux backend)
+     * report -32768 for a neutral stick until the axis is first moved.  If
+     * accepted immediately that holds C128 joystick UP+LEFT low, selecting
+     * keyboard matrix rows 0 and 2 during every scan.  Arm each analog axis
+     * only after it has visited a credible neutral position.  D-pad buttons
+     * remain usable while an uninitialised analog axis is suppressed. */
+    pressed |= joyports_analog_directions(&axes->analog, x, y);
+    bool up = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_UP) ||
+              (pressed & JOY_UP) != 0;
+    bool down = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_DOWN) ||
+                (pressed & JOY_DOWN) != 0;
+    bool left = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_LEFT) ||
+                (pressed & JOY_LEFT) != 0;
+    bool right = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT) ||
+                 (pressed & JOY_RIGHT) != 0;
+    pressed = 0;
     if (up != down) pressed |= up ? JOY_UP : JOY_DOWN;
     if (left != right) pressed |= left ? JOY_LEFT : JOY_RIGHT;
     if (SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_SOUTH) ||
@@ -426,6 +447,7 @@ int main(int argc, char **argv) {
     bool fullscreen = cfg.fullscreen;
     SDL_Window *mouse_captured = NULL;
     SDL_Gamepad *gamepad = open_first_gamepad();
+    GamepadAxes gamepad_axes = {0};
     bool pc_shift_held = false;
     bool startup_focus_placed = false;
     FramePacer frame_pacer;
@@ -722,7 +744,7 @@ int main(int argc, char **argv) {
         if (!c.paused && !overlay_is_visible(&overlay) &&
             cfg.joy_port_mode[cfg.main_input_port - 1] == JOYPORT_JOYSTICK)
             joyports_set_joystick(&c.joyports, (unsigned)(cfg.main_input_port - 1),
-                                  poll_gamepad(gamepad));
+                                  poll_gamepad(&gamepad_axes, gamepad));
 
         /* --- Machine step --- */
         if (!c.paused || c.debug.step_pending) {

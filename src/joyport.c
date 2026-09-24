@@ -34,3 +34,23 @@ u8 joyports_pot(const JoyPorts *ports, unsigned port, bool mouse_mode, bool y) {
     if (port >= 2 || !mouse_mode) return 0xff;
     return (u8)(0x40 + (y ? ports->mouse_y[port] : ports->mouse_x[port]));
 }
+
+void joyports_analog_gate_reset(JoyAnalogGate *gate) {
+    gate->x_ready = false;
+    gate->y_ready = false;
+}
+
+u8 joyports_analog_directions(JoyAnalogGate *gate, int x, int y) {
+    u8 pressed = 0;
+    if (x >= -8000 && x <= 8000) gate->x_ready = true;
+    if (y >= -8000 && y <= 8000) gate->y_ready = true;
+    if (gate->x_ready) {
+        if (x < -16000) pressed |= JOY_LEFT;
+        else if (x > 16000) pressed |= JOY_RIGHT;
+    }
+    if (gate->y_ready) {
+        if (y < -16000) pressed |= JOY_UP;
+        else if (y > 16000) pressed |= JOY_DOWN;
+    }
+    return pressed;
+}

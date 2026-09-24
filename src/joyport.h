@@ -15,9 +15,16 @@ typedef struct {
     u8 mouse_x[2], mouse_y[2];
 } JoyPorts;
 
+typedef struct {
+    bool x_ready;
+    bool y_ready;
+} JoyAnalogGate;
+
 void joyports_reset(JoyPorts *ports);
 void joyports_set_joystick(JoyPorts *ports, unsigned port, u8 pressed);
 void joyports_mouse_motion(JoyPorts *ports, unsigned port, int dx, int dy);
 void joyports_mouse_button(JoyPorts *ports, unsigned port, bool right, bool down);
 u8 joyports_digital(const JoyPorts *ports, unsigned port, bool mouse_mode);
 u8 joyports_pot(const JoyPorts *ports, unsigned port, bool mouse_mode, bool y);
+void joyports_analog_gate_reset(JoyAnalogGate *gate);
+u8 joyports_analog_directions(JoyAnalogGate *gate, int x, int y);
