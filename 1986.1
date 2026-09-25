@@ -46,7 +46,9 @@ Load a 1986 C128 snapshot (.vsf) at launch.
 Save a .vsf snapshot immediately before exit.
 .TP
 \fB\-\-gif\-out\fR PATH
-Start recording an animated GIF at launch.
+Start recording VIC and VDC animated GIF output at launch. PATH becomes the
+base for explicit -vic.gif and -vdc.gif files, or -unified.gif when Advanced
+Unified Capture is enabled.
 .TP
 \fB\-\-paste\fR TEXT
 Inject text through the emulated keyboard.
@@ -80,7 +82,7 @@ Save a PPM screenshot.
 Reset.
 .TP
 .B F6
-Toggle animated GIF recording.
+Toggle VIC and VDC animated GIF recording.
 .TP
 .B F7
 Pause/resume.

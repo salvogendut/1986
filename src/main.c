@@ -11,7 +11,7 @@
 #include "c128.h"
 #include "paste.h"
 #include "monitor.h"
-#include "gifcap.h"
+#include "videocap.h"
 #include "notify.h"
 #include "snapshot.h"
 #include "leds.h"
@@ -96,46 +96,50 @@ static SDL_Window *active_input_window(const Display *display) {
     return display->window;
 }
 
-/* --- Video capture state (F6). --- */
-static GifCap  *g_videocap_gif = NULL;
-static uint64_t g_videocap_gif_interval_ns = 0;
-static uint64_t g_videocap_gif_elapsed_ns = 0;
-static bool     g_videocap_gif_first = false;
+/* --- Dual-display video capture state (F6). --- */
+static VideoCapture g_videocap;
 
-static bool videocap_active(void) { return g_videocap_gif != NULL; }
-
-static bool videocap_start(const char *path, int gif_width, int gif_fps) {
-    if (!path || !path[0] || videocap_active()) return false;
-    if (gif_fps < 1) gif_fps = 25;
-    int delay_cs = 100 / gif_fps;
-    g_videocap_gif = gifcap_open(path, C128_SCREEN_W, C128_SCREEN_H,
-                                 gif_width, (gif_width * 5) / 8, delay_cs);
-    if (!g_videocap_gif) {
-        fprintf(stderr, "[videocap] GIF open failed for '%s'\n", path);
+static bool start_video_capture(const char *path, int gif_width, int gif_fps,
+                                bool unified) {
+    if (!videocap_start(&g_videocap, path, gif_width, gif_fps, unified)) {
+        fprintf(stderr, "[videocap] could not open VIC/VDC GIF output for '%s'\n",
+                path ? path : "");
+        notify_post("COULD NOT START VIC/VDC GIF RECORDING");
         return false;
     }
-    g_videocap_gif_interval_ns = 1000000000ULL / (uint64_t)gif_fps;
-    g_videocap_gif_elapsed_ns = 0;
-    g_videocap_gif_first = true;
-    fprintf(stderr, "[videocap] recording to %s\n", path);
-    return true;
-}
-
-static void videocap_stop(void) {
-    if (g_videocap_gif) {
-        int n = gifcap_frame_count(g_videocap_gif);
-        gifcap_close(g_videocap_gif);
-        g_videocap_gif = NULL;
-        fprintf(stderr, "[videocap] GIF stopped (%d frames)\n", n);
+    if (unified) {
+        fprintf(stderr, "[videocap] unified VIC+VDC recording to %s\n",
+                videocap_unified_path(&g_videocap));
+        notify_post("RECORDING UNIFIED VIC + VDC GIF");
+    } else {
+        fprintf(stderr, "[videocap] VIC recording to %s\n",
+                videocap_vic_path(&g_videocap));
+        fprintf(stderr, "[videocap] VDC recording to %s\n",
+                videocap_vdc_path(&g_videocap));
+        notify_post("RECORDING VIC + VDC GIFS");
     }
+    return true;
 }
 
-static bool videocap_gif_due(uint64_t emulated_frame_ns) {
-    if (g_videocap_gif_first) { g_videocap_gif_first = false; return true; }
-    g_videocap_gif_elapsed_ns += emulated_frame_ns;
-    if (g_videocap_gif_elapsed_ns < g_videocap_gif_interval_ns) return false;
-    g_videocap_gif_elapsed_ns %= g_videocap_gif_interval_ns;
-    return true;
+static void stop_video_capture(void) {
+    if (!videocap_active(&g_videocap)) return;
+    int vic_frames = 0, vdc_frames = 0, unified_frames = 0;
+    const char *vic_path = videocap_vic_path(&g_videocap);
+    const char *vdc_path = videocap_vdc_path(&g_videocap);
+    const char *unified_path = videocap_unified_path(&g_videocap);
+    bool unified = unified_path[0] != '\0';
+    videocap_stop(&g_videocap, &vic_frames, &vdc_frames, &unified_frames);
+    if (unified) {
+        fprintf(stderr, "[videocap] unified GIF stopped (%d frames): %s\n",
+                unified_frames, unified_path);
+        notify_post("UNIFIED VIC + VDC GIF SAVED");
+    } else {
+        fprintf(stderr, "[videocap] VIC GIF stopped (%d frames): %s\n",
+                vic_frames, vic_path);
+        fprintf(stderr, "[videocap] VDC GIF stopped (%d frames): %s\n",
+                vdc_frames, vdc_path);
+        notify_post("VIC + VDC GIFS SAVED");
+    }
 }
 
 static void usage(const char *argv0) {
@@ -153,7 +157,7 @@ static void usage(const char *argv0) {
         "  --cart PATH      attach a generic C128 CRT or raw function ROM\n"
         "  --snapshot PATH  load a 1986 C128 .vsf snapshot at launch\n"
         "  --save-snapshot PATH save a .vsf snapshot before exit\n"
-        "  --gif-out PATH   start recording a GIF at launch\n"
+        "  --gif-out PATH   start recording VIC and VDC GIF output at launch\n"
         "  --paste TEXT     inject text through the keyboard matrix\n"
         "  --paste-at N     delay --paste until emulated frame N\n"
         "  --frames N       exit after N emulated frames\n"
@@ -441,7 +445,9 @@ int main(int argc, char **argv) {
         paste_started = true;
     }
 
-    if (gif_out) videocap_start(gif_out, cfg.gif_width, cfg.gif_fps);
+    if (gif_out)
+        start_video_capture(gif_out, cfg.gif_width, cfg.gif_fps,
+                            cfg.unified_capture);
 
     bool running = true;
     bool fullscreen = cfg.fullscreen;
@@ -662,8 +668,8 @@ int main(int argc, char **argv) {
                     }
                     if (audio_stream) SDL_ClearAudioStream(audio_stream);
                 } else if (ev.key.scancode == SDL_SCANCODE_F6) {
-                    if (videocap_active()) {
-                        videocap_stop();
+                    if (videocap_active(&g_videocap)) {
+                        stop_video_capture();
                     } else {
                         char path[256];
                         time_t t = time(NULL);
@@ -671,7 +677,8 @@ int main(int argc, char **argv) {
                         if (lt) strftime(path, sizeof(path),
                                          "1986-%Y%m%d-%H%M%S.gif", lt);
                         else snprintf(path, sizeof(path), "1986-capture.gif");
-                        videocap_start(path, cfg.gif_width, cfg.gif_fps);
+                        start_video_capture(path, cfg.gif_width, cfg.gif_fps,
+                                            cfg.unified_capture);
                     }
                 } else if (ev.key.scancode == SDL_SCANCODE_F7) {
                     if (c.paused) c128_debug_continue(&c);
@@ -788,8 +795,12 @@ int main(int argc, char **argv) {
                         c128_is_c64_mode(&c) ? 1 : 0);
             }
 
-            if (g_videocap_gif && videocap_gif_due(emulated_frame_ns))
-                gifcap_frame(g_videocap_gif, c.display.pixels);
+            if (videocap_active(&g_videocap) &&
+                !videocap_frame(&g_videocap, emulated_frame_ns,
+                                c.display.pixels, c.display.vdc_pixels)) {
+                fprintf(stderr, "[videocap] GIF frame encoding failed\n");
+                stop_video_capture();
+            }
 
             /* One-shot frame capture (C128_SAVE_PPM=<path>) for visual debug. */
             if (g_save_ppm && c128_frame_count == g_save_ppm_frame) {
@@ -836,7 +847,8 @@ int main(int argc, char **argv) {
 
     release_mouse(&mouse_captured, &c.joyports);
     if (gamepad) SDL_CloseGamepad(gamepad);
-    if (videocap_active()) videocap_stop();
+    if (videocap_active(&g_videocap)) stop_video_capture();
+    videocap_destroy(&g_videocap);
     if (sfx_stream) SDL_DestroyAudioStream(sfx_stream);
     if (sfx_buf) SDL_free(sfx_buf);
     if (audio_stream) SDL_DestroyAudioStream(audio_stream);

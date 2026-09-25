@@ -26,8 +26,8 @@ disk access and an experimental ROM-backed 1571CR path.
 - Native C128 cartridges, raw function ROMs, the U36 internal ROM socket, and
   TAP/T64 cassette support.
 - Unified or separate VIC/VDC windows, persistent configuration, screenshots,
-  GIF capture, VICE-container snapshots, a dual-CPU 8502/Z80 ML monitor, and a
-  compact options overlay.
+  simultaneous per-display or side-by-side VIC/VDC GIF capture, VICE-container
+  snapshots, a dual-CPU 8502/Z80 ML monitor, and a compact options overlay.
 - An Emscripten/WebAssembly browser frontend with VIC/VDC video, SID audio,
   on-screen keyboard, gamepad input, disk, tape and cartridge media, and the
   shared Retro CRT/Sapporo themes plus a C128 DCR hardware theme.

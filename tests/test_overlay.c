@@ -295,6 +295,10 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.second_drive && second_led_enabled,
           "Second Drive toggle enables its device and LED");
+    key(&ov, SDL_SCANCODE_DOWN);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.unified_capture,
+          "Advanced enables side-by-side unified GIF capture");
 
     key(&ov, SDL_SCANCODE_LEFT);
     CHECK(ov.section == OV_MEDIA && ov.row == 0,
@@ -360,7 +364,7 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RIGHT);
     CHECK(ov.section == OV_ADVANCED && ov.row == 0,
           "Advanced opens at its first row for keyboard map");
-    for (int i = 0; i < 19; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 20; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.keyboard_map_visible, "Advanced opens the keyboard map");
     key(&ov, SDL_SCANCODE_LEFT);
@@ -374,11 +378,13 @@ int main(void) {
     key(&ov, SDL_SCANCODE_F9);
     CHECK(!ov.keyboard_map_visible && !ov.visible,
           "F9 closes options and clears keyboard map state");
+    CHECK(config_load(&saved, config_file) && saved.unified_capture,
+          "Unified Capture toggle persists when the overlay closes");
     key(&ov, SDL_SCANCODE_F9);
     CHECK(ov.visible, "reopen options for subsequent media checks");
 
     ov.section = OV_ADVANCED;
-    ov.row = 20;
+    ov.row = 21;
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!cfg.c64_test_mode && !c->mem.mmu.c64_enabled,
           "C64 test gate refuses to arm without optional C64 ROMs");
@@ -697,7 +703,7 @@ int main(void) {
             ov.visible = true;
             if (getenv("C128_OVERLAY_PREVIEW_KEYBOARD")) {
                 ov.section = OV_ADVANCED;
-                ov.row = 19;
+                ov.row = 20;
                 ov.keyboard_map_visible = true;
             } else if (getenv("C128_OVERLAY_PREVIEW_ABOUT")) {
                 ov.section = OV_GENERAL;
