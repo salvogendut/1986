@@ -74,9 +74,10 @@ To switch between the C128 upper/graphics and upper/lowercase character sets,
 press host Shift+Alt (the C128 Shift+C= chord). If the desktop intercepts that
 combination, press Caps Lock once as a shortcut for the same C128 chord. This
 works on both the VIC 40-column and VDC 80-column displays. Escape is C128
-RUN/STOP; Page Up is RESTORE, and Escape+Page Up sends RUN/STOP+RESTORE. To
-see the rest of the host-key mappings, enable **General > Tinker**, then open
-**Advanced > Keyboard map** with Enter. Enter or Esc closes the map.
+RUN/STOP, End is the native C128 ESC key, and Page Up is RESTORE;
+Escape+Page Up sends RUN/STOP+RESTORE. To see the rest of the host-key
+mappings, enable **General > Tinker**, then open **Advanced > Keyboard map**
+with Enter. Enter or Esc closes the map.
 
 F5 performs a normal hardware reset and therefore preserves the contents of
 main RAM and VDC video RAM. Ctrl+F5 performs a full power cycle: main and

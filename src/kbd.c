@@ -107,8 +107,8 @@ bool kbd_map_scancode(int scancode, int *row, int *col, bool *shift) {
         case SDL_SCANCODE_RCTRL:    *row = 7; *col = 2; return true;    /* CONTROL */
         case SDL_SCANCODE_LALT:     *row = 7; *col = 5; return true;    /* Commodore (CBM) */
         case SDL_SCANCODE_RALT:     *row = 10; *col = 0; return true;   /* C128 ALT */
-        case SDL_SCANCODE_ESCAPE:   *row = 9; *col = 0; return true;    /* C128 ESC */
-        case SDL_SCANCODE_END:      *row = 7; *col = 7; return true;    /* RUN/STOP */
+        case SDL_SCANCODE_ESCAPE:   *row = 7; *col = 7; return true;    /* RUN/STOP */
+        case SDL_SCANCODE_END:      *row = 9; *col = 0; return true;    /* C128 ESC */
         case SDL_SCANCODE_TAB:      *row = 8; *col = 3; return true;
         case SDL_SCANCODE_PAGEDOWN: *row = 8; *col = 0; return true;    /* HELP */
         case SDL_SCANCODE_PAUSE:    *row = 9; *col = 3; return true;    /* LINE FEED */
