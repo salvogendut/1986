@@ -258,20 +258,25 @@ bool vic_tick(Vic *v) {
     return (v->irq_status & 0x80) != 0;
 }
 
+static u8 vic_fetch_memory_byte(const VicRasterState *state, const Mem *m,
+                                u32 physical_addr) {
+    u16 vic_addr = (u16)(physical_addr - state->bank_addr);
+    bool rom = mem_c64_mode(m)
+        ? (physical_addr & 0x7000) == 0x1000
+        : (!(m->pla_data & 0x04) && (vic_addr & 0x3000) == 0x1000);
+    return rom
+        ? m->chargen[(mem_c64_mode(m) ? 0 : 0x1000) +
+                     (vic_addr & 0x0FFF)]
+        : m->ram[physical_addr];
+}
+
 static u8 vic_fetch_text_byte(const VicRasterState *state, const Mem *m,
                               u8 ch, u8 row) {
     if ((state->d011 & 0x60) == 0x40)
         ch &= 0x3F;
     u16 char_addr = (u16)((state->d018 & 0x0E) << 10);
     u16 glyph_addr = (u16)(char_addr + ((u16)ch << 3) + row);
-    u32 physical_glyph = state->bank_addr + glyph_addr;
-    bool rom = mem_c64_mode(m)
-        ? (physical_glyph & 0x7000) == 0x1000
-        : (!(m->pla_data & 0x04) && (glyph_addr & 0x3000) == 0x1000);
-    return rom
-        ? m->chargen[(mem_c64_mode(m) ? 0 : 0x1000) +
-                     (glyph_addr & 0x0FFF)]
-        : m->ram[physical_glyph];
+    return vic_fetch_memory_byte(state, m, state->bank_addr + glyph_addr);
 }
 
 static void vic_latch_matrix_fetch(Vic *v, const Mem *m, unsigned line,
@@ -294,7 +299,8 @@ static void vic_latch_matrix_fetch(Vic *v, const Mem *m, unsigned line,
             unsigned cbank = mem_c64_mode(m) ? 0 :
                              (m->pla_data >> 1) & 0x01;
             for (unsigned cx = 0; cx < VIC_CHARS_X; cx++) {
-                v->fetch_matrix_data[cx] = m->ram[screen_base + cell + cx];
+                v->fetch_matrix_data[cx] = vic_fetch_memory_byte(
+                    state, m, screen_base + cell + cx);
                 v->fetch_color_data[cx] =
                     m->color_ram[cbank * 0x400 + cell + cx] & 0x0F;
             }
@@ -552,7 +558,8 @@ void vic_render(Vic *v, Mem *m, Display *d) {
         for (int cx = 0; cx < VIC_CHARS_X; cx++) {
             u16 cell_index = (u16)(cy * VIC_CHARS_X + cx);
             u32 cell = screen_base + cell_index;
-            u8 screen = fetched ? state->matrix_data[cx] : m->ram[cell];
+            u8 screen = fetched ? state->matrix_data[cx] :
+                vic_fetch_memory_byte(state, m, cell);
             unsigned cbank = mem_c64_mode(m) ? 0 :
                              (m->pla_data >> 1) & 0x01;
             u8 cram = fetched ? state->color_data[cx] :

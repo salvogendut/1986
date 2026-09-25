@@ -97,6 +97,25 @@ int main(void) {
     CHECK(pixel(display, 0, 0) == 0xC46C71, "hires set bit uses screen high nibble");
     CHECK(pixel(display, 1, 0) == 0x75CEC8, "hires clear bit uses screen low nibble");
 
+    /* In native mode $01 bit 2 controls the VIC-visible character-ROM
+     * overlay across relative $1000-$1FFF in every 16K VIC bank.  It affects
+     * screen-matrix fetches as well as text glyph fetches. */
+    vic_reset(&vic);
+    clear_video_memory(mem);
+    vic_write(&vic, 0xD011, 0x3B);
+    vic_write(&vic, 0xD016, 0x08);
+    vic_write(&vic, 0xD018, 0x48); /* matrix $1000, bitmap $2000 */
+    mem->ram[0x1000] = 0xA3;
+    mem->chargen[0x1000] = 0xB4;
+    mem_set_processor_port(mem, 0x07, 0x00);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x8E3C97,
+          "native VIC matrix fetch sees character ROM while overlay is on");
+    mem_set_processor_port(mem, 0x07, 0x04);
+    vic_render(&vic, mem, display);
+    CHECK(pixel(display, 0, 0) == 0x75CEC8,
+          "native VIC matrix fetch sees RAM while overlay is off");
+
     /* A raster split can point adjacent bitmap scanlines at different bitmap
      * banks. The screen matrix remains buffered from the badline fetch. */
     vic_reset(&vic);

@@ -53,10 +53,10 @@ test-joyport: test_joyport.c ../src/joyport.c ../src/joyport.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_joyport.c ../src/joyport.c -o $@
 
-test-c128-keyboard: test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c ../src/mmu.c ../src/c128.h ../src/kbd.h ../src/vdc.h ../src/mmu.h
+test-c128-keyboard: test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c ../src/mmu.c ../src/mem.c ../src/vic.c ../src/c128.h ../src/kbd.h ../src/vdc.h ../src/mmu.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra \
 		-ffunction-sections -fdata-sections $(GC_SECTIONS_LDFLAGS) -I../src \
-		test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c ../src/mmu.c $(SDL3_LIBS) -o $@
+		test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c ../src/mmu.c ../src/mem.c ../src/vic.c $(SDL3_LIBS) -o $@
 
 test-mos6502dis: test_mos6502dis.c ../src/mos6502dis.c ../src/mos6502dis.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \

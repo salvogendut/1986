@@ -13,7 +13,7 @@ static bool drive_probe_active(const C128 *c) {
     return c->drive_raw_iec;
 }
 
-static void c128_update_vic_bank(C128 *c) {
+void c128_refresh_vic_bank(C128 *c) {
     /* $D506 bit 6 selects the VIC's 64K RAM bank on a 128K machine; CIA2
      * port A bits 0-1 select the inverted 16K window inside it. Input pins
      * float high, matching the 6526's (PRA | ~DDRA) effective port value. */
@@ -247,6 +247,7 @@ static void io_write(C128 *c, u16 addr, u8 val) {
         if (c->mem.mmu.mmio) {
             bool was_c64 = mmu_is_c64_mode(&c->mem.mmu);
             mmu_write(&c->mem.mmu, addr, val);
+            c128_refresh_vic_bank(c);
             if ((addr & 0xff) == 0x06 || (addr & 0xff) == 0x09)
                 cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
             if (mmu_take_c64_request(&c->mem.mmu))
@@ -268,8 +269,10 @@ static void io_write(C128 *c, u16 addr, u8 val) {
     if (addr >= 0xDD00 && addr < 0xDE00) {
         drive_sync_to_cpu(c);
         cia_write(&c->cia2, addr, val);
-        if ((addr & 15) == 0 || (addr & 15) == 2)
+        if ((addr & 15) == 0 || (addr & 15) == 2) {
+            c128_refresh_vic_bank(c);
             iec_bus_set_host(&c->iec_bus, c->cia2.pra, c->cia2.ddra);
+        }
         c128_refresh_interrupt_lines(c);
         return;
     }
@@ -317,6 +320,7 @@ void c128_mem_write(void *ctx, u16 addr, u8 val) {
     if (addr == 0x0001) { c->cpu.io_port = val; pla_update(c); tape_motor_update(c); return; }
     if (!mem_c64_mode(&c->mem) && addr >= 0xFF00 && addr <= 0xFF04) {
         mmu_ffxx_write(&c->mem.mmu, addr, val);
+        c128_refresh_vic_bank(c);
         return;
     }
     if (addr >= 0xD000 && addr < 0xE000 && mem_io_visible(&c->mem)) {
@@ -362,6 +366,7 @@ static void z80_mem_write(void *ctx, u16 addr, u8 val) {
 
     if (addr >= 0xff00 && addr <= 0xff04) {
         mmu_ffxx_write(mmu, addr, val);
+        c128_refresh_vic_bank(c);
         return;
     }
     if (addr >= 0x1000 && addr < 0x1400 && !(mmu->mcr & 0x01)) {
@@ -752,7 +757,7 @@ int c128_frame(C128 *c) {
     bool ran_z80 = false;
     bool debug_halted = false;
     c->audio_count = 0;
-    c128_update_vic_bank(c);
+    c128_refresh_vic_bank(c);
     if (!resuming_frame) {
         vic_set_raster_line(&c->vic, 0);
         vic_begin_frame(&c->vic, &c->mem);
@@ -915,7 +920,7 @@ int c128_frame(C128 *c) {
         if (debug_halted) break;
         c->debug.partial_frame = false;
         resuming_frame = false;
-        c128_update_vic_bank(c);
+        c128_refresh_vic_bank(c);
         unsigned next_line = video_line + 1;
         vic_set_raster_line(&c->vic, next_line);
         if (next_line < VIC_RASTER_LINES)
