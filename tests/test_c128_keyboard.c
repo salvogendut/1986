@@ -107,6 +107,22 @@ int main(void) {
           c->vdc.bytes_per_char == 16,
           "switching back to VDC leaves its display registers intact");
 
+    /* VIC DMA bank changes are electrical effects of the MMU/CIA2 writes,
+     * not raster-boundary events.  Software can change both selectors and
+     * immediately start preparing the newly selected display bank. */
+    c->mem.mmu.c64_mode = false;
+    c->mem.mmu.rcr = 0x40;
+    c->cia2.pra = 0xFF;
+    c->cia2.ddra = 0x00;
+    c128_refresh_vic_bank(c);
+    CHECK(c->vic.bank_addr == 0x10000,
+          "$D506 immediately selects VIC RAM bank 1");
+    c->cia2.ddra = 0x03;
+    c->cia2.pra = 0x02;
+    c128_refresh_vic_bank(c);
+    CHECK(c->vic.bank_addr == 0x14000,
+          "CIA2 immediately selects the VIC 16K window inside RAM bank 1");
+
     /* VICE keeps the VDC host ports registered in C64 mode. Elite128 uses
      * this exact R18/R19 round trip to distinguish a C128 from a stock C64. */
     vdc_init(&c->vdc);
