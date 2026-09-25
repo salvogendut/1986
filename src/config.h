@@ -35,6 +35,7 @@ typedef struct {
     int        gif_width;          /* F6 GIF capture width */
     int        gif_fps;            /* F6 GIF capture fps */
     bool       gif_ffmpeg;         /* optimize GIF via ffmpeg if present */
+    bool       unified_capture;    /* one side-by-side VIC+VDC GIF */
     char       rom_dir[CONFIG_PATH_MAX];  /* directory holding machine ROMs */
 
     /* Media files chosen in the overlay. */

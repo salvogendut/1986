@@ -15,6 +15,7 @@ int main(void) {
     CHECK(cfg.col_mode_80, "default display is 80 columns");
     CHECK(cfg.vdc_ram_kb == 64, "C128DCR defaults to 64K VDC RAM");
     CHECK(!cfg.double_z80_frequency, "doubled Z80 frequency defaults off");
+    CHECK(!cfg.unified_capture, "unified GIF capture defaults off");
     CHECK(!cfg.real_disk_drive, "real drive defaults off");
     CHECK(!cfg.drive_audio_monitor, "drive audio monitor defaults off");
     CHECK(!cfg.drive_visual_monitor, "drive visual monitor defaults off");
@@ -51,6 +52,7 @@ int main(void) {
     cfg.col_mode_80 = false;
     cfg.vdc_ram_kb = 16;
     cfg.double_z80_frequency = true;
+    cfg.unified_capture = true;
     cfg.real_disk_drive = true;
     cfg.drive_audio_monitor = true;
     cfg.drive_visual_monitor = true;
@@ -81,6 +83,7 @@ int main(void) {
     CHECK(!back.col_mode_80, "40-column mode roundtrip");
     CHECK(back.vdc_ram_kb == 16, "16K VDC RAM setting roundtrip");
     CHECK(back.double_z80_frequency, "doubled Z80 frequency roundtrip");
+    CHECK(back.unified_capture, "unified GIF capture roundtrip");
     CHECK(back.real_disk_drive, "real-drive preference roundtrip");
     CHECK(back.drive_audio_monitor, "drive audio monitor roundtrip");
     CHECK(back.drive_visual_monitor, "drive visual monitor roundtrip");
@@ -114,6 +117,8 @@ int main(void) {
     CHECK(back.vdc_ram_kb == 16, "mode-only save preserves VDC RAM size");
     CHECK(back.double_z80_frequency,
           "mode-only save preserves doubled Z80 frequency");
+    CHECK(back.unified_capture,
+          "mode-only save preserves unified GIF capture");
     CHECK(back.scale == 3, "mode-only save preserves other settings");
     CHECK(strcmp(back.disk_path, "keep-me.d64") == 0,
           "mode-only save preserves media settings");

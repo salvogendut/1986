@@ -40,7 +40,7 @@ technical handoff sequence.
 | `--cart PATH` | Attach a generic C128 `.crt` or raw external function-ROM `.bin`/`.rom` at launch. |
 | `--snapshot PATH` | Load a 1986 C128 snapshot (`.vsf`) at launch. |
 | `--save-snapshot PATH` | Save a `.vsf` snapshot immediately before exit. |
-| `--gif-out PATH` | Start recording a GIF at launch. |
+| `--gif-out PATH` | Record VIC and VDC GIF output at launch; PATH is used as the output-name base. |
 | `--paste TEXT` | Inject text through the emulated keyboard. |
 | `--paste-at N` | Delay `--paste` until emulated frame N. |
 | `--frames N` | Exit after N emulated frames. |

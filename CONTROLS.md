@@ -74,8 +74,15 @@ Sections:
 
 ## GIF capture
 
-**F6** (or `--gif-out PATH`) records an animated GIF of the current
-framebuffer. The Capture section sets resolution and frame rate.
+**F6** (or `--gif-out PATH`) records both C128 video outputs independently;
+`capture.gif` produces `capture-vic.gif` and `capture-vdc.gif`. Recording is
+independent of the active display, window focus, and Unified Display setting.
+
+With **Advanced > Unified Capture** enabled, the same action instead produces
+`capture-unified.gif`: VIC is on the left, VDC is on the right, and both keep
+their native display proportions. The toggle defaults to Off. The Advanced
+GIF resolution setting controls each pane's width, and GIF frame rate controls
+the common emulated-time cadence.
 
 ## Clipboard paste
 

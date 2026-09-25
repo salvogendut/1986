@@ -27,6 +27,7 @@ void config_set_defaults(Config *cfg) {
     cfg->gif_width = 320;
     cfg->gif_fps = 25;
     cfg->gif_ffmpeg = false;
+    cfg->unified_capture = false;
     cfg->rom_dir[0] = '\0';
     cfg->disk_path[0] = '\0';
     cfg->disk2_path[0] = '\0';
@@ -119,6 +120,7 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "gif_width"))     cfg->gif_width = atoi(value);
     else if (!strcasecmp(key, "gif_fps"))       cfg->gif_fps = atoi(value);
     else if (!strcasecmp(key, "gif_ffmpeg"))    cfg->gif_ffmpeg = atoi(value) != 0;
+    else if (!strcasecmp(key, "unified_capture")) cfg->unified_capture = atoi(value) != 0;
     else if (!strcasecmp(key, "rom_dir")) {
         snprintf(cfg->rom_dir, sizeof(cfg->rom_dir), "%s", value);
     }
@@ -221,6 +223,7 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "gif_width = %d\n", cfg->gif_width);
     fprintf(f, "gif_fps = %d\n", cfg->gif_fps);
     fprintf(f, "gif_ffmpeg = %d\n", cfg->gif_ffmpeg ? 1 : 0);
+    fprintf(f, "unified_capture = %d\n", cfg->unified_capture ? 1 : 0);
     fprintf(f, "rom_dir = %s\n", cfg->rom_dir);
     fprintf(f, "disk = %s\n", cfg->disk_path);
     fprintf(f, "disk2 = %s\n", cfg->disk2_path);

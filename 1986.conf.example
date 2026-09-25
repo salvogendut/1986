@@ -55,10 +55,12 @@ cart =
 # Optional U36 internal function ROM (.bin/.rom, raw 8/16/32 KiB)
 u36 =
 
-# F6 GIF capture
+# F6 GIF capture. unified_capture=0 writes -vic.gif and -vdc.gif;
+# unified_capture=1 writes one side-by-side -unified.gif.
 gif_width = 320
 gif_fps = 25
 gif_ffmpeg = 0
+unified_capture = 0
 
 # Directory holding the machine ROM images (kernal.rom, basic.rom, chargen.rom)
 rom_dir =

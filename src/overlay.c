@@ -75,19 +75,20 @@ static const char *const keyboard_map_lines[] = {
 #define ADV_DRIVE_AUDIO         8
 #define ADV_DRIVE_VISUAL        9
 #define ADV_SECOND_DRIVE        10
-#define ADV_GIF_WIDTH           11
-#define ADV_GIF_FPS             12
-#define ADV_GIF_ENCODER         13
-#define ADV_TAPE_AUDIO          14
-#define ADV_TAPE_VIDEO          15
-#define ADV_NOTIFICATIONS       16
-#define ADV_DEBUG               17
-#define ADV_JOY_HIDAPI          18
-#define ADV_KEYBOARD_MAP        19
-#define ADV_C64_TEST            20
-#define ADV_RESET               21
-#define ADV_VERSION             22
-#define ADV_ROWS                23
+#define ADV_UNIFIED_CAPTURE     11
+#define ADV_GIF_WIDTH           12
+#define ADV_GIF_FPS             13
+#define ADV_GIF_ENCODER         14
+#define ADV_TAPE_AUDIO          15
+#define ADV_TAPE_VIDEO          16
+#define ADV_NOTIFICATIONS       17
+#define ADV_DEBUG               18
+#define ADV_JOY_HIDAPI          19
+#define ADV_KEYBOARD_MAP        20
+#define ADV_C64_TEST            21
+#define ADV_RESET               22
+#define ADV_VERSION             23
+#define ADV_ROWS                24
 
 static int cycle_gif_width(int width) {
     switch (width) {
@@ -742,6 +743,12 @@ static void overlay_activate(Overlay *ov) {
                            : "SECOND DRIVE CONNECTED")
                         : "SECOND DRIVE DISCONNECTED");
                     break;
+                case ADV_UNIFIED_CAPTURE:
+                    ov->cfg->unified_capture = !ov->cfg->unified_capture;
+                    notify_post(ov->cfg->unified_capture
+                        ? "GIF CAPTURE: UNIFIED VIC + VDC"
+                        : "GIF CAPTURE: SEPARATE VIC + VDC");
+                    break;
                 case ADV_GIF_WIDTH:
                     ov->cfg->gif_width = cycle_gif_width(ov->cfg->gif_width);
                     break;
@@ -1307,8 +1314,14 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
 #endif
         snprintf(sline, sizeof(sline), "%d%%%s", ov->cfg->crt_scanlines,
                  ov->cfg->crt_enabled ? "" : " (inactive)");
-        snprintf(gline, sizeof(gline), "%dx%d", ov->cfg->gif_width,
-                 (ov->cfg->gif_width * 5) / 8);
+        if (ov->cfg->unified_capture)
+            snprintf(gline, sizeof(gline), "%dx%d side-by-side",
+                     ov->cfg->gif_width * 2,
+                     (ov->cfg->gif_width * 3) / 4);
+        else
+            snprintf(gline, sizeof(gline), "%dx%d + %dx%d",
+                     ov->cfg->gif_width, (ov->cfg->gif_width * 5) / 8,
+                     ov->cfg->gif_width, (ov->cfg->gif_width * 3) / 4);
 
         draw_row(r, panel_w, y, "Smoothing", ov->cfg->smoothing ? "On" : "Off",
                  ov->row == ADV_SMOOTHING); y += OV_LINE_H;
@@ -1339,6 +1352,9 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, panel_w, y, "Second Drive",
                  ov->cfg->second_drive ? "On" : "Off",
                  ov->row == ADV_SECOND_DRIVE); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Unified Capture",
+                 ov->cfg->unified_capture ? "On" : "Off",
+                 ov->row == ADV_UNIFIED_CAPTURE); y += OV_LINE_H;
         draw_row(r, panel_w, y, "GIF resolution", gline,
                  ov->row == ADV_GIF_WIDTH); y += OV_LINE_H;
         {

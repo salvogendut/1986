@@ -11,7 +11,7 @@ else
 GC_SECTIONS_LDFLAGS = -Wl,--gc-sections
 endif
 
-TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-frame-pacer test-joyport test-c128-keyboard test-mos6502dis test-gifcap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc test-snapshot
+TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-frame-pacer test-joyport test-c128-keyboard test-mos6502dis test-gifcap test-videocap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc test-snapshot
 
 .PHONY: all check clean
 
@@ -65,6 +65,10 @@ test-mos6502dis: test_mos6502dis.c ../src/mos6502dis.c ../src/mos6502dis.h
 test-gifcap: test_gifcap.c ../src/gifcap.c ../src/gifcap.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_gifcap.c ../src/gifcap.c -o $@
+
+test-videocap: test_videocap.c ../src/videocap.c ../src/videocap.h ../src/gifcap.c ../src/gifcap.h ../src/display.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=c11 -Wall -Wextra -I../src \
+		test_videocap.c ../src/videocap.c ../src/gifcap.c -o $@
 
 test-d64: test_d64.c ../src/disk_image.c ../src/disk_image.h ../src/virtual_drive.c ../src/virtual_drive.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
@@ -156,6 +160,7 @@ check: $(TESTS)
 	./test-c128-keyboard
 	./test-mos6502dis
 	./test-gifcap
+	./test-videocap
 	./test-d64
 	./test-d64-save
 	./test-disk-formats
