@@ -72,15 +72,18 @@ int main(void) {
 
     c128_key_event(c, SDL_SCANCODE_ESCAPE, true);
     c128_key_event(c, SDL_SCANCODE_PAGEUP, true);
-    CHECK(pressed(&c->kbd, 9, 0) && c->restore_down,
-          "Escape+PageUp supplies C128 ESC and RESTORE NMI");
+    CHECK(pressed(&c->kbd, 7, 7) && !pressed(&c->kbd, 9, 0) &&
+          c->restore_down,
+          "Escape+PageUp supplies RUN/STOP and RESTORE NMI");
     c128_key_event(c, SDL_SCANCODE_PAGEUP, false);
     c128_key_event(c, SDL_SCANCODE_ESCAPE, false);
-    CHECK(!pressed(&c->kbd, 9, 0) && !c->restore_down,
-          "C128 ESC and RESTORE release cleanly");
+    CHECK(!pressed(&c->kbd, 7, 7) && !c->restore_down,
+          "RUN/STOP and RESTORE release cleanly");
     c128_key_event(c, SDL_SCANCODE_END, true);
-    CHECK(pressed(&c->kbd, 7, 7), "End supplies RUN/STOP");
+    CHECK(pressed(&c->kbd, 9, 0) && !pressed(&c->kbd, 7, 7),
+          "End supplies the native C128 ESC key");
     c128_key_event(c, SDL_SCANCODE_END, false);
+    CHECK(!pressed(&c->kbd, 9, 0), "native C128 ESC releases cleanly");
 
     /* F10 without a reset selects an output, but must not copy one screen
      * into the other's independent video memory or change VDC geometry. */

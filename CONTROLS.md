@@ -35,8 +35,8 @@ C128-only keys are available as follows:
 | Caps Lock | Locking CAPS (ASCII/DIN) switch |
 | Left Alt | Commodore |
 | Right Alt | ALT |
-| Escape | ESC |
-| End | RUN/STOP |
+| Escape | RUN/STOP |
+| End | ESC |
 | Page Up | RESTORE |
 | Page Down | HELP |
 | Tab | TAB |

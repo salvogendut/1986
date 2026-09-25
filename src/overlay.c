@@ -35,6 +35,7 @@ static const char *const keyboard_map_lines[] = {
     "Shift + Alt                     switch character sets",
     "Caps Lock                       Shift+C= shortcut",
     "Escape                          RUN/STOP",
+    "End                             C128 ESC",
     "Page Up                         RESTORE (NMI)",
     "Escape + Page Up                RUN/STOP + RESTORE",
     "Left/Right Ctrl                 CONTROL",
