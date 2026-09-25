@@ -11,11 +11,13 @@ void joyports_set_joystick(JoyPorts *ports, unsigned port, u8 pressed) {
 
 void joyports_mouse_motion(JoyPorts *ports, unsigned port, int dx, int dy) {
     if (port >= 2) return;
-    /* 1351 POT values wrap through a seven-bit position counter. Host SDL
-     * coordinates grow downward; the Commodore mouse Y counter runs upward
-     * (VICE's SDL mouse driver likewise subtracts relative Y motion). */
-    ports->mouse_x[port] = (u8)((ports->mouse_x[port] + dx) & 0x7f);
-    ports->mouse_y[port] = (u8)((ports->mouse_y[port] - dy) & 0x7f);
+    /* The 1351 exposes its six-bit position in POT bits 1-6; bit 0 is the
+     * noise bit ignored by Commodore's driver. Map one host pixel to two raw
+     * POT units so the standard divide-by-two delta routine returns one
+     * pointer pixel. Host SDL Y grows downward while the 1351 counter grows
+     * upward (VICE likewise subtracts relative Y motion). */
+    ports->mouse_x[port] = (u8)((ports->mouse_x[port] + dx * 2) & 0x7f);
+    ports->mouse_y[port] = (u8)((ports->mouse_y[port] - dy * 2) & 0x7f);
 }
 
 void joyports_mouse_button(JoyPorts *ports, unsigned port, bool right, bool down) {
