@@ -121,6 +121,11 @@ void vdc_reset(Vdc *v) {
     v->raster_output_line = 0;
     v->vsync_counter = 0;
     v->vsync_active = false;
+    v->draw_raster = 0;
+    v->draw_advance_latched = false;
+    v->draw_prime = true;
+    v->draw_active = false;
+    v->draw_finished = false;
     v->bus_clock = 1;
     v->ready_clock = 0;
     v->clock_scale = 1;
@@ -298,14 +303,14 @@ static void vdc_capture_raster(Vdc *v) {
         for (int x = 0; x < v->fb_w; ++x) line[x] = bg;
         v->raster_fb_valid = true;
     }
-    if (!vdc_display_active(v)) return;
+    if (!vdc_display_active(v) || !v->draw_active || v->vsync_active ||
+        v->draw_raster > (v->regs[9] & 0x1Fu)) return;
 
     int cols = (int)v->screen_text_cols;
     if (cols < 1) cols = 1;
     if (cols > VDC_MAX_COLS) cols = VDC_MAX_COLS;
-    int stride = cols + v->regs[27];
     bool bitmap = (v->regs[25] & 0x80) != 0;
-    if (y < 0 || y >= v->fb_h) goto advance_pointers;
+    if (y < 0 || y >= v->fb_h) return;
     u32 *line = v->fb + (size_t)y * v->fb_w;
 
     int char_width = vdc_char_width(v);
@@ -313,7 +318,7 @@ static void vdc_capture_raster(Vdc *v) {
         (v->regs[25] & 0x0F) > (v->regs[22] >> 4) ||
         ((v->regs[34] > v->regs[0]) && (v->regs[35] <= v->regs[0])) ||
         ((v->regs[34] == v->regs[35]) && (v->regs[35] <= v->regs[0])))
-        goto advance_pointers;
+        return;
 
     int x0 = vdc_horizontal_start(v, cols, char_width);
     bool attr_mode = (v->regs[25] & 0x40) != 0;
@@ -333,21 +338,23 @@ static void vdc_capture_raster(Vdc *v) {
             u16 address = (u16)(v->raster_screen_adr + col);
             bits = vdc_ram_read(v, address);
             if (attr_mode) {
-                dot_fg = VDC_COLORS[attr >> 4];
-                dot_bg = VDC_COLORS[attr & 0x0F];
+                /* Bitmap attributes have the opposite nibble order to
+                 * R26: low = foreground, high = background (VICE VDC). */
+                dot_fg = VDC_COLORS[attr & 0x0F];
+                dot_bg = VDC_COLORS[attr >> 4];
             }
         } else {
             u16 address = (u16)(v->raster_screen_adr + col);
             u8 c = vdc_ram_read(v, address);
             u16 glyph = (u16)(v->chargen_adr +
                 (attr_mode && (attr & VDC_ATTR_ALTCHARSET) ? 0x1000u : 0u) +
-                (u16)(c * v->bytes_per_char) + v->raster_in_row);
-            bits = v->raster_in_row <= (v->regs[23] & 0x1F)
+                (u16)(c * v->bytes_per_char) + v->draw_raster);
+            bits = v->draw_raster <= (v->regs[23] & 0x1F)
                 ? vdc_ram_read(v, glyph) & VDC_PIXEL_MASK[v->regs[22] & 0x0F]
                 : 0;
             if (attr_mode) dot_fg = VDC_COLORS[attr & 0x0F];
             if (attr_mode && (attr & VDC_ATTR_UNDERLINE) &&
-                v->raster_in_row == v->regs[29]) bits = 0xFF;
+                v->draw_raster == v->regs[29]) bits = 0xFF;
             if (attr_mode && (attr & VDC_ATTR_FLASH) && attribute_blink)
                 bits = 0;
             if (v->regs[25] & 0x20) {
@@ -367,15 +374,55 @@ static void vdc_capture_raster(Vdc *v) {
         }
     }
     v->raster_fb_valid = true;
+}
 
-advance_pointers:
-    /* The VDC advances internal memory counters using the R27 value that was
-     * active on each raster.  Recomputing an address as raster*current_stride
-     * applies a mid-frame R27 change retroactively and tears raster demos. */
-    if (bitmap || v->raster_in_row == (v->regs[9] & 0x1F))
-        v->raster_screen_adr = (u16)(v->raster_screen_adr + stride);
-    if (v->raster_in_row == (v->regs[9] & 0x1F))
-        v->raster_attribute_adr = (u16)(v->raster_attribute_adr + stride);
+static void vdc_latch_addresses(Vdc *v) {
+    v->raster_screen_adr = (u16)((v->regs[12] << 8) | v->regs[13]);
+    v->raster_attribute_adr = (u16)(
+        ((v->regs[20] << 8) | v->regs[21]) + v->raster_attribute_offset);
+    v->raster_attribute_offset = 0;
+    if (v->regs[4] == 0xFF)
+        v->raster_attribute_adr = (u16)(
+            v->raster_attribute_adr - v->regs[1]);
+    v->draw_active = false;
+    v->draw_finished = true;
+}
+
+/* The vertical signal counter and the drawing counter are separate on the
+ * VDC.  R24 primes drawing early by up to 31 rasters; the border and status
+ * timing continue to use the signal counter.  See VICE's vdc.c drawing
+ * section.  In particular, retain a matched row-end latch across R9 writes:
+ * re-testing the live R9 loses a colour-row advance in RFOVDC's FLI image. */
+static void vdc_advance_drawing(Vdc *v) {
+    unsigned last = v->regs[9] & 0x1Fu;
+    if (v->draw_prime) {
+        if (v->row_counter == 0 && v->raster_in_row == 0) {
+            v->draw_raster = v->regs[24] & 0x1Fu;
+            v->draw_advance_latched = false;
+        } else if (v->draw_raster == last) {
+            v->draw_raster = 0;
+            v->draw_prime = false;
+            v->draw_active = true;
+            v->draw_finished = false;
+            v->draw_advance_latched = last == 0;
+        } else {
+            v->draw_raster = (v->draw_raster + 1u) & 0x1Fu;
+        }
+    } else if (v->draw_active) {
+        unsigned stride = v->screen_text_cols + v->regs[27];
+        bool row_end = v->draw_advance_latched;
+        if (row_end) {
+            v->draw_raster = 0;
+            v->raster_attribute_adr = (u16)(v->raster_attribute_adr + stride);
+        } else {
+            v->draw_raster = (v->draw_raster + 1u) & 0x1Fu;
+        }
+        if ((v->regs[25] & 0x80) || row_end)
+            v->raster_screen_adr = (u16)(v->raster_screen_adr + stride);
+        v->draw_advance_latched = v->draw_raster == last;
+    } else {
+        v->draw_advance_latched = false;
+    }
 }
 
 void vdc_set_raster_line(Vdc *v, unsigned line) {
@@ -386,6 +433,7 @@ void vdc_set_raster_line(Vdc *v, unsigned line) {
     for (unsigned i = 0; i < elapsed; ++i) {
         vdc_capture_raster(v);
         bool row_advanced = false;
+        bool frame_restarted = false;
         if (v->vertical_adjust_active) {
             unsigned adjust = v->regs[5] & 0x1Fu;
             if (++v->vertical_adjust_counter >= adjust) {
@@ -395,6 +443,7 @@ void vdc_set_raster_line(Vdc *v, unsigned line) {
                 v->raster_in_row = 0;
                 v->row_advance_latched = false;
                 row_advanced = true;
+                frame_restarted = true;
             }
         } else if (v->row_advance_latched) {
             v->row_advance_latched = false;
@@ -406,6 +455,7 @@ void vdc_set_raster_line(Vdc *v, unsigned line) {
                     v->vertical_adjust_counter = 0;
                 } else {
                     v->row_counter = 0;
+                    frame_restarted = true;
                 }
             }
             row_advanced = true;
@@ -417,20 +467,18 @@ void vdc_set_raster_line(Vdc *v, unsigned line) {
         if (v->raster_in_row == (v->regs[9] & 0x1F))
             v->row_advance_latched = true;
 
+        if (frame_restarted) {
+            if (!v->draw_finished) vdc_latch_addresses(v);
+            v->draw_prime = true;
+        }
+
         /* Display and attribute start addresses are sampled after the last
          * displayed row rather than changing in the middle of a frame. */
         if (v->row_counter == (unsigned)v->regs[6] + 1u &&
             v->raster_in_row == 1u) {
-            v->raster_screen_adr =
-                (u16)((v->regs[12] << 8) | v->regs[13]);
-            v->raster_attribute_adr = (u16)(
-                ((v->regs[20] << 8) | v->regs[21]) +
-                v->raster_attribute_offset);
-            v->raster_attribute_offset = 0;
-            if (v->regs[4] == 0xFF)
-                v->raster_attribute_adr = (u16)(
-                    v->raster_attribute_adr - v->regs[1]);
+            vdc_latch_addresses(v);
         }
+        vdc_advance_drawing(v);
 
         /* The VDC owns its video timing.  Its visible scanout does not start
          * at the VIC-II frame boundary: R7 starts vsync and the PAL monitor
@@ -565,8 +613,8 @@ static void render_bitmap(const Vdc *v, u32 *pixels, int fbw, int fbh,
             u32 dot_bg = bg;
             if (attr_mode) {
                 u8 attr = vdc_ram_read(v, (u16)(v->attribute_adr + attr_row + byte_col));
-                dot_fg = VDC_COLORS[attr >> 4];
-                dot_bg = VDC_COLORS[attr & 0x0F];
+                dot_fg = VDC_COLORS[attr & 0x0F];
+                dot_bg = VDC_COLORS[attr >> 4];
             }
             pixels[y * fbw + x] = source_bit < 8 &&
                 (bits & (0x80u >> source_bit)) ? dot_fg : dot_bg;

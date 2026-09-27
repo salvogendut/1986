@@ -49,6 +49,11 @@ typedef struct {
     unsigned raster_output_line; /* physical scanout line since VDC vsync */
     unsigned vsync_counter; /* scan lines elapsed in the VDC vsync pulse */
     bool vsync_active;
+    unsigned draw_raster; /* glyph/colour-cell raster, offset by R24 scroll */
+    bool draw_advance_latched; /* drawing row ended on the previous raster */
+    bool draw_prime; /* waiting for the first drawing row after frame restart */
+    bool draw_active;
+    bool draw_finished; /* addresses already reloaded in the bottom border */
     u64 bus_clock;       /* 8502 clock at the latest VDC port access */
     u64 ready_clock;     /* approximate end of the current VDC operation */
     unsigned clock_scale; /* 8502 clocks per nominal VDC bus clock */
