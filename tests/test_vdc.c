@@ -304,9 +304,9 @@ int main(void) {
         reg_write(timing, 25, 0x81);    /* must not clear raster 0 */
         reg_write(timing, 27, 1);       /* next stride is 7, not retroactive */
         vdc_set_raster_line(timing, 5); /* consumes address 6 */
-        CHECK(timing->fb[142 * timing->fb_w + 1] == 0xFFFFFF,
+        CHECK(timing->fb[3 * timing->fb_w + 1] == 0xFFFFFF,
               "mid-frame smooth-scroll write preserves prior raster lines");
-        CHECK(timing->fb[143 * timing->fb_w + 2] == 0xFFFFFF,
+        CHECK(timing->fb[4 * timing->fb_w + 2] == 0xFFFFFF,
               "bitmap fetch pointer uses each raster's active R27 stride");
 
         /* A reduced display mode occupies its VDC active rectangle within
@@ -327,10 +327,41 @@ int main(void) {
         reg_write(timing, 35, 2);
         vdc_set_raster_line(timing, 89);
         vdc_render(timing, pixels, 640, 480);
-        CHECK(pixels[240 * 640 + 320] == 0xFFFFFF,
+        CHECK(pixels[80 * 640 + 320] == 0xFFFFFF,
               "fixed VDC canvas contains the reduced active picture");
-        CHECK(pixels[240 * 640 + 40] == 0x000000 && pixels[40] == 0x000000,
+        CHECK(pixels[80 * 640 + 40] == 0x000000 &&
+              pixels[240 * 640 + 320] == 0x000000,
               "fixed VDC canvas preserves horizontal and vertical borders");
+
+        /* Host frames and VDC frames need not begin together.  RFOVDC2 uses
+         * a 32-byte, 256-raster picture whose VDC frame wraps shortly after
+         * the host presents.  Clearing the live scanout at that wrap exposed
+         * only the newly drawn top strip. */
+        vdc_reset(timing);
+        memset(timing->ram, 0xFF, sizeof(timing->ram));
+        reg_write(timing, 1, 32);
+        reg_write(timing, 2, 78);
+        reg_write(timing, 4, 155);
+        reg_write(timing, 6, 128);
+        reg_write(timing, 7, 138);
+        reg_write(timing, 9, 1);
+        reg_write(timing, 22, 0x78);
+        reg_write(timing, 23, 1);
+        reg_write(timing, 25, 0x80);
+        reg_write(timing, 26, 0xF0);
+        reg_write(timing, 28, 0x10);
+        reg_write(timing, 34, 1);
+        reg_write(timing, 35, 2);
+        host_line = 0;
+        for (int i = 0; i < 350; ++i) {
+            host_line = (host_line + 1u) % 312u;
+            vdc_set_raster_line(timing, host_line);
+        }
+        vdc_render(timing, pixels, 640, 480);
+        CHECK(pixels[40 * 640 + 320] == 0xFFFFFF &&
+              pixels[400 * 640 + 320] == 0xFFFFFF,
+              "completed VDC scanout survives an asynchronous frame wrap");
+        free(timing->display_fb);
         free(timing->fb);
         free(timing);
     }
@@ -411,6 +442,7 @@ int main(void) {
     CHECK(v->address_mask == 0x3fff && v->regs[1] == 102,
           "VDC power cycle preserves fitted RAM size and resets registers");
 
+    free(v->display_fb);
     free(v->fb);
     free(v);
     free(pixels);

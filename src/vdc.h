@@ -45,8 +45,10 @@ typedef struct {
     u16 raster_screen_adr; /* latched display address/current fetch pointer */
     u16 raster_attribute_adr; /* latched attribute address/current row pointer */
     u8 raster_attribute_offset; /* RFOVDC 8x1 colour-cell address quirk */
-    bool raster_clear_pending; /* beginning a new VDC frame: clear old lines */
     bool raster_fb_valid; /* at least one scan line has been captured */
+    unsigned raster_output_line; /* physical scanout line since VDC vsync */
+    unsigned vsync_counter; /* scan lines elapsed in the VDC vsync pulse */
+    bool vsync_active;
     u64 bus_clock;       /* 8502 clock at the latest VDC port access */
     u64 ready_clock;     /* approximate end of the current VDC operation */
     unsigned clock_scale; /* 8502 clocks per nominal VDC bus clock */
@@ -58,8 +60,10 @@ typedef struct {
 
     u8  ram[VDC_RAM_SIZE];      /* VDC video RAM (byte-addressed model) */
 
-    u32 *fb;                    /* rendered framebuffer (fb_w x fb_h) */
+    u32 *fb;                    /* VDC scanout currently being captured */
+    u32 *display_fb;            /* last complete scanout presented to host */
     int  fb_w, fb_h;
+    bool display_fb_valid;
 
     bool dirty;                 /* force a re-render */
 } Vdc;

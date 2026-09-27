@@ -317,6 +317,15 @@ static SnapshotResult load_private(C128 *c, const ModuleView *module) {
     mem_set_processor_port(&c->mem, cpu.io_ddr, cpu.io_port);
     cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
     c128_set_4080(c, c->col_mode_80);
+    c->vdc.raster_fb_valid = false;
+    c->vdc.display_fb_valid = false;
+    if (c->vdc.fb)
+        memset(c->vdc.fb, 0,
+               (size_t)c->vdc.fb_w * c->vdc.fb_h * sizeof(*c->vdc.fb));
+    if (c->vdc.display_fb)
+        memset(c->vdc.display_fb, 0,
+               (size_t)c->vdc.fb_w * c->vdc.fb_h *
+               sizeof(*c->vdc.display_fb));
     c->vdc.dirty = true;
     c->audio_count = 0;
     return SNAPSHOT_OK;

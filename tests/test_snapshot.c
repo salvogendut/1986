@@ -1,6 +1,7 @@
 #include "snapshot.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int failures;
@@ -68,8 +69,12 @@ int main(void) {
     static C128 c;
     const char *path = "/tmp/1986-test-snapshot.vsf";
     const char *vice = "/tmp/1986-test-vice.vsf";
-    c.vdc.fb = (u32 *)(uintptr_t)0x1234;
     c.vdc.fb_w = 800; c.vdc.fb_h = 400;
+    c.vdc.fb = calloc((size_t)c.vdc.fb_w * c.vdc.fb_h, sizeof(*c.vdc.fb));
+    c.vdc.display_fb = calloc((size_t)c.vdc.fb_w * c.vdc.fb_h,
+                              sizeof(*c.vdc.display_fb));
+    u32 *host_vdc_fb = c.vdc.fb;
+    CHECK(c.vdc.fb && c.vdc.display_fb, "allocate host VDC scanout buffers");
     c.mem.ram[0x1234] = 0xA7;
     c.mem.color_ram[0x321] = 0x0E;
     c.mem.mmu.mcr = 0x42; c.mem.mmu.page1 = 0x73;
@@ -108,7 +113,7 @@ int main(void) {
           "CIA and SID round trip");
     CHECK(core_state.pc == 0x9abc && core_state.clock == 0x102030405ULL,
           "8502 core round trip");
-    CHECK(c.vdc.fb == (u32 *)(uintptr_t)0x1234, "host VDC pointer preserved");
+    CHECK(c.vdc.fb == host_vdc_fb, "host VDC pointer preserved");
 
     make_vice_projection(vice);
     core_state.pc = 0xabcd;
@@ -121,6 +126,8 @@ int main(void) {
           "rejected VICE snapshot does not partially mutate the machine");
 
     remove(path); remove(vice);
+    free(c.vdc.display_fb);
+    free(c.vdc.fb);
     if (failures) return 1;
     puts("snapshot tests passed");
     return 0;

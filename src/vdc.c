@@ -62,6 +62,8 @@ void vdc_init(Vdc *v) {
     v->fb_w = VDC_RASTER_WIDTH;
     v->fb_h = VDC_RASTER_HEIGHT;
     v->fb = (u32 *)malloc((size_t)v->fb_w * v->fb_h * sizeof(u32));
+    v->display_fb = (u32 *)malloc(
+        (size_t)v->fb_w * v->fb_h * sizeof(u32));
     vdc_powerup(v);
 }
 
@@ -115,14 +117,20 @@ void vdc_reset(Vdc *v) {
     v->raster_screen_adr = 0;
     v->raster_attribute_adr = 0;
     v->raster_attribute_offset = 0;
-    v->raster_clear_pending = true;
     v->raster_fb_valid = false;
+    v->raster_output_line = 0;
+    v->vsync_counter = 0;
+    v->vsync_active = false;
     v->bus_clock = 1;
     v->ready_clock = 0;
     v->clock_scale = 1;
     v->dirty = true;
     if (v->fb)
         memset(v->fb, 0, (size_t)v->fb_w * v->fb_h * sizeof(*v->fb));
+    if (v->display_fb)
+        memset(v->display_fb, 0,
+               (size_t)v->fb_w * v->fb_h * sizeof(*v->display_fb));
+    v->display_fb_valid = false;
 }
 
 void vdc_powerup(Vdc *v) {
@@ -281,9 +289,13 @@ static void vdc_capture_raster(Vdc *v) {
     if (!v->fb) return;
 
     u32 bg = VDC_COLORS[v->regs[26] & 0x0F];
-    if (v->raster_clear_pending) {
-        for (int i = 0; i < v->fb_w * v->fb_h; ++i) v->fb[i] = bg;
-        v->raster_clear_pending = false;
+    /* Clear only the physical line being scanned.  The VDC's timing is
+     * independent of the VIC-II/host presentation boundary, so erasing the
+     * entire scanout at an internal frame wrap exposes a partial frame. */
+    int y = (int)v->raster_output_line;
+    if (y >= 0 && y < v->fb_h) {
+        u32 *line = v->fb + (size_t)y * v->fb_w;
+        for (int x = 0; x < v->fb_w; ++x) line[x] = bg;
         v->raster_fb_valid = true;
     }
     if (!vdc_display_active(v)) return;
@@ -291,19 +303,10 @@ static void vdc_capture_raster(Vdc *v) {
     int cols = (int)v->screen_text_cols;
     if (cols < 1) cols = 1;
     if (cols > VDC_MAX_COLS) cols = VDC_MAX_COLS;
-    int rasters = (v->regs[9] & 0x1F) + 1;
-    int display_row = (int)v->row_counter - 1;
-    int display_raster = display_row * rasters + (int)v->raster_in_row;
-    int active_h = (int)v->regs[6] * rasters;
     int stride = cols + v->regs[27];
     bool bitmap = (v->regs[25] & 0x80) != 0;
-    int top = (VDC_RASTER_HEIGHT - active_h) / 2;
-    if (top < 0) top = 0;
-    int y = top + display_raster;
     if (y < 0 || y >= v->fb_h) goto advance_pointers;
-
     u32 *line = v->fb + (size_t)y * v->fb_w;
-    for (int x = 0; x < v->fb_w; ++x) line[x] = bg;
 
     int char_width = vdc_char_width(v);
     if (char_width < 8 ||
@@ -382,6 +385,7 @@ void vdc_set_raster_line(Vdc *v, unsigned line) {
         ? line - v->raster_line : 312u - v->raster_line + line;
     for (unsigned i = 0; i < elapsed; ++i) {
         vdc_capture_raster(v);
+        bool row_advanced = false;
         if (v->vertical_adjust_active) {
             unsigned adjust = v->regs[5] & 0x1Fu;
             if (++v->vertical_adjust_counter >= adjust) {
@@ -390,7 +394,7 @@ void vdc_set_raster_line(Vdc *v, unsigned line) {
                 v->row_counter = 0;
                 v->raster_in_row = 0;
                 v->row_advance_latched = false;
-                v->raster_clear_pending = true;
+                row_advanced = true;
             }
         } else if (v->row_advance_latched) {
             v->row_advance_latched = false;
@@ -402,9 +406,9 @@ void vdc_set_raster_line(Vdc *v, unsigned line) {
                     v->vertical_adjust_counter = 0;
                 } else {
                     v->row_counter = 0;
-                    v->raster_clear_pending = true;
                 }
             }
+            row_advanced = true;
         } else {
             v->raster_in_row = (v->raster_in_row + 1u) & 0x1Fu;
         }
@@ -426,6 +430,35 @@ void vdc_set_raster_line(Vdc *v, unsigned line) {
             if (v->regs[4] == 0xFF)
                 v->raster_attribute_adr = (u16)(
                     v->raster_attribute_adr - v->regs[1]);
+        }
+
+        /* The VDC owns its video timing.  Its visible scanout does not start
+         * at the VIC-II frame boundary: R7 starts vsync and the PAL monitor
+         * resumes at raster zero after the 25-line sync interval.  Keeping a
+         * physical output-line counter is also essential for effects which
+         * alter R9 while a frame is being scanned. */
+        if (row_advanced && v->row_counter == v->regs[7] &&
+            !v->vsync_active) {
+            v->vsync_active = true;
+            v->vsync_counter = 0;
+        }
+        if (v->vsync_active) {
+            if (++v->vsync_counter > 25u) {
+                v->vsync_active = false;
+                v->vsync_counter = 0;
+                v->raster_output_line = 0;
+                if (v->display_fb && v->raster_fb_valid) {
+                    u32 *completed = v->fb;
+                    v->fb = v->display_fb;
+                    v->display_fb = completed;
+                    v->display_fb_valid = true;
+                    v->raster_fb_valid = false;
+                }
+            } else {
+                v->raster_output_line++;
+            }
+        } else {
+            v->raster_output_line++;
         }
     }
     v->raster_line = line;
@@ -546,10 +579,12 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
 
     v->frame_counter++;
 
-    if (fbw == VDC_SCREEN_W && fbh == VDC_SCREEN_H && v->raster_fb_valid) {
+    if (fbw == VDC_SCREEN_W && fbh == VDC_SCREEN_H &&
+        (v->raster_fb_valid || v->display_fb_valid)) {
+        const u32 *scanout = v->display_fb_valid ? v->display_fb : v->fb;
         for (int y = 0; y < fbh; ++y) {
             int sy = y * v->fb_h / fbh;
-            const u32 *src = v->fb + (size_t)sy * v->fb_w;
+            const u32 *src = scanout + (size_t)sy * v->fb_w;
             u32 *dst = pixels + (size_t)y * fbw;
             for (int x = 0; x < fbw; ++x)
                 dst[x] = src[x * v->fb_w / fbw];
