@@ -83,7 +83,10 @@ void display_set_crt(Display *d, bool enabled, int scanlines, int brightness,
 void display_set_scale(Display *d, int scale);       /* resize both output windows */
 void display_set_one_display(Display *d, bool one);   /* create/destroy VDC window */
 void display_set_vdc_active(Display *d, bool active); /* select VIC vs VDC (one-window) */
+SDL_Window *display_active_window(const Display *d); /* selected output's host window */
 void display_focus_active(Display *d);                /* focus selected output window */
+bool display_set_fullscreen(Display *d, bool enabled); /* selected window only */
+bool display_toggle_fullscreen(Display *d); /* use the selected window's own state */
 SDL_Renderer *display_active_renderer(const Display *d); /* renderer for modal UI */
 bool display_vdc_window_open(const Display *d);
 void display_apply_greyscale(Display *d);

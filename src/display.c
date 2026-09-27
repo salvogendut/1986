@@ -159,15 +159,31 @@ void display_set_vdc_active(Display *d, bool active) {
     d->vdc_active = active;
 }
 
-void display_focus_active(Display *d) {
-    SDL_Window *target = d->window;
+SDL_Window *display_active_window(const Display *d) {
     if (!d->one_display && d->vdc_active && d->vdc_window)
-        target = d->vdc_window;
+        return d->vdc_window;
+    return d->window;
+}
+
+void display_focus_active(Display *d) {
+    SDL_Window *target = display_active_window(d);
     if (!target) return;
     SDL_WindowFlags flags = SDL_GetWindowFlags(target);
     if (flags & SDL_WINDOW_MINIMIZED) SDL_RestoreWindow(target);
     if (flags & SDL_WINDOW_HIDDEN) SDL_ShowWindow(target);
     SDL_RaiseWindow(target);
+}
+
+bool display_set_fullscreen(Display *d, bool enabled) {
+    SDL_Window *target = display_active_window(d);
+    return target && SDL_SetWindowFullscreen(target, enabled);
+}
+
+bool display_toggle_fullscreen(Display *d) {
+    SDL_Window *target = display_active_window(d);
+    if (!target) return false;
+    bool enabled = (SDL_GetWindowFlags(target) & SDL_WINDOW_FULLSCREEN) != 0;
+    return display_set_fullscreen(d, !enabled);
 }
 
 SDL_Renderer *display_active_renderer(const Display *d) {

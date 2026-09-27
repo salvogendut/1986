@@ -90,12 +90,6 @@ static void release_mouse(SDL_Window **captured, JoyPorts *ports) {
     }
 }
 
-static SDL_Window *active_input_window(const Display *display) {
-    if (!display->one_display && display->vdc_active && display->vdc_window)
-        return display->vdc_window;
-    return display->window;
-}
-
 /* --- Dual-display video capture state (F6). --- */
 static VideoCapture g_videocap;
 
@@ -175,7 +169,7 @@ static void usage(const char *argv0) {
         "  F8     Monitor\n"
         "  F9     Options overlay\n"
         "  F10    Switch 40/80-column display\n"
-        "  F11    Toggle fullscreen\n"
+        "  F11    Toggle fullscreen on the selected display\n"
         "  F12    Quit\n"
         "  Ctrl+V Paste clipboard text\n"
         "  Ctrl++ / Ctrl+- Adjust window scale\n",
@@ -267,7 +261,6 @@ int main(int argc, char **argv) {
                     cfg.crt_brightness, cfg.crt_contrast,
                     cfg.crt_red, cfg.crt_green, cfg.crt_blue);
     display_set_one_display(&c.display, cfg.one_display);
-    if (cfg.fullscreen) SDL_SetWindowFullscreen(c.display.window, true);
 
     SDL_AudioStream *audio_stream = NULL;
     if (!no_throttle) {
@@ -433,6 +426,11 @@ int main(int argc, char **argv) {
         fprintf(stderr, "1986: loaded snapshot '%s'\n", snapshot_path);
     }
 
+    /* Power-on and snapshot restore establish which 40/80 output is selected.
+     * In separate-window mode, startup fullscreen must follow that selection. */
+    if (cfg.fullscreen && !display_set_fullscreen(&c.display, true))
+        fprintf(stderr, "1986: could not enter fullscreen: %s\n", SDL_GetError());
+
     Overlay overlay;
     overlay_init(&overlay, &cfg, &c);
 
@@ -450,7 +448,6 @@ int main(int argc, char **argv) {
                             cfg.unified_capture);
 
     bool running = true;
-    bool fullscreen = cfg.fullscreen;
     SDL_Window *mouse_captured = NULL;
     SDL_Gamepad *gamepad = open_first_gamepad();
     GamepadAxes gamepad_axes = {0};
@@ -495,7 +492,7 @@ int main(int argc, char **argv) {
             } else if (ev.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
                 leds_set_mouse_position(0, 0, false);
             } else if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-                SDL_Window *target = active_input_window(&c.display);
+                SDL_Window *target = display_active_window(&c.display);
                 if (!c.paused && !overlay_is_visible(&overlay) && mouse_mode && target &&
                     ev.button.windowID == SDL_GetWindowID(target)) {
                     if (!mouse_captured && SDL_SetWindowRelativeMouseMode(target, true))
@@ -641,8 +638,11 @@ int main(int argc, char **argv) {
                     else
                         monitor_open(monitor);
                 } else if (ev.key.scancode == SDL_SCANCODE_F11) {
-                    fullscreen = !fullscreen;
-                    SDL_SetWindowFullscreen(c.display.window, fullscreen);
+                    if (!ev.key.repeat && !display_toggle_fullscreen(&c.display)) {
+                        fprintf(stderr, "1986: could not toggle fullscreen: %s\n",
+                                SDL_GetError());
+                        notify_post("COULD NOT TOGGLE FULLSCREEN");
+                    }
                 } else if (ev.key.scancode == SDL_SCANCODE_F4) {
                     char path[256];
                     char tmp[256];

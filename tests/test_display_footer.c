@@ -32,6 +32,60 @@ static int led_pixel(SDL_Renderer *r, int x, int y) {
     return colour_pixel(r, x, y, 0x22, 0x33, 0x44);
 }
 
+static bool is_fullscreen(SDL_Window *window) {
+    return (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
+}
+
+static int test_selected_fullscreen(Display *d) {
+    int ok = 1;
+    display_set_one_display(d, true);
+    for (int col80 = 0; col80 < 2; ++col80) {
+        display_set_vdc_active(d, col80 != 0);
+        ok &= display_active_window(d) == d->window;
+        ok &= display_toggle_fullscreen(d);
+        ok &= is_fullscreen(d->window);
+        ok &= display_toggle_fullscreen(d);
+        ok &= !is_fullscreen(d->window);
+    }
+
+    display_set_one_display(d, false);
+    if (!d->vdc_window) return 0;
+    display_set_vdc_active(d, true);
+    ok &= display_active_window(d) == d->vdc_window;
+    ok &= display_toggle_fullscreen(d);
+    ok &= is_fullscreen(d->vdc_window) && !is_fullscreen(d->window);
+    ok &= display_toggle_fullscreen(d);
+    ok &= !is_fullscreen(d->vdc_window) && !is_fullscreen(d->window);
+
+    /* A single global fullscreen flag fails when selection changes between
+     * presses: the next window must enter fullscreen, not be told to exit. */
+    display_set_vdc_active(d, false);
+    ok &= display_active_window(d) == d->window;
+    ok &= display_toggle_fullscreen(d);
+    ok &= is_fullscreen(d->window) && !is_fullscreen(d->vdc_window);
+    display_set_vdc_active(d, true);
+    ok &= display_toggle_fullscreen(d);
+    ok &= is_fullscreen(d->vdc_window);
+    ok &= display_toggle_fullscreen(d);
+    ok &= !is_fullscreen(d->vdc_window);
+    display_set_vdc_active(d, false);
+    ok &= display_set_fullscreen(d, false);
+    ok &= !is_fullscreen(d->window);
+
+    /* Window-manager changes and startup fullscreen must be reflected by
+     * the next F11 press, rather than a stale application-wide boolean. */
+    display_set_vdc_active(d, true);
+    ok &= display_set_fullscreen(d, true);
+    ok &= is_fullscreen(d->vdc_window) && !is_fullscreen(d->window);
+    ok &= display_toggle_fullscreen(d);
+    ok &= !is_fullscreen(d->vdc_window);
+    display_set_one_display(d, true);
+    static Display absent;
+    ok &= display_active_window(&absent) == NULL;
+    ok &= !display_toggle_fullscreen(&absent);
+    return ok;
+}
+
 int main(void) {
     setenv("SDL_VIDEODRIVER", "dummy", 1);
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -96,6 +150,10 @@ int main(void) {
     display_render_function_keys(d);
     ok = ok && !d->vdc_renderer &&
          band_pixel(d->renderer, 2, mh - LED_BAR_HEIGHT - 2);
+    if (!test_selected_fullscreen(d)) {
+        fputs("test-display-footer: selected-window fullscreen failed\n", stderr);
+        ok = 0;
+    }
     display_destroy(d);
     free(d);
     SDL_Quit();
