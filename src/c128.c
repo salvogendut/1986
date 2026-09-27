@@ -246,12 +246,26 @@ static void io_write(C128 *c, u16 addr, u8 val) {
     if (!mem_c64_mode(&c->mem) && addr >= 0xD500 && addr < 0xD510) {
         if (c->mem.mmu.mmio) {
             bool was_c64 = mmu_is_c64_mode(&c->mem.mmu);
-            mmu_write(&c->mem.mmu, addr, val);
+            bool d505_c64 = (addr & 0xff) == 0x05 && (val & 0x40);
+            /* BASIC's GO64 routine performs its final $D505 write from the
+             * four-byte trampoline at $0000-$0003. Keep that user command
+             * behind Advanced > C64 Test Mode, but accept direct MMU writes
+             * from native C128 loaders just like the hardware and VICE do. */
+            bool go64_trampoline = d505_c64 && c->cpu.pc == 0x0004;
+            bool missing_c64_roms = d505_c64 &&
+                                    !mem_c64_roms_loaded(&c->mem);
+            if (go64_trampoline || missing_c64_roms)
+                mmu_write_go64(&c->mem.mmu, val);
+            else
+                mmu_write(&c->mem.mmu, addr, val);
             c128_refresh_vic_bank(c);
             if ((addr & 0xff) == 0x06 || (addr & 0xff) == 0x09)
                 cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
-            if (mmu_take_c64_request(&c->mem.mmu))
-                notify_post("C64 MODE IS NOT SUPPORTED - USING NATIVE C128 MODE");
+            if (mmu_take_c64_request(&c->mem.mmu)) {
+                notify_post(missing_c64_roms
+                    ? "C64 COMPATIBILITY ROMS ARE REQUIRED"
+                    : "C64 MODE IS NOT SUPPORTED - USING NATIVE C128 MODE");
+            }
             if (!was_c64 && mmu_is_c64_mode(&c->mem.mmu)) {
                 cpu_set_stack_page(c->mem.ram +
                     ((u32)c->mem.mmu.c64_ram_bank << 16) + 0x100);

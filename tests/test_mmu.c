@@ -37,24 +37,32 @@ int main(void) {
     mmu_write(&mmu, 0xD50D, 0x02);
     CHECK(mmu.vdc_bank == 0x02, "VDC bank");
 
-    /* $D505 bit 6 requests the separate C64 personality. The native-C128
-     * emulator rejects it, reports it once, and preserves the other bits. */
+    /* Direct $D505 writes are real C128 hardware transitions and must work
+     * even while the product-facing GO64 test gate is disabled. */
+    mmu.mcr = 0x40;
     mmu_write(&mmu, 0xD505, 0x47);
+    CHECK(mmu_is_c64_mode(&mmu), "direct hardware write enters C64 personality");
+    CHECK(mmu.c64_ram_bank == 1, "hardware transition latches selected RAM bank");
+    mmu_write(&mmu, 0xD505, 0x07);
+
+    /* BASIC's GO64 command remains rejected and reported once unless the
+     * temporary Advanced test gate has explicitly armed it. */
+    mmu_write_go64(&mmu, 0x47);
     CHECK((mmu.mcr5 & 0x40) == 0, "C64 mode request is rejected");
     CHECK((mmu.mcr5 & 0x0F) == 0x07, "native MCR bits are preserved");
     CHECK(mmu_take_c64_request(&mmu), "first C64 request is reported");
     CHECK(!mmu_take_c64_request(&mmu), "C64 request is consumed once");
-    mmu_write(&mmu, 0xD505, 0x47);
+    mmu_write_go64(&mmu, 0x47);
     CHECK(!mmu_take_c64_request(&mmu), "repeated active request is deduplicated");
-    mmu_write(&mmu, 0xD505, 0x07);
-    mmu_write(&mmu, 0xD505, 0x47);
+    mmu_write_go64(&mmu, 0x07);
+    mmu_write_go64(&mmu, 0x47);
     CHECK(mmu_take_c64_request(&mmu), "a later C64 request is reported again");
 
     /* The same hardware request changes personality only when the temporary
      * development gate has explicitly armed it. */
     mmu_set_c64_enabled(&mmu, true);
     mmu.mcr = 0x40;
-    mmu_write(&mmu, 0xD505, 0x47);
+    mmu_write_go64(&mmu, 0x47);
     CHECK(mmu_is_c64_mode(&mmu), "enabled gate accepts C64 personality request");
     CHECK(mmu.c64_ram_bank == 1, "C64 personality latches the selected RAM bank");
     CHECK((mmu_read(&mmu, 0xD505) & 0x40) == 0,
