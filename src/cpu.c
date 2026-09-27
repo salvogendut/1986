@@ -476,6 +476,12 @@ void cpu_irq(Cpu8502 *cpu, bool level) {
         interrupt_set_irq(maincpu_int_status, 0, level ? 1 : 0, maincpu_clk);
 }
 
+void cpu_irq_defer(Cpu8502 *cpu) {
+    cpu_irq(cpu, false);
+    if (maincpu_int_status)
+        interrupt_ack_irq(maincpu_int_status);
+}
+
 void cpu_nmi(Cpu8502 *cpu, bool level) {
     if (cpu) cpu->nmi_level = level;
     if (maincpu_int_status)

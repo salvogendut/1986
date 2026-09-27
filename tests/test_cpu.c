@@ -92,6 +92,25 @@ int main(void) {
           "JSR writes relocated stack page, not physical page one");
     cpu_set_stack_page(&ram[0x0100]);
 
+    /* Deferring a level IRQ must also clear the VICE core's delayed IRQ
+     * latch.  Otherwise the interrupt can still be taken for a few cycles
+     * after its external line has been removed. */
+    load(0x0700, (u8[]){ 0x58, 0xEA, 0x4C, 0x01, 0x07 }, 5); /* CLI; NOP; loop */
+    load(0x0800, (u8[]){ 0xEE, 0x00, 0x09, 0x40 }, 4);       /* INC $0900; RTI */
+    ram[0x0900] = 0;
+    ram[0xFFFC] = 0x00; ram[0xFFFD] = 0x07;
+    ram[0xFFFE] = 0x00; ram[0xFFFF] = 0x08;
+    cpu_reset(&cpu);
+    cpu_step_budget(&cpu, 2); /* execute CLI */
+    cpu_irq(&cpu, true);
+    cpu_irq_defer(&cpu);
+    cpu_step_budget(&cpu, 20);
+    CHECK(ram[0x0900] == 0, "deferred IRQ does not enter its handler");
+    cpu_irq(&cpu, true);
+    cpu_step_budget(&cpu, 20);
+    CHECK(ram[0x0900] != 0, "reasserted IRQ is delivered after defer");
+    cpu_irq(&cpu, false);
+
     /* A real illegal/JAM opcode must not reset the VICE core clock inside a
      * bounded step and trap the host forever. Surface it to the machine so
      * the SDL loop can reset cleanly. */

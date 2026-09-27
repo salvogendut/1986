@@ -81,6 +81,11 @@ With it Off, `GO64` remains deliberately unavailable. General C64 cartridge
 compatibility and becoming a replacement for a dedicated C64 emulator are not
 release goals.
 
+Native C128 software may still switch the MMU into the compatibility
+personality directly. This is required by C128 titles whose native bootstrap
+then uses the VIC-IIe, SID, and C64 KERNAL; the optional C64 ROMs must be
+present, but the `GO64` test toggle does not need to be enabled.
+
 ## Important limitations
 
 - Emulation is not cycle exact; more VIC-IIe bad-line/raster validation remains.

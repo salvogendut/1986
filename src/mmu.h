@@ -34,11 +34,11 @@ typedef struct {
     u8  vdc_bank; /* $D50D */
     u8  vdc_ctrl; /* $D50E */
     u8  mcr5;     /* $D505 mode configuration register (low nibble) */
-    bool c64_enabled;         /* Advanced test gate permits compatibility mode */
+    bool c64_enabled;         /* Advanced test gate permits BASIC's GO64 command */
     bool c64_mode;            /* C128 is currently in its C64 personality */
     u8   c64_ram_bank;        /* RAM bank latched when entering C64 mode */
-    bool c64_request_pending; /* rejected C64-mode transition to report */
-    bool c64_request_active;  /* suppress duplicate reports for one request */
+    bool c64_request_pending; /* rejected GO64 transition to report */
+    bool c64_request_active;  /* suppress duplicate GO64 reports */
     bool col4080; /* 40/80 column key: true = 40-col (default) */
     bool mmio;    /* true when $D500 block is mapped in */
 } Mmu;
@@ -46,11 +46,13 @@ typedef struct {
 void mmu_init(Mmu *mmu);
 void mmu_reset(Mmu *mmu);
 void mmu_write(Mmu *mmu, u16 addr, u8 val);
+/* Apply a $D505 write made by BASIC's GO64 trampoline. Unlike direct hardware
+ * writes, this product-facing command remains behind the Advanced test gate. */
+void mmu_write_go64(Mmu *mmu, u8 val);
 u8   mmu_read(const Mmu *mmu, u16 addr);
 u8   mmu_ffxx_read(const Mmu *mmu, u16 addr);         /* $FF00-$FF04 mirror */
 void mmu_ffxx_write(Mmu *mmu, u16 addr, u8 val);
-/* Consume one rejected $D505 C64-mode request. The emulator deliberately
- * remains in native C128 mode. */
+/* Consume one rejected GO64 request. */
 bool mmu_take_c64_request(Mmu *mmu);
 void mmu_set_c64_enabled(Mmu *mmu, bool enabled);
 bool mmu_is_c64_mode(const Mmu *mmu);

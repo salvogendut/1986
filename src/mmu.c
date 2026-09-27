@@ -36,18 +36,13 @@ void mmu_write(Mmu *mmu, u16 addr, u8 val) {
         case 0x03: mmu->pcr3 = val; break;
         case 0x04: mmu->pcr4 = val; break;
         case 0x05:
-            /* VICE's x128 changes the memory personality immediately when
-             * MCR bit 6 rises. Keep that authentic path behind the explicit
-             * Advanced test gate; otherwise retain the historical rejection. */
+            /* A direct $D505 write is hardware, and native C128 software is
+             * allowed to enter the compatibility personality. BASIC's GO64
+             * product policy is applied separately by mmu_write_go64(). */
             if (val & 0x40) {
-                if (mmu->c64_enabled) {
-                    if (!mmu->c64_mode)
-                        mmu->c64_ram_bank = (mmu->mcr >> 6) & 1;
-                    mmu->c64_mode = true;
-                } else if (!mmu->c64_request_active) {
-                    mmu->c64_request_pending = true;
-                }
-                mmu->c64_request_active = true;
+                if (!mmu->c64_mode)
+                    mmu->c64_ram_bank = (mmu->mcr >> 6) & 1;
+                mmu->c64_mode = true;
             } else {
                 mmu->c64_request_active = false;
                 mmu->c64_mode = false;
@@ -70,6 +65,18 @@ void mmu_write(Mmu *mmu, u16 addr, u8 val) {
         case 0x0E: mmu->vdc_ctrl = val; break;
         default: break;
     }
+}
+
+void mmu_write_go64(Mmu *mmu, u8 val) {
+    if ((val & 0x40) && !mmu->c64_enabled) {
+        if (!mmu->c64_request_active)
+            mmu->c64_request_pending = true;
+        mmu->c64_request_active = true;
+        mmu->c64_mode = false;
+        mmu->mcr5 = (val & 0x3F) | 0x30;
+        return;
+    }
+    mmu_write(mmu, 0xD505, val);
 }
 
 u8 mmu_read(const Mmu *mmu, u16 addr) {

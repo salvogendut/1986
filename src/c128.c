@@ -13,6 +13,22 @@ static bool drive_probe_active(const C128 *c) {
     return c->drive_raw_iec;
 }
 
+/* The C128 KERNAL copies its banked FETCH, STASH and CMPARE primitives to
+ * $02a2-$02cc.  Each temporarily maps KERNAL out through $ff00, performs one
+ * indirect access, then restores the old configuration.  Our raster IRQ is
+ * scheduled at instruction boundaries rather than at an exact VIC cycle;
+ * defer a level IRQ across only these tiny MMU windows so it cannot enter the
+ * common-RAM IRQ trampoline with KERNAL absent and return into overwritten
+ * top shared RAM.  The device flag remains pending and is delivered as soon
+ * as the restoring $ff00 write completes. */
+static bool kernal_bank_access_active(const C128 *c) {
+    u16 pc = c->cpu.pc;
+    if ((c->mem.mmu.mcr & 0x30) == 0) return false;
+    return (pc >= 0x02a8 && pc <= 0x02ab) ||
+           (pc >= 0x02b6 && pc <= 0x02ba) ||
+           (pc >= 0x02c5 && pc <= 0x02c9);
+}
+
 void c128_refresh_vic_bank(C128 *c) {
     /* $D506 bit 6 selects the VIC's 64K RAM bank on a 128K machine; CIA2
      * port A bits 0-1 select the inverted 16K window inside it. Input pins
@@ -134,7 +150,11 @@ void c128_vdc_port_write(C128 *c, u16 addr, u8 val) {
 static void c128_refresh_interrupt_lines(C128 *c) {
     bool irq = cia_irq_line(&c->cia1) || (c->vic.irq_status & 0x80);
     if (mmu_cpu_is_8502(&c->mem.mmu)) {
-        cpu_irq(&c->cpu, irq);
+        bool bank_access = kernal_bank_access_active(c);
+        if (irq && bank_access)
+            cpu_irq_defer(&c->cpu);
+        else
+            cpu_irq(&c->cpu, irq);
         cpu_nmi(&c->cpu, cia_irq_line(&c->cia2) || c->restore_down);
     } else {
         c->z80.pending_irq = irq;
@@ -246,12 +266,26 @@ static void io_write(C128 *c, u16 addr, u8 val) {
     if (!mem_c64_mode(&c->mem) && addr >= 0xD500 && addr < 0xD510) {
         if (c->mem.mmu.mmio) {
             bool was_c64 = mmu_is_c64_mode(&c->mem.mmu);
-            mmu_write(&c->mem.mmu, addr, val);
+            bool d505_c64 = (addr & 0xff) == 0x05 && (val & 0x40);
+            /* BASIC's GO64 routine performs its final $D505 write from the
+             * four-byte trampoline at $0000-$0003. Keep that user command
+             * behind Advanced > C64 Test Mode, but accept direct MMU writes
+             * from native C128 loaders just like the hardware and VICE do. */
+            bool go64_trampoline = d505_c64 && c->cpu.pc == 0x0004;
+            bool missing_c64_roms = d505_c64 &&
+                                    !mem_c64_roms_loaded(&c->mem);
+            if (go64_trampoline || missing_c64_roms)
+                mmu_write_go64(&c->mem.mmu, val);
+            else
+                mmu_write(&c->mem.mmu, addr, val);
             c128_refresh_vic_bank(c);
             if ((addr & 0xff) == 0x06 || (addr & 0xff) == 0x09)
                 cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
-            if (mmu_take_c64_request(&c->mem.mmu))
-                notify_post("C64 MODE IS NOT SUPPORTED - USING NATIVE C128 MODE");
+            if (mmu_take_c64_request(&c->mem.mmu)) {
+                notify_post(missing_c64_roms
+                    ? "C64 COMPATIBILITY ROMS ARE REQUIRED"
+                    : "C64 MODE IS NOT SUPPORTED - USING NATIVE C128 MODE");
+            }
             if (!was_c64 && mmu_is_c64_mode(&c->mem.mmu)) {
                 cpu_set_stack_page(c->mem.ram +
                     ((u32)c->mem.mmu.c64_ram_bank << 16) + 0x100);
@@ -321,6 +355,7 @@ void c128_mem_write(void *ctx, u16 addr, u8 val) {
     if (!mem_c64_mode(&c->mem) && addr >= 0xFF00 && addr <= 0xFF04) {
         mmu_ffxx_write(&c->mem.mmu, addr, val);
         c128_refresh_vic_bank(c);
+        c128_refresh_interrupt_lines(c);
         return;
     }
     if (addr >= 0xD000 && addr < 0xE000 && mem_io_visible(&c->mem)) {
@@ -853,6 +888,10 @@ int c128_frame(C128 *c) {
             int progressed = resumed_line ? c->debug.partial_progressed : 0;
             while (progressed < target &&
                    mmu_cpu_is_8502(&c->mem.mmu)) {
+                /* Re-evaluate at every instruction boundary.  In particular,
+                 * this drops an already-high IRQ line while a KERNAL bank
+                 * primitive has KERNAL ROM temporarily mapped out. */
+                c128_refresh_interrupt_lines(c);
                 /* A full raster-line gap can swallow an IEC bit transition.
                  * In true-drive mode, alternate one 8502 instruction with
                  * the corresponding 1571 clock slice. */
