@@ -126,6 +126,8 @@ void vdc_reset(Vdc *v) {
     v->draw_prime = true;
     v->draw_active = false;
     v->draw_finished = false;
+    v->draw_screen_pending = false;
+    v->draw_attribute_pending = false;
     v->bus_clock = 1;
     v->ready_clock = 0;
     v->clock_scale = 1;
@@ -291,6 +293,17 @@ static int vdc_horizontal_start(const Vdc *v, int cols, int char_width) {
  * from the final register values loses the very effects the VDC was designed
  * to produce. */
 static void vdc_capture_raster(Vdc *v) {
+    /* Sample the coarse address step (R27) and fine pixel shift (R25) at
+     * the same drawing boundary, as in VICE's raster draw handler. Latching
+     * the row-end decision must still happen on the preceding raster, so
+     * an intervening R9 write cannot cancel an already-matched row end. */
+    unsigned stride = v->screen_text_cols + v->regs[27];
+    if (v->draw_screen_pending)
+        v->raster_screen_adr = (u16)(v->raster_screen_adr + stride);
+    if (v->draw_attribute_pending)
+        v->raster_attribute_adr = (u16)(v->raster_attribute_adr + stride);
+    v->draw_screen_pending = false;
+    v->draw_attribute_pending = false;
     if (!v->fb) return;
 
     u32 bg = VDC_COLORS[v->regs[26] & 0x0F];
@@ -409,16 +422,15 @@ static void vdc_advance_drawing(Vdc *v) {
             v->draw_raster = (v->draw_raster + 1u) & 0x1Fu;
         }
     } else if (v->draw_active) {
-        unsigned stride = v->screen_text_cols + v->regs[27];
         bool row_end = v->draw_advance_latched;
         if (row_end) {
             v->draw_raster = 0;
-            v->raster_attribute_adr = (u16)(v->raster_attribute_adr + stride);
+            v->draw_attribute_pending = true;
         } else {
             v->draw_raster = (v->draw_raster + 1u) & 0x1Fu;
         }
         if ((v->regs[25] & 0x80) || row_end)
-            v->raster_screen_adr = (u16)(v->raster_screen_adr + stride);
+            v->draw_screen_pending = true;
         v->draw_advance_latched = v->draw_raster == last;
     } else {
         v->draw_advance_latched = false;

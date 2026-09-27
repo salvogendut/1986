@@ -298,16 +298,50 @@ int main(void) {
         reg_write(timing, 34, 1);
         reg_write(timing, 35, 2);
         timing->ram[0] = 0x80;
-        timing->ram[6] = 0x80;
+        timing->ram[7] = 0x80;
         vdc_set_raster_line(timing, 3); /* row 1, raster 0 begins next */
-        vdc_set_raster_line(timing, 4); /* consumes address 0, stride 6 */
+        vdc_set_raster_line(timing, 4); /* consumes address 0 */
         reg_write(timing, 25, 0x81);    /* must not clear raster 0 */
         reg_write(timing, 27, 1);       /* next stride is 7, not retroactive */
-        vdc_set_raster_line(timing, 5); /* consumes address 6 */
+        vdc_set_raster_line(timing, 5); /* consumes address 7, new stride */
         CHECK(timing->fb[3 * timing->fb_w + 1] == 0xFFFFFF,
               "mid-frame smooth-scroll write preserves prior raster lines");
         CHECK(timing->fb[4 * timing->fb_w + 2] == 0xFFFFFF,
               "bitmap fetch pointer uses each raster's active R27 stride");
+
+        /* RFO's logo swinger pairs R27 coarse shifts with R25 fine shifts
+         * on every raster. A vertical marker should follow a smooth ramp
+         * in both directions, including each fine-scroll wrap, not jump
+         * eight pixels because the coarse shift was sampled one line early. */
+        vdc_reset(timing);
+        memset(timing->ram, 0, sizeof(timing->ram));
+        reg_write(timing, 1, 6);
+        reg_write(timing, 2, 110);
+        reg_write(timing, 6, 2);
+        reg_write(timing, 9, 31);
+        reg_write(timing, 25, 0x87);
+        reg_write(timing, 26, 0xF0);
+        reg_write(timing, 28, 0x10);
+        reg_write(timing, 34, 1);
+        reg_write(timing, 35, 2);
+        timing->raster_screen_adr = 18;
+        for (unsigned i = 0; i < 32; ++i)
+            timing->ram[i * 128 + 20] = 0x80;
+        vdc_set_raster_line(timing, 32);
+        int previous_coarse = 18;
+        for (unsigned i = 0; i < 32; ++i) {
+            unsigned shift = i < 16 ? i : 31 - i;
+            int coarse = 18 + (int)(shift / 8);
+            reg_write(timing, 27, (u8)(128 - 6 + coarse - previous_coarse));
+            reg_write(timing, 25, (u8)(0x87 - shift % 8));
+            vdc_set_raster_line(timing, 33 + i);
+            const u32 *raster = timing->fb + (32 + i) * timing->fb_w;
+            unsigned marker = 64 - shift;
+            CHECK(raster[marker] == 0xFFFFFF &&
+                  raster[marker - 1] == 0 && raster[marker + 1] == 0,
+                  "paired R27/R25 changes move a bitmap marker smoothly across HSS wraps");
+            previous_coarse = coarse;
+        }
 
         /* A reduced display mode occupies its VDC active rectangle within
          * the fixed PAL canvas instead of being stretched edge to edge. */

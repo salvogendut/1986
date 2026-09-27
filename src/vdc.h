@@ -54,6 +54,8 @@ typedef struct {
     bool draw_prime; /* waiting for the first drawing row after frame restart */
     bool draw_active;
     bool draw_finished; /* addresses already reloaded in the bottom border */
+    bool draw_screen_pending; /* sample R27 with the next raster's R25 */
+    bool draw_attribute_pending;
     u64 bus_clock;       /* 8502 clock at the latest VDC port access */
     u64 ready_clock;     /* approximate end of the current VDC operation */
     unsigned clock_scale; /* 8502 clocks per nominal VDC bus clock */
