@@ -7,11 +7,10 @@
  * MOS 8563 VDC (80-column video chip) for the C128.
  *
  * The VDC drives the 640x200 (text) / 640x400 (high-res) display and has its
- * own character set and video RAM. This is a frame-based emulation: the
- * register interface ($D600 index / $D601 data), selectable 16K/64K fitted
- * video RAM, and R28 memory addressing are modelled. Text and standard bitmap
- * modes are rendered once per frame; ready/VBLANK timing is approximate.
- * Interlace and cycle-accurate raster timing are not yet implemented.
+ * own character set and video RAM. The register interface ($D600 index /
+ * $D601 data), selectable 16K/64K fitted video RAM, R28 memory addressing,
+ * and a scanline framebuffer for mid-frame display effects are modelled.
+ * Ready timing and interlace remain approximate.
  */
 
 #define VDC_RAM_SIZE     0x10000   /* 64K of VDC video RAM (C128DCR) */
@@ -41,6 +40,22 @@ typedef struct {
     unsigned row_counter; /* VDC vertical character row, independent of PAL */
     unsigned raster_in_row; /* current raster within the VDC character row */
     bool row_advance_latched; /* previous raster matched R9; advance next line */
+    unsigned vertical_adjust_counter; /* scan lines elapsed in R5 fine adjust */
+    bool vertical_adjust_active; /* between the last row and frame restart */
+    u16 raster_screen_adr; /* latched display address/current fetch pointer */
+    u16 raster_attribute_adr; /* latched attribute address/current row pointer */
+    u8 raster_attribute_offset; /* RFOVDC 8x1 colour-cell address quirk */
+    bool raster_fb_valid; /* at least one scan line has been captured */
+    unsigned raster_output_line; /* physical scanout line since VDC vsync */
+    unsigned vsync_counter; /* scan lines elapsed in the VDC vsync pulse */
+    bool vsync_active;
+    unsigned draw_raster; /* glyph/colour-cell raster, offset by R24 scroll */
+    bool draw_advance_latched; /* drawing row ended on the previous raster */
+    bool draw_prime; /* waiting for the first drawing row after frame restart */
+    bool draw_active;
+    bool draw_finished; /* addresses already reloaded in the bottom border */
+    bool draw_screen_pending; /* sample R27 with the next raster's R25 */
+    bool draw_attribute_pending;
     u64 bus_clock;       /* 8502 clock at the latest VDC port access */
     u64 ready_clock;     /* approximate end of the current VDC operation */
     unsigned clock_scale; /* 8502 clocks per nominal VDC bus clock */
@@ -52,8 +67,10 @@ typedef struct {
 
     u8  ram[VDC_RAM_SIZE];      /* VDC video RAM (byte-addressed model) */
 
-    u32 *fb;                    /* rendered framebuffer (fb_w x fb_h) */
+    u32 *fb;                    /* VDC scanout currently being captured */
+    u32 *display_fb;            /* last complete scanout presented to host */
     int  fb_w, fb_h;
+    bool display_fb_valid;
 
     bool dirty;                 /* force a re-render */
 } Vdc;

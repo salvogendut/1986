@@ -158,6 +158,7 @@ int main(void) {
     CHECK(c128_debug_step(c, C128_DEBUG_CPU_8502) && c->debug.step_pending,
           "active 8502 schedules exactly one instruction");
 
+    free(c->vdc.display_fb);
     free(c->vdc.fb);
     free(c);
     if (!failures) puts("test-c128-keyboard: OK");

@@ -1,6 +1,7 @@
 #include "snapshot.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int failures;
@@ -68,14 +69,19 @@ int main(void) {
     static C128 c;
     const char *path = "/tmp/1986-test-snapshot.vsf";
     const char *vice = "/tmp/1986-test-vice.vsf";
-    c.vdc.fb = (u32 *)(uintptr_t)0x1234;
     c.vdc.fb_w = 800; c.vdc.fb_h = 400;
+    c.vdc.fb = calloc((size_t)c.vdc.fb_w * c.vdc.fb_h, sizeof(*c.vdc.fb));
+    c.vdc.display_fb = calloc((size_t)c.vdc.fb_w * c.vdc.fb_h,
+                              sizeof(*c.vdc.display_fb));
+    u32 *host_vdc_fb = c.vdc.fb;
+    CHECK(c.vdc.fb && c.vdc.display_fb, "allocate host VDC scanout buffers");
     c.mem.ram[0x1234] = 0xA7;
     c.mem.color_ram[0x321] = 0x0E;
     c.mem.mmu.mcr = 0x42; c.mem.mmu.page1 = 0x73;
     c.z80.pc = 0xCAFE; c.z80.af = 0xBEEF; c.z80.iff1 = true;
     c.vic.raster_irq_line = 0x101; c.vic.sprite_enable = 0x81;
     c.vdc.regs[12] = 0x20; c.vdc.ram[0x4567] = 0xCC;
+    c.vdc.draw_screen_pending = true; c.vdc.draw_attribute_pending = true;
     c.cia1.ta_counter = 0x1234; c.cia2.tod[2] = 0x59;
     c.sid.regs[0x18] = 0x0f; c.sid.voice[1].phase = 0x123456;
     c.kbd.matrix[3] = 0x40; c.joyports.mouse_x[1] = 0x91;
@@ -95,6 +101,7 @@ int main(void) {
 
     c.mem.ram[0x1234] = 0; c.mem.color_ram[0x321] = 0;
     c.z80.pc = 0; c.vic.sprite_enable = 0; c.vdc.ram[0x4567] = 0;
+    c.vdc.draw_screen_pending = false; c.vdc.draw_attribute_pending = false;
     c.cia1.ta_counter = 0; c.sid.regs[0x18] = 0; c.total_cycles = 0;
     core_state.pc = 0;
     CHECK(snapshot_load(&c, path) == SNAPSHOT_OK, "load full snapshot");
@@ -104,11 +111,13 @@ int main(void) {
           "Z80 round trip");
     CHECK(c.vic.sprite_enable == 0x81 && c.vdc.ram[0x4567] == 0xCC,
           "VIC and VDC round trip");
+    CHECK(c.vdc.draw_screen_pending && c.vdc.draw_attribute_pending,
+          "pending VDC raster address steps survive a snapshot round trip");
     CHECK(c.cia1.ta_counter == 0x1234 && c.sid.regs[0x18] == 0x0f,
           "CIA and SID round trip");
     CHECK(core_state.pc == 0x9abc && core_state.clock == 0x102030405ULL,
           "8502 core round trip");
-    CHECK(c.vdc.fb == (u32 *)(uintptr_t)0x1234, "host VDC pointer preserved");
+    CHECK(c.vdc.fb == host_vdc_fb, "host VDC pointer preserved");
 
     make_vice_projection(vice);
     core_state.pc = 0xabcd;
@@ -121,6 +130,8 @@ int main(void) {
           "rejected VICE snapshot does not partially mutate the machine");
 
     remove(path); remove(vice);
+    free(c.vdc.display_fb);
+    free(c.vdc.fb);
     if (failures) return 1;
     puts("snapshot tests passed");
     return 0;

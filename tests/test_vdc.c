@@ -32,7 +32,7 @@ static u8 ram_read(Vdc *v, u16 address) {
 
 int main(void) {
     Vdc *v = calloc(1, sizeof(*v));
-    u32 *pixels = calloc(640 * 400, sizeof(*pixels));
+    u32 *pixels = calloc(640 * 480, sizeof(*pixels));
     CHECK(v && pixels, "allocate VDC test fixtures");
     if (!v || !pixels) { free(v); free(pixels); return 1; }
     vdc_init(v);
@@ -87,12 +87,12 @@ int main(void) {
     v->ram[0] = 0x80;
     v->ram[80] = 0x80;
     v->ram[640] = 0x80;
-    v->ram[0x4000] = 0xA4;      /* purple foreground, green background */
-    v->ram[0x4000 + 80] = 0xF0; /* next character row changes colour */
+    v->ram[0x4000] = 0x4A;      /* purple foreground, green background */
+    v->ram[0x4000 + 80] = 0x0F; /* next character row changes colour */
     vdc_render(v, pixels, 640, 200);
     CHECK(pixels[0] == 0xAA00AA && pixels[1] == 0x00AA00 &&
           pixels[640] == 0xAA00AA,
-          "bitmap attributes use high nibble foreground and low nibble background");
+          "bitmap attributes use low nibble foreground and high nibble background");
     CHECK(pixels[8 * 640] == 0xFFFFFF,
           "bitmap attributes advance once per character row");
 
@@ -249,6 +249,25 @@ int main(void) {
               "short R4=$ff VDC frame has its own VBLANK pulse");
         CHECK(short_active_again,
               "short R4=$ff VDC frame resumes active display");
+
+        vdc_reset(timing);
+        reg_write(timing, 4, 30);
+        reg_write(timing, 5, 2);
+        reg_write(timing, 9, 9);
+        host_line = 0;
+        for (int i = 0; i < 311; ++i) {
+            host_line = (host_line + 1u) % 312u;
+            vdc_set_raster_line(timing, host_line);
+        }
+        CHECK(timing->vertical_adjust_active &&
+              timing->vertical_adjust_counter == 1,
+              "R5 adds fine-adjust scanlines after the final character row");
+        host_line = (host_line + 1u) % 312u;
+        vdc_set_raster_line(timing, host_line);
+        CHECK(!timing->vertical_adjust_active && timing->row_counter == 0 &&
+              timing->raster_in_row == 0,
+              "R4/R5/R9 timing produces the complete 312-line VDC frame");
+
         vdc_reset(timing);
         reg_write(timing, 4, 0xFF);
         reg_write(timing, 6, 0xFE);
@@ -260,6 +279,190 @@ int main(void) {
         vdc_set_raster_line(timing, 33);
         CHECK(!(vdc_read_status(timing) & 0x20),
               "latched R9 match advances to the next visible row");
+
+        /* VDC raster effects change smooth scroll and R27 while a frame is
+         * being drawn. Previously either write cleared all earlier lines,
+         * and recomputing raster*stride applied R27 retroactively. */
+        vdc_reset(timing);
+        memset(timing->ram, 0, sizeof(timing->ram));
+        reg_write(timing, 1, 6);
+        reg_write(timing, 2, 115);
+        reg_write(timing, 4, 3);
+        reg_write(timing, 6, 1);
+        reg_write(timing, 9, 2);
+        reg_write(timing, 22, 0x78);
+        reg_write(timing, 23, 2);
+        reg_write(timing, 25, 0x80);
+        reg_write(timing, 26, 0xF0);
+        reg_write(timing, 28, 0x10);
+        reg_write(timing, 34, 1);
+        reg_write(timing, 35, 2);
+        timing->ram[0] = 0x80;
+        timing->ram[7] = 0x80;
+        vdc_set_raster_line(timing, 3); /* row 1, raster 0 begins next */
+        vdc_set_raster_line(timing, 4); /* consumes address 0 */
+        reg_write(timing, 25, 0x81);    /* must not clear raster 0 */
+        reg_write(timing, 27, 1);       /* next stride is 7, not retroactive */
+        vdc_set_raster_line(timing, 5); /* consumes address 7, new stride */
+        CHECK(timing->fb[3 * timing->fb_w + 1] == 0xFFFFFF,
+              "mid-frame smooth-scroll write preserves prior raster lines");
+        CHECK(timing->fb[4 * timing->fb_w + 2] == 0xFFFFFF,
+              "bitmap fetch pointer uses each raster's active R27 stride");
+
+        /* RFO's logo swinger pairs R27 coarse shifts with R25 fine shifts
+         * on every raster. A vertical marker should follow a smooth ramp
+         * in both directions, including each fine-scroll wrap, not jump
+         * eight pixels because the coarse shift was sampled one line early. */
+        vdc_reset(timing);
+        memset(timing->ram, 0, sizeof(timing->ram));
+        reg_write(timing, 1, 6);
+        reg_write(timing, 2, 110);
+        reg_write(timing, 6, 2);
+        reg_write(timing, 9, 31);
+        reg_write(timing, 25, 0x87);
+        reg_write(timing, 26, 0xF0);
+        reg_write(timing, 28, 0x10);
+        reg_write(timing, 34, 1);
+        reg_write(timing, 35, 2);
+        timing->raster_screen_adr = 18;
+        for (unsigned i = 0; i < 32; ++i)
+            timing->ram[i * 128 + 20] = 0x80;
+        vdc_set_raster_line(timing, 32);
+        int previous_coarse = 18;
+        for (unsigned i = 0; i < 32; ++i) {
+            unsigned shift = i < 16 ? i : 31 - i;
+            int coarse = 18 + (int)(shift / 8);
+            reg_write(timing, 27, (u8)(128 - 6 + coarse - previous_coarse));
+            reg_write(timing, 25, (u8)(0x87 - shift % 8));
+            vdc_set_raster_line(timing, 33 + i);
+            const u32 *raster = timing->fb + (32 + i) * timing->fb_w;
+            unsigned marker = 64 - shift;
+            CHECK(raster[marker] == 0xFFFFFF &&
+                  raster[marker - 1] == 0 && raster[marker + 1] == 0,
+                  "paired R27/R25 changes move a bitmap marker smoothly across HSS wraps");
+            previous_coarse = coarse;
+        }
+
+        /* A reduced display mode occupies its VDC active rectangle within
+         * the fixed PAL canvas instead of being stretched edge to edge. */
+        vdc_reset(timing);
+        memset(timing->ram, 0xFF, sizeof(timing->ram));
+        reg_write(timing, 1, 40);
+        reg_write(timing, 2, 84);
+        reg_write(timing, 4, 20);
+        reg_write(timing, 6, 10);
+        reg_write(timing, 9, 7);
+        reg_write(timing, 22, 0x78);
+        reg_write(timing, 23, 7);
+        reg_write(timing, 25, 0x80);
+        reg_write(timing, 26, 0xF0);
+        reg_write(timing, 28, 0x10);
+        reg_write(timing, 34, 1);
+        reg_write(timing, 35, 2);
+        vdc_set_raster_line(timing, 89);
+        vdc_render(timing, pixels, 640, 480);
+        CHECK(pixels[80 * 640 + 320] == 0xFFFFFF,
+              "fixed VDC canvas contains the reduced active picture");
+        CHECK(pixels[80 * 640 + 40] == 0x000000 &&
+              pixels[240 * 640 + 320] == 0x000000,
+              "fixed VDC canvas preserves horizontal and vertical borders");
+
+        /* Host frames and VDC frames need not begin together.  RFOVDC2 uses
+         * a 32-byte, 256-raster picture whose VDC frame wraps shortly after
+         * the host presents.  Clearing the live scanout at that wrap exposed
+         * only the newly drawn top strip. */
+        vdc_reset(timing);
+        memset(timing->ram, 0xFF, sizeof(timing->ram));
+        reg_write(timing, 1, 32);
+        reg_write(timing, 2, 78);
+        reg_write(timing, 4, 155);
+        reg_write(timing, 6, 128);
+        reg_write(timing, 7, 138);
+        reg_write(timing, 9, 1);
+        reg_write(timing, 22, 0x78);
+        reg_write(timing, 23, 1);
+        reg_write(timing, 25, 0x80);
+        reg_write(timing, 26, 0xF0);
+        reg_write(timing, 28, 0x10);
+        reg_write(timing, 34, 1);
+        reg_write(timing, 35, 2);
+        host_line = 0;
+        for (int i = 0; i < 350; ++i) {
+            host_line = (host_line + 1u) % 312u;
+            vdc_set_raster_line(timing, host_line);
+        }
+        vdc_render(timing, pixels, 640, 480);
+        CHECK(pixels[40 * 640 + 320] == 0xFFFFFF &&
+              pixels[400 * 640 + 320] == 0xFFFFFF,
+              "completed VDC scanout survives an asynchronous frame wrap");
+
+        /* Like RFOVDC's FLI picture, change R9 after the current row's end
+         * has already been latched.  The next bitmap raster must get the
+         * next attribute row even though the new R9 no longer matches. */
+        vdc_reset(timing);
+        memset(timing->ram, 0, sizeof(timing->ram));
+        reg_write(timing, 1, 6);
+        reg_write(timing, 2, 115);
+        reg_write(timing, 6, 10);
+        reg_write(timing, 9, 1);
+        reg_write(timing, 23, 1);
+        reg_write(timing, 25, 0xC7);
+        reg_write(timing, 28, 0x10);
+        reg_write(timing, 34, 1);
+        reg_write(timing, 35, 2);
+        timing->raster_attribute_adr = 0x4000;
+        timing->ram[0] = timing->ram[6] = timing->ram[12] = 0x80;
+        timing->ram[0x4000] = 0x4A;
+        timing->ram[0x4006] = 0x2F;
+        vdc_set_raster_line(timing, 3); /* row 1, raster 1: end latched */
+        reg_write(timing, 9, 0);
+        vdc_set_raster_line(timing, 5);
+        CHECK(timing->fb[2 * timing->fb_w + 8] == 0xAA00AA &&
+              timing->fb[2 * timing->fb_w + 9] == 0x00AA00,
+              "scanline bitmap uses low/high attribute nibbles for foreground/background");
+        CHECK(timing->fb[4 * timing->fb_w + 8] == 0xFFFFFF &&
+              timing->fb[4 * timing->fb_w + 9] == 0x0000AA,
+              "latched colour-row advance survives an R9 write between rasters");
+
+        /* Credits use 12-raster text rows and walk R24 through all twelve
+         * offsets.  A one-raster glyph marker must move one output line per
+         * step, and crossing the character boundary must fetch the next
+         * screen code with its matching attribute. */
+        for (unsigned scroll = 0; scroll < 12; ++scroll) {
+            vdc_reset(timing);
+            memset(timing->ram, 0, sizeof(timing->ram));
+            reg_write(timing, 1, 6);
+            reg_write(timing, 2, 115);
+            reg_write(timing, 4, 25);
+            reg_write(timing, 6, 20);
+            reg_write(timing, 7, 23);
+            reg_write(timing, 9, 11);
+            reg_write(timing, 20, 0x40);
+            reg_write(timing, 23, 11);
+            reg_write(timing, 24, scroll);
+            reg_write(timing, 25, 0x47);
+            reg_write(timing, 28, 0x30);
+            reg_write(timing, 34, 1);
+            reg_write(timing, 35, 2);
+            timing->ram[0] = 1;
+            timing->ram[6] = 2;
+            timing->ram[0x4000] = 0x0F;
+            timing->ram[0x4006] = 0x04;
+            timing->ram[0x2010 + 11] = 0x80;
+            timing->ram[0x2020] = 0x40;
+            host_line = 0;
+            for (int i = 0; i < 650; ++i) {
+                host_line = (host_line + 1u) % 312u;
+                vdc_set_raster_line(timing, host_line);
+            }
+            /* Vsync ends 25 lines after row 23: the active area starts at
+             * output y=23.  R24 shifts drawing within that fixed border. */
+            int marker_y = 23 + 11 - (int)scroll;
+            CHECK(timing->display_fb[marker_y * timing->fb_w + 8] == 0xFFFFFF &&
+                  timing->display_fb[(marker_y + 1) * timing->fb_w + 9] == 0x00AA00,
+                  "R24 scrolls text one raster and advances screen/attribute rows together");
+        }
+        free(timing->display_fb);
         free(timing->fb);
         free(timing);
     }
@@ -340,6 +543,7 @@ int main(void) {
     CHECK(v->address_mask == 0x3fff && v->regs[1] == 102,
           "VDC power cycle preserves fitted RAM size and resets registers");
 
+    free(v->display_fb);
     free(v->fb);
     free(v);
     free(pixels);

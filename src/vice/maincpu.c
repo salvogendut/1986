@@ -126,13 +126,17 @@
 #endif
 
 #ifndef STORE_ZERO
+/* The generic C128 bus callback receives the full address, unlike VICE's
+ * machine-specific page-zero handlers which mask it internally.  Apply the
+ * hardware's $FF->$00 wrap here so ($zp,X), ($zp),Y and zero-page indexing do
+ * not accidentally fetch their high byte from stack page $0100. */
 #define STORE_ZERO(addr, value) \
-    (*_mem_write_tab_ptr[0])((WORD)(addr), (BYTE)(value))
+    (*_mem_write_tab_ptr[0])((WORD)((addr) & 0xff), (BYTE)(value))
 #endif
 
 #ifndef LOAD_ZERO
 #define LOAD_ZERO(addr) \
-    (*_mem_read_tab_ptr[0])((WORD)(addr))
+    (*_mem_read_tab_ptr[0])((WORD)((addr) & 0xff))
 #endif
 
 #define LOAD_ADDR(addr) \

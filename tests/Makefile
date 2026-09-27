@@ -143,7 +143,7 @@ test-vdc: test_vdc.c ../src/vdc.c ../src/vdc.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_vdc.c ../src/vdc.c -o $@
 
-test-snapshot: test_snapshot.c ../src/snapshot.c ../src/snapshot.h ../src/tape.c ../src/tape.h
+test-snapshot: test_snapshot.c ../src/snapshot.c ../src/snapshot.h ../src/tape.c ../src/tape.h ../src/c128.h ../src/vdc.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_snapshot.c ../src/snapshot.c ../src/tape.c -lm -o $@
 
