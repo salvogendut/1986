@@ -67,6 +67,10 @@ handoff rather than bypassing it with host traps.
   reminder, notifications, and an MMU-aware 8502/Z80 ML monitor with
   instruction stepping and CPU-tagged breakpoints.
 - Per-drive activity LEDs and optional drive/tape audio and visual monitors.
+- VDC presentation and PPM screenshots retain the full 856-dot PAL raster
+  width on an 856x642 (4:3) surface, preserving single-dot character strokes
+  and borders. Window sizes and scale settings are independent of this
+  backing resolution; smaller GIF output sizes still downscale the image.
 
 ## C128-first product scope
 

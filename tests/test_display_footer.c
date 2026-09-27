@@ -60,7 +60,7 @@ int main(void) {
     display_upload(d);
     display_render_function_keys(d);
     int ok = active_ok && mw == WINDOW_W && mh == WINDOW_H_TOTAL &&
-             vw == VDC_SCREEN_W && vh == VDC_SCREEN_H + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT &&
+             vw == VDC_WINDOW_W && vh == VDC_WINDOW_H + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT &&
              band_pixel(d->renderer, 2, mh - LED_BAR_HEIGHT - 2) &&
              band_pixel(d->vdc_renderer, 2, vh - LED_BAR_HEIGHT - 2) &&
              led_pixel(d->renderer, 2, mh - 2) &&
@@ -73,8 +73,8 @@ int main(void) {
     ok = ok && d->scale == 2 &&
          mw == WINDOW_W * 2 &&
          mh == WINDOW_H * 2 + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT &&
-         vw == VDC_SCREEN_W * 2 &&
-         vh == VDC_SCREEN_H * 2 + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT;
+         vw == VDC_WINDOW_W * 2 &&
+         vh == VDC_WINDOW_H * 2 + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT;
     display_upload(d);
     display_render_function_keys(d);
     ok = ok && band_pixel(d->renderer, 2, mh - LED_BAR_HEIGHT - 2) &&
@@ -89,8 +89,8 @@ int main(void) {
     display_set_one_display(d, false);
     SDL_GetWindowSize(d->vdc_window, &vw, &vh);
     ok = ok && display_active_renderer(d) == d->vdc_renderer &&
-         vw == VDC_SCREEN_W * 2 &&
-         vh == VDC_SCREEN_H * 2 + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT;
+         vw == VDC_WINDOW_W * 2 &&
+         vh == VDC_WINDOW_H * 2 + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT;
     display_set_one_display(d, true);
     display_upload(d);
     display_render_function_keys(d);

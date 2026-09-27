@@ -11,10 +11,9 @@ static const u32 VDC_COLORS[16] = {
     0xAA5500, 0xFFFF55, 0xAAAAAA, 0xFFFFFF
 };
 
-/* VICE exposes the PAL VDC as an 856x288 raster.  1986 keeps its public
- * framebuffer at 640x480, so render into the equivalent fixed raster and
- * scale coordinates into that framebuffer.  Crucially, only the active
- * rectangle is scaled: changing R1/R6 must reveal border rather than stretch
+/* VICE exposes the PAL VDC as an 856x288 raster. Preserve its full horizontal
+ * resolution in the public framebuffer and expand only the vertical axis
+ * for 4:3 presentation. Changing R1/R6 must reveal border rather than stretch
  * a small display mode over the whole window. */
 #define VDC_RASTER_WIDTH  856
 #define VDC_RASTER_HEIGHT 288
@@ -646,8 +645,11 @@ void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
             int sy = y * v->fb_h / fbh;
             const u32 *src = scanout + (size_t)sy * v->fb_w;
             u32 *dst = pixels + (size_t)y * fbw;
-            for (int x = 0; x < fbw; ++x)
-                dst[x] = src[x * v->fb_w / fbw];
+            if (fbw == v->fb_w)
+                memcpy(dst, src, (size_t)fbw * sizeof(*dst));
+            else
+                for (int x = 0; x < fbw; ++x)
+                    dst[x] = src[x * v->fb_w / fbw];
         }
         v->dirty = false;
         return;

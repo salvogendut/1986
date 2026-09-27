@@ -17,6 +17,9 @@ TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config 
 
 all: $(TESTS)
 
+# These tests embed Display/C128 or consume the VDC framebuffer dimensions.
+test-c128-keyboard test-overlay test-vdc test-snapshot: ../src/display.h
+
 test-cpu: test_cpu.c ../src/cpu.c ../src/cpu.h ../src/vice/maincpu.c ../src/vice/interrupt.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_cpu.c ../src/cpu.c ../src/vice/maincpu.c ../src/vice/interrupt.c -lm -o $@

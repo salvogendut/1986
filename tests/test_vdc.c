@@ -32,7 +32,7 @@ static u8 ram_read(Vdc *v, u16 address) {
 
 int main(void) {
     Vdc *v = calloc(1, sizeof(*v));
-    u32 *pixels = calloc(640 * 480, sizeof(*pixels));
+    u32 *pixels = calloc(VDC_SCREEN_W * VDC_SCREEN_H, sizeof(*pixels));
     CHECK(v && pixels, "allocate VDC test fixtures");
     if (!v || !pixels) { free(v); free(pixels); return 1; }
     vdc_init(v);
@@ -360,11 +360,11 @@ int main(void) {
         reg_write(timing, 34, 1);
         reg_write(timing, 35, 2);
         vdc_set_raster_line(timing, 89);
-        vdc_render(timing, pixels, 640, 480);
-        CHECK(pixels[80 * 640 + 320] == 0xFFFFFF,
+        vdc_render(timing, pixels, VDC_SCREEN_W, VDC_SCREEN_H);
+        CHECK(pixels[(VDC_SCREEN_H / 6) * VDC_SCREEN_W + VDC_SCREEN_W / 2] == 0xFFFFFF,
               "fixed VDC canvas contains the reduced active picture");
-        CHECK(pixels[80 * 640 + 40] == 0x000000 &&
-              pixels[240 * 640 + 320] == 0x000000,
+        CHECK(pixels[(VDC_SCREEN_H / 6) * VDC_SCREEN_W + VDC_SCREEN_W / 16] == 0x000000 &&
+              pixels[(VDC_SCREEN_H / 2) * VDC_SCREEN_W + VDC_SCREEN_W / 2] == 0x000000,
               "fixed VDC canvas preserves horizontal and vertical borders");
 
         /* Host frames and VDC frames need not begin together.  RFOVDC2 uses
@@ -391,10 +391,28 @@ int main(void) {
             host_line = (host_line + 1u) % 312u;
             vdc_set_raster_line(timing, host_line);
         }
-        vdc_render(timing, pixels, 640, 480);
-        CHECK(pixels[40 * 640 + 320] == 0xFFFFFF &&
-              pixels[400 * 640 + 320] == 0xFFFFFF,
+        vdc_render(timing, pixels, VDC_SCREEN_W, VDC_SCREEN_H);
+        CHECK(pixels[(VDC_SCREEN_H / 12) * VDC_SCREEN_W + VDC_SCREEN_W / 2] == 0xFFFFFF &&
+              pixels[(VDC_SCREEN_H * 5 / 6) * VDC_SCREEN_W + VDC_SCREEN_W / 2] == 0xFFFFFF,
               "completed VDC scanout survives an asynchronous frame wrap");
+
+        /* UDEKS uses single-dot custom glyphs for its box edges. The old
+         * 856-to-640 nearest-neighbour reduction silently dropped columns,
+         * including the Japanese wordmark's left border. Every dot in the
+         * completed scanout must survive presentation, not just wide fills. */
+        CHECK(VDC_SCREEN_W == timing->fb_w,
+              "public VDC framebuffer retains every horizontal scanout dot");
+        for (int y = 0; y < timing->fb_h; ++y)
+            for (int x = 0; x < timing->fb_w; ++x)
+                timing->display_fb[y * timing->fb_w + x] =
+                    (x & 1) ? 0xFFFF55 : 0x000000;
+        vdc_render(timing, pixels, VDC_SCREEN_W, VDC_SCREEN_H);
+        bool all_dots = true;
+        for (int y = 0; y < VDC_SCREEN_H; ++y)
+            for (int x = 0; x < VDC_SCREEN_W; ++x)
+                if (pixels[y * VDC_SCREEN_W + x] !=
+                    ((x & 1) ? 0xFFFF55u : 0x000000u)) all_dots = false;
+        CHECK(all_dots, "single-dot vertical strokes survive VDC presentation");
 
         /* Like RFOVDC's FLI picture, change R9 after the current row's end
          * has already been latched.  The next bitmap raster must get the

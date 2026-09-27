@@ -22,8 +22,15 @@
 #define FUNCTION_KEY_BAR_HEIGHT 16 /* host shortcut strip above the LED bar */
 #define WINDOW_H_TOTAL      (WINDOW_H + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT)
 
-#define VDC_SCREEN_W        640   /* VDC 8563 text screen width (80 x 8 px) */
-#define VDC_SCREEN_H        480   /* 4:3 display height (25 rows scaled, ~19.2 px/row) */
+/* Preserve every dot of the full PAL scanout, including its borders. The
+ * 640-dot active text area is only part of this raster: squeezing the whole
+ * raster into 640 pixels discards character strokes and one-dot box edges.
+ * Keep a 4:3 presentation surface for SDL, screenshots, GIFs and the browser. */
+#define VDC_SCREEN_W        856
+#define VDC_SCREEN_H        (VDC_SCREEN_W * 3 / 4)
+/* Window magnification is independent of the backing framebuffer size. */
+#define VDC_WINDOW_W        640
+#define VDC_WINDOW_H        480
 
 #define DISPLAY_CRT_SCANLINES_DEFAULT 35
 #define DISPLAY_CRT_BRIGHTNESS_DEFAULT 100
