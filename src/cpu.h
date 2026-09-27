@@ -73,6 +73,8 @@ void cpu_reset(Cpu8502 *cpu);
 int  cpu_step(Cpu8502 *cpu);          /* run one frame of cycles; returns cycles */
 int  cpu_step_budget(Cpu8502 *cpu, int budget); /* run up to budget cycles */
 void cpu_irq(Cpu8502 *cpu, bool level);
+/* Temporarily remove a level IRQ including the core's delayed IRQ latch. */
+void cpu_irq_defer(Cpu8502 *cpu);
 void cpu_nmi(Cpu8502 *cpu, bool level);
 void cpu_pc(Cpu8502 *cpu, u16 pc);
 u64  cpu_cycles(void);                /* total cycles executed (for raster sync) */
