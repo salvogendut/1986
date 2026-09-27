@@ -61,7 +61,11 @@ void display_set_crt(Display *d, bool enabled, int scanlines, int brightness,
 void display_set_scale(Display *d, int scale) { (void)d; (void)scale; }
 void display_set_one_display(Display *d, bool one) { d->one_display = one; }
 void display_set_vdc_active(Display *d, bool active) { d->vdc_active = active; }
+SDL_Window *display_active_window(const Display *d) { (void)d; return NULL; }
 void display_focus_active(Display *d) { (void)d; }
+/* Browser fullscreen is handled by the web UI, not SDL host windows. */
+bool display_set_fullscreen(Display *d, bool enabled) { (void)d; (void)enabled; return false; }
+bool display_toggle_fullscreen(Display *d) { (void)d; return false; }
 SDL_Renderer *display_active_renderer(const Display *d) { (void)d; return NULL; }
 bool display_vdc_window_open(const Display *d) { (void)d; return false; }
 void display_apply_greyscale(Display *d) { (void)d; }
