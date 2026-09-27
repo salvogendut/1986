@@ -32,7 +32,7 @@ static u8 ram_read(Vdc *v, u16 address) {
 
 int main(void) {
     Vdc *v = calloc(1, sizeof(*v));
-    u32 *pixels = calloc(640 * 400, sizeof(*pixels));
+    u32 *pixels = calloc(640 * 480, sizeof(*pixels));
     CHECK(v && pixels, "allocate VDC test fixtures");
     if (!v || !pixels) { free(v); free(pixels); return 1; }
     vdc_init(v);
@@ -249,6 +249,25 @@ int main(void) {
               "short R4=$ff VDC frame has its own VBLANK pulse");
         CHECK(short_active_again,
               "short R4=$ff VDC frame resumes active display");
+
+        vdc_reset(timing);
+        reg_write(timing, 4, 30);
+        reg_write(timing, 5, 2);
+        reg_write(timing, 9, 9);
+        host_line = 0;
+        for (int i = 0; i < 311; ++i) {
+            host_line = (host_line + 1u) % 312u;
+            vdc_set_raster_line(timing, host_line);
+        }
+        CHECK(timing->vertical_adjust_active &&
+              timing->vertical_adjust_counter == 1,
+              "R5 adds fine-adjust scanlines after the final character row");
+        host_line = (host_line + 1u) % 312u;
+        vdc_set_raster_line(timing, host_line);
+        CHECK(!timing->vertical_adjust_active && timing->row_counter == 0 &&
+              timing->raster_in_row == 0,
+              "R4/R5/R9 timing produces the complete 312-line VDC frame");
+
         vdc_reset(timing);
         reg_write(timing, 4, 0xFF);
         reg_write(timing, 6, 0xFE);
@@ -260,6 +279,58 @@ int main(void) {
         vdc_set_raster_line(timing, 33);
         CHECK(!(vdc_read_status(timing) & 0x20),
               "latched R9 match advances to the next visible row");
+
+        /* VDC raster effects change smooth scroll and R27 while a frame is
+         * being drawn. Previously either write cleared all earlier lines,
+         * and recomputing raster*stride applied R27 retroactively. */
+        vdc_reset(timing);
+        memset(timing->ram, 0, sizeof(timing->ram));
+        reg_write(timing, 1, 6);
+        reg_write(timing, 2, 115);
+        reg_write(timing, 4, 3);
+        reg_write(timing, 6, 1);
+        reg_write(timing, 9, 2);
+        reg_write(timing, 22, 0x78);
+        reg_write(timing, 23, 2);
+        reg_write(timing, 25, 0x80);
+        reg_write(timing, 26, 0xF0);
+        reg_write(timing, 28, 0x10);
+        reg_write(timing, 34, 1);
+        reg_write(timing, 35, 2);
+        timing->ram[0] = 0x80;
+        timing->ram[6] = 0x80;
+        vdc_set_raster_line(timing, 3); /* row 1, raster 0 begins next */
+        vdc_set_raster_line(timing, 4); /* consumes address 0, stride 6 */
+        reg_write(timing, 25, 0x81);    /* must not clear raster 0 */
+        reg_write(timing, 27, 1);       /* next stride is 7, not retroactive */
+        vdc_set_raster_line(timing, 5); /* consumes address 6 */
+        CHECK(timing->fb[142 * timing->fb_w + 1] == 0xFFFFFF,
+              "mid-frame smooth-scroll write preserves prior raster lines");
+        CHECK(timing->fb[143 * timing->fb_w + 2] == 0xFFFFFF,
+              "bitmap fetch pointer uses each raster's active R27 stride");
+
+        /* A reduced display mode occupies its VDC active rectangle within
+         * the fixed PAL canvas instead of being stretched edge to edge. */
+        vdc_reset(timing);
+        memset(timing->ram, 0xFF, sizeof(timing->ram));
+        reg_write(timing, 1, 40);
+        reg_write(timing, 2, 84);
+        reg_write(timing, 4, 20);
+        reg_write(timing, 6, 10);
+        reg_write(timing, 9, 7);
+        reg_write(timing, 22, 0x78);
+        reg_write(timing, 23, 7);
+        reg_write(timing, 25, 0x80);
+        reg_write(timing, 26, 0xF0);
+        reg_write(timing, 28, 0x10);
+        reg_write(timing, 34, 1);
+        reg_write(timing, 35, 2);
+        vdc_set_raster_line(timing, 89);
+        vdc_render(timing, pixels, 640, 480);
+        CHECK(pixels[240 * 640 + 320] == 0xFFFFFF,
+              "fixed VDC canvas contains the reduced active picture");
+        CHECK(pixels[240 * 640 + 40] == 0x000000 && pixels[40] == 0x000000,
+              "fixed VDC canvas preserves horizontal and vertical borders");
         free(timing->fb);
         free(timing);
     }

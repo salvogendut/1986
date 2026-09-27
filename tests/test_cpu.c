@@ -92,6 +92,29 @@ int main(void) {
           "JSR writes relocated stack page, not physical page one");
     cpu_set_stack_page(&ram[0x0100]);
 
+    /* Indirect pointers at the end of zero page wrap their high byte through
+     * $00, not into stack page $0100.  Both indexed-indirect forms are used
+     * by real-world C128 decompressors. */
+    load(0x0A00, (u8[]){
+        0xA0, 0x00,             /* LDY #0 */
+        0xB1, 0xFF,             /* LDA ($FF),Y */
+        0x8D, 0x00, 0x02,       /* STA $0200 */
+        0xA2, 0x01,             /* LDX #1 */
+        0xA1, 0xFE,             /* LDA ($FE,X) */
+        0x8D, 0x01, 0x02,       /* STA $0201 */
+        0x4C, 0x00, 0x0A        /* JMP $0A00 */
+    }, 17);
+    ram[0x00FF] = 0x34;
+    ram[0x0000] = 0x12;
+    ram[0x0100] = 0x56;         /* catches the incorrect non-wrapping path */
+    ram[0x1234] = 0xA5;
+    ram[0x5634] = 0x5A;
+    ram[0xFFFC] = 0x00; ram[0xFFFD] = 0x0A;
+    cpu_reset(&cpu);
+    cpu_step_budget(&cpu, 40);
+    CHECK(ram[0x0200] == 0xA5, "($FF),Y pointer wraps in zero page");
+    CHECK(ram[0x0201] == 0xA5, "($FE,X) pointer wraps in zero page");
+
     /* Deferring a level IRQ must also clear the VICE core's delayed IRQ
      * latch.  Otherwise the interrupt can still be taken for a few cycles
      * after its external line has been removed. */

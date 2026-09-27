@@ -7,11 +7,10 @@
  * MOS 8563 VDC (80-column video chip) for the C128.
  *
  * The VDC drives the 640x200 (text) / 640x400 (high-res) display and has its
- * own character set and video RAM. This is a frame-based emulation: the
- * register interface ($D600 index / $D601 data), selectable 16K/64K fitted
- * video RAM, and R28 memory addressing are modelled. Text and standard bitmap
- * modes are rendered once per frame; ready/VBLANK timing is approximate.
- * Interlace and cycle-accurate raster timing are not yet implemented.
+ * own character set and video RAM. The register interface ($D600 index /
+ * $D601 data), selectable 16K/64K fitted video RAM, R28 memory addressing,
+ * and a scanline framebuffer for mid-frame display effects are modelled.
+ * Ready timing and interlace remain approximate.
  */
 
 #define VDC_RAM_SIZE     0x10000   /* 64K of VDC video RAM (C128DCR) */
@@ -41,6 +40,13 @@ typedef struct {
     unsigned row_counter; /* VDC vertical character row, independent of PAL */
     unsigned raster_in_row; /* current raster within the VDC character row */
     bool row_advance_latched; /* previous raster matched R9; advance next line */
+    unsigned vertical_adjust_counter; /* scan lines elapsed in R5 fine adjust */
+    bool vertical_adjust_active; /* between the last row and frame restart */
+    u16 raster_screen_adr; /* latched display address/current fetch pointer */
+    u16 raster_attribute_adr; /* latched attribute address/current row pointer */
+    u8 raster_attribute_offset; /* RFOVDC 8x1 colour-cell address quirk */
+    bool raster_clear_pending; /* beginning a new VDC frame: clear old lines */
+    bool raster_fb_valid; /* at least one scan line has been captured */
     u64 bus_clock;       /* 8502 clock at the latest VDC port access */
     u64 ready_clock;     /* approximate end of the current VDC operation */
     unsigned clock_scale; /* 8502 clocks per nominal VDC bus clock */
