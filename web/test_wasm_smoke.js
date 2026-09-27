@@ -10,7 +10,8 @@ create1986({
 }).then(Module=>{
   assert.equal(Module._poc_init(),0);
   assert.equal(Module._poc_display(),80);
-  assert.equal(Module._poc_width(),640);
+  assert.equal(Module._poc_width(),856);
+  assert.equal(Module._poc_height(),642);
   for(let i=0;i<10;i++)Module._poc_step();
   assert(Module._poc_pixels()>0);
   assert(Module._poc_audio_avail()>0);

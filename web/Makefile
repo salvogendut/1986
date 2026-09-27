@@ -21,6 +21,11 @@ WEB_ASSETS := index.html styles.css theme-c128-dcr.css theme-retro-crt.css \
 
 all: $(DIST_DIR)/1986.js $(addprefix $(DIST_DIR)/,$(WEB_ASSETS)) $(DIST_DIR)/brand-1986.png
 
+# Framebuffer dimensions are embedded in Display/C128 and their consumers.
+# Rebuild every core object when that layout changes, including old builds
+# which predate this dependency.
+$(OBJS): ../src/display.h
+
 $(DIST_DIR)/1986.js: $(OBJS) $(ROM_FILES) | $(DIST_DIR)
 	$(EMCC) $(CFLAGS) $(OBJS) -o $@ -lm \
 	  -sMODULARIZE -sEXPORT_NAME=create1986 -sALLOW_MEMORY_GROWTH=1 \

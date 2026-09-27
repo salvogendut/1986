@@ -110,8 +110,8 @@ void display_set_scale(Display *d, int scale) {
         SDL_SetWindowSize(d->window, WINDOW_W * d->scale,
                           WINDOW_H * d->scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT);
     if (d->vdc_window)
-        SDL_SetWindowSize(d->vdc_window, VDC_SCREEN_W * d->scale,
-                          VDC_SCREEN_H * d->scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT);
+        SDL_SetWindowSize(d->vdc_window, VDC_WINDOW_W * d->scale,
+                          VDC_WINDOW_H * d->scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT);
 }
 
 /* Create or destroy the separate VDC (80-column) window used in two-window
@@ -129,8 +129,8 @@ void display_set_one_display(Display *d, bool one) {
     }
     if (d->vdc_window) return;   /* already open */
     d->vdc_window = SDL_CreateWindow("1986 — VDC 8563 (80-column)",
-                                     VDC_SCREEN_W * d->scale,
-                                     VDC_SCREEN_H * d->scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT,
+                                     VDC_WINDOW_W * d->scale,
+                                     VDC_WINDOW_H * d->scale + FUNCTION_KEY_BAR_HEIGHT + LED_BAR_HEIGHT,
                                      SDL_WINDOW_RESIZABLE);
     if (!d->vdc_window) {
         fprintf(stderr, "SDL_CreateWindow (VDC): %s\n", SDL_GetError());
