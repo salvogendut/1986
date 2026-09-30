@@ -250,7 +250,16 @@ cycle-level 1571 implementation without conflating their interfaces.
 - [ ] Complete true-drive mode: WD1770/FDC2, fast serial, accurate
   mechanism timing, and broader D71 validation.
 - [x] Media persists a per-drive hardware type when real-drive mode is selected;
-  1581 is shown as future hardware rather than confused with D81 image support.
+  the hardware model is distinct from disk-image format support.
+- [x] First standalone 1581 slice (#152): shared independent NMOS core at
+  2 MHz, 8 KiB RAM/32 KiB ROM mapping, CIA timers/IRQ and IEC pin interface,
+  read-only WD1770 decoded D81 sector reads; private DOS-ROM startup and
+  read-job tests pass.
+- [x] Real 1581 shared IEC/scheduler integration for either drive, ROM discovery,
+  Media selection, per-drive monitors and drive warp; native `DIRECTORY` and
+  `BLOAD`, mixed 1571/1581 pairs, disk replacement and write protection tested.
+- [ ] Add safe 1581 sector writes and validate host `SAVE`; follow with burst
+  serial, 8520 TOD and raw MFM tracks (#152).
 - [x] Separate, live Drive 1/Drive 2 activity LEDs in both display windows
   (#92); real-drive pulses follow motor, seek, and GCR reads (#100).
 - [x] Independent saved, default-off sample-based audio and activity waveform

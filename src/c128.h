@@ -12,6 +12,7 @@
 #include "joyport.h"
 #include "drive.h"
 #include "drive1571cr.h"
+#include "drive1581.h"
 #include "iec_bus.h"
 #include "drive_monitor.h"
 #include "tape.h"
@@ -87,6 +88,8 @@ typedef struct {
     Drive   drive2;
     Drive1571Cr integrated_drive; /* independent ROM-backed 1571CR machine */
     Drive1571Cr second_real_drive; /* optional second ROM-backed 1571CR */
+    Drive1581 real1581[2];
+    int real_drive_type[2]; /* running hardware; config changes require restart */
     IecBus  iec_bus;     /* physical slow IEC pins, separate from VirtualDrive */
     DriveMonitor drive_monitor; /* host-only LED and audio presentation */
     DriveMonitor drive2_monitor;
@@ -97,7 +100,7 @@ typedef struct {
     unsigned drive_media_generation;
     unsigned drive2_media_generation;
     bool drive_raw_iec; /* opt-in diagnostic: KERNAL serial ROM is unpatched */
-    bool drive2_raw_iec; /* second physical 1571 joined to the same IEC bus */
+    bool drive2_raw_iec; /* second physical drive joined to the same IEC bus */
     Config *cfg;
     bool    paused;
     C128DebugState debug;
@@ -147,6 +150,13 @@ C128DebugStopReason c128_debug_take_stop(C128 *c, C128DebugCpu *cpu, u16 *addres
 
 /* Host-only automatic warp request; never changes emulated clock ratios. */
 bool c128_drive_warp_active(const C128 *c);
+/* Choose loaded ROM backends at startup, before installing KERNAL traps.
+ * If any enabled hardware ROM is missing, fall back to virtual as a pair. */
+bool c128_configure_real_drives(C128 *c);
+/* Runtime second-device gate. Does not change the frozen hardware type.
+ * Returns false only when disconnect would lose an unsaved write. Missing
+ * ROMs leave the device absent, allowing preferences to be set for restart. */
+bool c128_enable_second_real_drive(C128 *c, bool enabled);
 
 /* IEC serial-bus forwarding (installed via cpu_install_iec_traps). */
 void c128_iec_attention(void *ctx, u8 b);

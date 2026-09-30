@@ -1,6 +1,7 @@
 #include "iec_bus.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static void trace(const IecBus *bus, char source) {
     static unsigned printed;
@@ -10,8 +11,9 @@ static void trace(const IecBus *bus, char source) {
             bus->atn_high, bus->clock_high, bus->data_high);
 }
 
-static bool data_release(u8 pins, bool atn_high) {
+static bool data_release(u8 pins, bool atn_high, bool cia1581) {
     bool atna_high = (pins & 0x10) != 0;
+    if (cia1581) return !(pins & 0x02) && (!atna_high || atn_high);
     return !(pins & 0x02) && (atna_high != atn_high);
 }
 
@@ -40,9 +42,9 @@ static void update(IecBus *bus) {
     /* VICE passes the inverted CIA2 output to iec_update_cpu_bus(), so
      * its cpu_bus ATN bit represents the physical ATN-high level. */
     bus->data_high = !(bus->host_pa & 0x20) &&
-                     data_release(bus->drive_pb, bus->atn_high) &&
+                     data_release(bus->drive_pb, bus->atn_high, bus->input_hook[0] != NULL) &&
                      (!bus->drive2_enabled ||
-                      data_release(bus->drive2_pb, bus->atn_high));
+                      data_release(bus->drive2_pb, bus->atn_high, bus->input_hook[1] != NULL));
     bus->line_changes += (old_atn != bus->atn_high) +
                          (old_clock != bus->clock_high) +
                          (old_data != bus->data_high);
@@ -54,9 +56,16 @@ static void update(IecBus *bus) {
     if (bus->drive2_enabled)
         update_drive_inputs(bus->drive2_via, bus->drive2_unit,
                             bus->atn_high, bus->clock_high, bus->data_high);
+    if (bus->input_hook[0])
+        bus->input_hook[0](bus->input_ctx[0], bus->drive_unit,
+                          bus->atn_high, bus->clock_high, bus->data_high);
+    if (bus->drive2_enabled && bus->input_hook[1])
+        bus->input_hook[1](bus->input_ctx[1], bus->drive2_unit,
+                          bus->atn_high, bus->clock_high, bus->data_high);
 }
 
 void iec_bus_init(IecBus *bus, Via6522 *drive_via) {
+    memset(bus, 0, sizeof(*bus));
     bus->drive_via = drive_via;
     bus->drive_unit = 8;
     bus->drive2_via = NULL;
@@ -73,12 +82,31 @@ void iec_bus_set_unit(IecBus *bus, unsigned unit) {
 
 void iec_bus_attach_second(IecBus *bus, Via6522 *drive_via, unsigned unit) {
     bus->drive2_via = drive_via;
+    bus->input_hook[1] = NULL;
+    bus->input_ctx[1] = NULL;
     if (unit >= 8 && unit <= 11) bus->drive2_unit = unit;
     update(bus);
 }
 
+void iec_bus_attach_first(IecBus *bus, Via6522 *via, unsigned unit) {
+    bus->drive_via = via;
+    bus->input_hook[0] = NULL;
+    bus->input_ctx[0] = NULL;
+    iec_bus_set_unit(bus, unit);
+}
+
+void iec_bus_attach_1581(IecBus *bus, unsigned slot, IecBusInputHook hook,
+                         void *ctx, unsigned unit) {
+    if (slot > 1 || !hook || unit < 8 || unit > 11) return;
+    bus->input_hook[slot] = hook;
+    bus->input_ctx[slot] = ctx;
+    if (slot) { bus->drive2_via = NULL; bus->drive2_unit = unit; }
+    else { bus->drive_via = NULL; bus->drive_unit = unit; }
+    update(bus);
+}
+
 void iec_bus_enable_second(IecBus *bus, bool enabled) {
-    bus->drive2_enabled = enabled && bus->drive2_via != NULL;
+    bus->drive2_enabled = enabled && (bus->drive2_via || bus->input_hook[1]);
     update(bus);
 }
 

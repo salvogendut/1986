@@ -236,12 +236,20 @@ over slow IEC. Normal D64/D71 GCR sector reads and writes work, including
 BASIC `SAVE`; writes atomically replace the host disk image. Keep a backup of
 valuable disks. Read-only media and external host edits are protected, and
 Media refuses an eject/replacement while a write remains unsaved. The real
-drive does not yet support nonstandard raw tracks, burst serial, or the 1581
-hardware backend. With Second Drive enabled and its Media hardware type also
-set to 1571CR, both ROM-backed drives share one IEC bus at separate addresses;
-each has its own D64/D71 image, LED, and write protection. If either selected
-hardware type is 1581, both drives use the fast virtual backend after restart;
-mixed physical and virtual IEC is not available. Advanced has independent audio
+drive does not yet support nonstandard raw tracks or burst serial.
+
+For a real **1581**, choose **1581 (D81 read-only)** in Media, supply a 32 KiB
+`dos1581.bin` (or `dos1581-318045-02.bin`) in the ROM directory, and restart.
+`DIRECTORY` and program loading run through the drive's DOS ROM. This backend
+is currently read-only: writes report DOS write protection. Use D81 images;
+other formats leave its mechanism empty with an incompatible-media warning.
+
+With Second Drive enabled, 1571CR and 1581 models can be combined in either
+slot, including two of either model. Both share one IEC bus at distinct
+addresses, with separate images and LEDs. Model/address changes require
+restart. If an enabled device's ROM is missing, both drives fall back to the
+fast virtual backend; mixed physical and virtual IEC is not available.
+Advanced has independent audio
 and visual drive monitors, both Off by default; the visual
 scope sits above the function-key footer and shows Drive 2's track above
 Drive 1's. The audio monitor mixes both drives' mechanism sounds.

@@ -336,9 +336,24 @@ int main(int argc, char **argv) {
             fprintf(stderr, "1986: loaded 1571CR DOS ROM from '%s'\n", drive_rom_path);
             if (!drive1571cr_load_rom(&c.second_real_drive, drive_rom_path))
                 fprintf(stderr, "1986: could not load second 1571CR DOS ROM\n");
-        } else if (cfg.real_disk_drive) {
+        } else if (cfg.real_disk_drive && (cfg.drive_type == 1571 ||
+                   (cfg.second_drive && cfg.drive2_type == 1571))) {
             fprintf(stderr, "1986: 1571CR DOS ROM missing/invalid in '%s' (32 KiB required)\n", dir);
         }
+        static const char *names1581[] = {"dos1581.bin", "dos1581-318045-02.bin"};
+        for (unsigned i = 0; i < sizeof(names1581) / sizeof(names1581[0]); ++i) {
+            int npath = snprintf(drive_rom_path, sizeof(drive_rom_path), "%s/%s", dir, names1581[i]);
+            if (npath > 0 && (size_t)npath < sizeof(drive_rom_path) &&
+                drive1581_load_rom(&c.real1581[0], drive_rom_path)) {
+                if (!drive1581_load_rom(&c.real1581[1], drive_rom_path))
+                    fprintf(stderr, "1986: could not load second 1581 DOS ROM\n");
+                fprintf(stderr, "1986: loaded 1581 DOS ROM from '%s'\n", drive_rom_path);
+                break;
+            }
+        }
+        if (!c.real1581[0].rom_loaded && cfg.real_disk_drive &&
+            (cfg.drive_type == 1581 || (cfg.second_drive && cfg.drive2_type == 1581)))
+            fprintf(stderr, "1986: 1581 DOS ROM missing/invalid in '%s' (dos1581.bin, 32 KiB required)\n", dir);
         if (cfg.disk_path[0] && drive_attach_disk(&c.drive, cfg.disk_path) != 0)
             fprintf(stderr, "1986: could not attach drive media '%s'\n", cfg.disk_path);
         if (cfg.disk2_path[0] && drive_attach_disk(&c.drive2, cfg.disk2_path) != 0)
@@ -380,6 +395,7 @@ int main(int argc, char **argv) {
     /* Power up after ROMs are loaded so the reset vector comes from the
      * KERNAL and volatile RAM receives its hardware startup pattern. */
     c.col_mode_80 = cfg.col_mode_80;
+    c128_configure_real_drives(&c);
     c128_power_cycle(&c);
     display_focus_active(&c.display);
 
@@ -395,18 +411,15 @@ int main(int argc, char **argv) {
         .take_status = c128_iec_take_status,
         .c64_mode = iec_c64_mode,
     };
-    /* The ROM-level serial path cannot mix a physical 1571 with a trapped
-     * virtual 1581. Fall back as a pair until that hardware is implemented. */
-    c.drive_raw_iec = cfg.real_disk_drive && cfg.drive_type == 1571 &&
-                      c.integrated_drive.rom_loaded &&
-                      (!cfg.second_drive || (cfg.drive2_type == 1571 &&
-                                             c.second_real_drive.rom_loaded));
-    c.drive2_raw_iec = c.drive_raw_iec && cfg.second_drive &&
-                       cfg.drive2_type == 1571 && c.second_real_drive.rom_loaded;
-    iec_bus_enable_second(&c.iec_bus, c.drive2_raw_iec);
-    if (c.drive_raw_iec)
-        fprintf(stderr, "1986: %d 1571CR DOS ROM drive(s) on line-level IEC\n",
-                c.drive2_raw_iec ? 2 : 1);
+    if (c.drive_raw_iec) {
+        fprintf(stderr, "1986: drive 1: %d on line-level IEC #%u%s\n",
+                c.real_drive_type[0], c.iec_bus.drive_unit,
+                c.real_drive_type[0] == 1581 ? " (D81 read-only)" : "");
+        if (c.drive2_raw_iec)
+            fprintf(stderr, "1986: drive 2: %d on line-level IEC #%u%s\n",
+                    c.real_drive_type[1], c.iec_bus.drive2_unit,
+                    c.real_drive_type[1] == 1581 ? " (D81 read-only)" : "");
+    }
     else {
         if (cfg.real_disk_drive)
             fprintf(stderr, "1986: real-drive backend unavailable; using fast virtual drive\n");

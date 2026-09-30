@@ -68,6 +68,19 @@ int main(void) {
           "live real backend remains authoritative until restart");
     c.integrated_drive.gcr.motor = false;
     CHECK(!c128_drive_warp_active(&c), "reset/stopped drive restores normal speed");
+    c.real_drive_type[0] = 1581;
+    c.real1581[0].fdc.motor = true;
+    c.real1581[0].led = true;
+    CHECK(c128_drive_warp_active(&c), "1581 motor and LED request warp");
+    c.real1581[0].led = false;
+    CHECK(!c128_drive_warp_active(&c), "1581 idle motor spin-down stays paced");
+    c.real1581[0].fdc.status = WD1770_BUSY;
+    CHECK(c128_drive_warp_active(&c), "1581 controller operation is busy without LED");
+    c.real1581[0].fdc.motor = false;
+    c.real_drive_type[1] = 1581;
+    c.drive2_raw_iec = true;
+    c.real1581[1].fdc.motor = c.real1581[1].led = true;
+    CHECK(c128_drive_warp_active(&c), "second 1581 requests warp independently");
     puts("test-drive-warp: OK");
     return 0;
 }
