@@ -41,7 +41,7 @@ and icons;
 the Windows executable embeds the icon, and the macOS app includes an `.icns`.
 
 The packages contain no copyrighted Commodore machine ROMs. Supply your own
-ROM images as described in [`USAGE.md`](USAGE.md). Portable Windows and macOS
+ROM images listed in [`ROMS.md`](ROMS.md). Portable Windows and macOS
 bundles look for a `roms` directory next to the executable. Installed Linux
 packages use `/usr/share/1986/roms` by default (or a configured ROM path).
 
@@ -56,4 +56,4 @@ SDL_VIDEODRIVER=dummy ./1986
 ## Machine ROMs
 
 The emulator runs and shows its test pattern without ROMs. To boot the KERNAL
-and BASIC, supply the machine ROMs (see [`USAGE.md`](USAGE.md)).
+and BASIC, supply the machine ROMs (see [`ROMS.md`](ROMS.md)).

@@ -5,10 +5,23 @@
  * drive/iec/{wd1770,fdd}.c. Sector storage stays in our DiskImage layer.
  * A D81 cylinder contains 2 heads x 10 physical 512-byte sectors, exposed
  * to CBM DOS as forty 256-byte blocks. VICE's 1581 head polarity is inverted. */
-enum { IDLE, PREPARE, STEP, VERIFY, SEARCH, TRANSFER, CRC_END };
+enum { IDLE, PREPARE, STEP, VERIFY, SEARCH, TRANSFER, CRC_END, WRITE_FIRST };
 static const unsigned step_cycles[4] = {12000, 24000, 40000, 60000};
 
 static bool ready(const Wd1770 *f) { return f->image && f->motor; }
+static bool writing(const Wd1770 *f) { return (f->command & 0xe0) == 0xa0; }
+
+bool wd1770_write_protected(const Wd1770 *f) {
+    return !f->image || !f->image->writable || f->write_error == DISK_SAVE_IO_ERROR;
+}
+
+static void write_failed(Wd1770 *f, DiskSaveResult error) {
+    /* A host failure inhibits further writes until reset/media replacement.
+     * Subsequent DOS retries see protection but must not hide its cause. */
+    if (f->write_error == DISK_SAVE_IO_ERROR && error == DISK_SAVE_WRITE_PROTECT) return;
+    if (f->write_error != error) f->write_error_reported = false;
+    f->write_error = error;
+}
 
 static void finish(Wd1770 *f, u8 error) {
     f->status = (u8)((f->status & ~WD1770_BUSY) | error);
@@ -25,7 +38,7 @@ void wd1770_init(Wd1770 *f) {
 }
 
 void wd1770_reset(Wd1770 *f) {
-    const DiskImage *image = f->image;
+    DiskImage *image = f->image;
     unsigned head = f->head_track, side = f->side;
     bool changed = f->disk_changed;
     wd1770_init(f);
@@ -35,16 +48,18 @@ void wd1770_reset(Wd1770 *f) {
     f->disk_changed = changed;
 }
 
-bool wd1770_attach(Wd1770 *f, const DiskImage *image) {
+bool wd1770_attach(Wd1770 *f, DiskImage *image) {
     if (image && (image->format != DISK_FORMAT_D81 || !image->data ||
                   image->tracks != 80 || image->size != 819200)) return false;
-    /* Eject/insert aborts an in-flight read; no buffered bytes may leak from
-     * the previous disk after its owner frees it. */
+    /* Eject/insert aborts an in-flight transfer; neither buffered reads nor
+     * incomplete writes may leak into the replacement image. */
     if (f->phase != IDLE) finish(f, WD1770_RNF);
     f->status &= (u8)~WD1770_DRQ;
     f->image = image;
     f->disk_changed = true;
     f->position = f->length = 0;
+    f->write_error = DISK_SAVE_OK;
+    f->write_error_reported = false;
     return true;
 }
 
@@ -58,7 +73,8 @@ void wd1770_set_motor(Wd1770 *f, bool on) {
 
 void wd1770_set_side(Wd1770 *f, unsigned side) {
     side &= 1;
-    if (f->side != side && (f->phase == TRANSFER || f->phase == CRC_END)) {
+    if (f->side != side && (f->phase == TRANSFER || f->phase == CRC_END ||
+                            f->phase == WRITE_FIRST)) {
         f->status &= (u8)~WD1770_DRQ;
         finish(f, WD1770_RNF);
     }
@@ -69,7 +85,8 @@ static u8 status(const Wd1770 *f) {
     u8 value = f->status;
     if (f->type1) {
         value &= (u8)~(WD1770_DRQ | WD1770_LOST);
-        value |= WD1770_WP;
+        value &= (u8)~WD1770_WP;
+        if (wd1770_write_protected(f)) value |= WD1770_WP;
         if (f->head_track == 0) value |= 0x04; /* track-zero sensor */
         if (ready(f) && f->rotation < 4000) value |= 0x02; /* index */
     }
@@ -160,11 +177,13 @@ static void event(Wd1770 *f) {
                 }
                 f->phase = STEP;
                 f->delay = f->steps ? step_cycles[f->command & 3] : 1;
-            } else if ((f->command & 0xe0) == 0xa0 ||
-                       (f->command & 0xf0) == 0xf0) {
-                finish(f, WD1770_WP); /* deliberate read-only first slice */
-            } else if ((f->command & 0xf0) == 0xe0) {
-                finish(f, WD1770_RNF); /* raw track read not implemented */
+            } else if ((writing(f) || (f->command & 0xf0) == 0xf0) &&
+                       wd1770_write_protected(f)) {
+                write_failed(f, DISK_SAVE_WRITE_PROTECT);
+                finish(f, WD1770_WP);
+            } else if ((f->command & 0xe0) == 0xe0 ||
+                       (writing(f) && (f->command & 1))) {
+                finish(f, WD1770_RNF); /* raw tracks/deleted marks need MFM storage */
             } else search(f);
             break;
         case STEP:
@@ -204,6 +223,16 @@ static void event(Wd1770 *f) {
                 f->buffer[5] = (u8)crc;
                 f->sector = f->buffer[0]; /* WD read-address side effect */
                 f->length = 6;
+            } else if (writing(f)) {
+                if (wd1770_write_protected(f)) {
+                    write_failed(f, DISK_SAVE_WRITE_PROTECT);
+                    finish(f, WD1770_WP);
+                    break;
+                }
+                f->write_track = f->head_track + 1;
+                f->write_side = f->side ^ 1;
+                f->write_sector = f->sector;
+                f->length = 512;
             } else {
                 int block = (int)((f->side ^ 1) * 20 + (f->sector - 1) * 2);
                 if (disk_image_read_sector(f->image, (int)f->head_track + 1,
@@ -216,11 +245,38 @@ static void event(Wd1770 *f) {
                 f->length = 512;
             }
             f->position = 0;
-            f->phase = TRANSFER;
-            f->delay = WD1770_BYTE_CYCLES;
+            f->phase = writing(f) ? WRITE_FIRST : TRANSFER;
+            f->delay = WD1770_BYTE_CYCLES * (writing(f) ? 2 : 1);
             break;
         }
+        case WRITE_FIRST:
+            /* VICE requests the first byte two byte-times after the ID,
+             * then allows nine byte-times before declaring lost data. */
+            f->status |= WD1770_DRQ;
+            f->phase = TRANSFER;
+            f->delay = 9 * WD1770_BYTE_CYCLES;
+            break;
         case TRANSFER:
+            if (writing(f)) {
+                if (f->status & WD1770_DRQ) {
+                    f->status &= (u8)~WD1770_DRQ;
+                    /* Unlike a raw track, a decoded D81 cannot preserve a
+                     * partially overwritten sector. Reject it as lost data. */
+                    finish(f, WD1770_LOST);
+                    break;
+                }
+                f->buffer[f->position++] = f->data;
+                f->data = 0;
+                f->write_bytes++;
+                if (f->position == f->length) {
+                    f->phase = CRC_END;
+                    f->delay = 3 * WD1770_BYTE_CYCLES; /* two CRC bytes + gap */
+                } else {
+                    f->status |= WD1770_DRQ;
+                    f->delay = WD1770_BYTE_CYCLES;
+                }
+                break;
+            }
             if (f->status & WD1770_DRQ) f->status |= WD1770_LOST;
             f->data = f->buffer[f->position++];
             f->status |= WD1770_DRQ;
@@ -232,6 +288,25 @@ static void event(Wd1770 *f) {
             }
             break;
         case CRC_END:
+            if (writing(f)) {
+                DiskSaveResult result = disk_image_write_d81_sector(f->image,
+                    f->write_track, f->write_side, f->write_sector, f->buffer);
+                if (result != DISK_SAVE_OK) {
+                    write_failed(f, result);
+                    /* Close the write gate on host failure. LOST invites DOS
+                     * to retry/recover its dirty track indefinitely; WP makes
+                     * the ROM return an error, while write_error preserves the
+                     * host cause for diagnostics. No sector was committed. */
+                    finish(f, WD1770_WP);
+                    break;
+                }
+                f->write_error = DISK_SAVE_OK;
+                f->write_error_reported = false;
+                f->sectors_written++;
+                if (f->command & 0x10) { f->sector++; search(f); break; }
+                finish(f, 0);
+                break;
+            }
             if (f->status & WD1770_DRQ) f->status |= WD1770_LOST;
             if ((f->command & 0xe0) == 0x80) {
                 f->sectors_read++;

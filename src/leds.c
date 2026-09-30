@@ -38,6 +38,7 @@ static const LedPalette palette_m4_net   = { 70, 70, 70,  240, 240, 240 };
 
 static bool   g_enabled  [LED_COUNT];
 static int    g_drive_unit[2] = { 8, 9 };
+static int    g_drive_type[2]; /* 0 = fast virtual backend */
 static unsigned g_cpu_mhz = 1;
 static unsigned g_z80_mhz = 2;
 static Uint64 g_last_ms  [LED_COUNT];   /* Generic, also used for LED_USIFAC RX half */
@@ -106,15 +107,24 @@ static void update_hover(int x, int y, int w, int h) {
 
     int cx = x + (w - total_w) / 2;
     int cy = y + (h - led_h) / 2;
-    if (g_mouse_y < cy || g_mouse_y >= cy + led_h)
-        return;
-
     for (int i = 0; i < LED_COUNT; i++) {
         if (!g_enabled[i]) continue;
 
         int this_w = led_width((LedId)i);
-        if (g_mouse_x >= cx && g_mouse_x < cx + this_w) {
-            if (i == LED_M4) {
+        bool drive = i == LED_FDC_A || i == LED_FDC_B;
+        int hit_y = drive ? y + (h - 18) / 2 : cy;
+        int hit_h = drive ? 18 : led_h;
+        if (g_mouse_x >= cx && g_mouse_x < cx + this_w &&
+            g_mouse_y >= hit_y && g_mouse_y < hit_y + hit_h) {
+            if (drive) {
+                unsigned slot = i == LED_FDC_B;
+                char label[32];
+                const char *type = g_drive_type[slot] == 1571 ? "1571CR" :
+                                   g_drive_type[slot] == 1581 ? "1581" : "Fast virtual";
+                snprintf(label, sizeof(label), "Drive %u %s #%d", slot + 1,
+                         type, g_drive_unit[slot]);
+                set_hover_label(label, cx, this_w, y);
+            } else if (i == LED_M4) {
                 int seg_w = this_w / 3;
                 int seg = (g_mouse_x - cx) / seg_w;
                 if (seg < 0) seg = 0;
@@ -153,6 +163,11 @@ void leds_set_enabled(LedId id, bool enabled) {
 void leds_set_drive_unit(LedId id, int unit) {
     if ((id == LED_FDC_A || id == LED_FDC_B) && unit >= 8 && unit <= 11)
         g_drive_unit[id == LED_FDC_B] = unit;
+}
+
+void leds_set_drive_type(LedId id, int type) {
+    if (id == LED_FDC_A || id == LED_FDC_B)
+        g_drive_type[id == LED_FDC_B] = type == 1571 || type == 1581 ? type : 0;
 }
 
 void leds_set_cpu_frequency(unsigned mhz) {
@@ -283,16 +298,26 @@ void leds_render(SDL_Renderer *r, int x, int y, int w, int h) {
             SDL_RenderRect(r, &lamp);
             char label[32];
             if (i == LED_FDC_A || i == LED_FDC_B) {
-                snprintf(label, sizeof(label), "D%d #%d",
-                         i == LED_FDC_A ? 1 : 2,
-                         g_drive_unit[i == LED_FDC_B]);
+                unsigned slot = i == LED_FDC_B;
+                const char *type = g_drive_type[slot] == 1571 ? "1571" :
+                                   g_drive_type[slot] == 1581 ? "1581" : "FAST";
+                /* Two short rows keep both types and #10/#11 readable even
+                 * with both CPU lamps in a 384-pixel scale-1 VIC window. */
+                int text_y = y + (h - 18) / 2;
+                snprintf(label, sizeof(label), "D%u %s", slot + 1, type);
+                SDL_SetRenderDrawColor(r, 205, 205, 205, 255);
+                SDL_RenderDebugText(r, (float)(cx + 20), (float)text_y, label);
+                snprintf(label, sizeof(label), "#%d", g_drive_unit[slot]);
+                SDL_RenderDebugText(r, (float)(cx + 20), (float)(text_y + 10), label);
             } else if (i == LED_CPU_8502) {
                 snprintf(label, sizeof(label), "8502 %uMHZ", g_cpu_mhz);
             } else {
                 snprintf(label, sizeof(label), "Z80 %uMHZ", g_z80_mhz);
             }
-            SDL_SetRenderDrawColor(r, 205, 205, 205, 255);
-            SDL_RenderDebugText(r, (float)(cx + 20), (float)(cy + 1), label);
+            if (i != LED_FDC_A && i != LED_FDC_B) {
+                SDL_SetRenderDrawColor(r, 205, 205, 205, 255);
+                SDL_RenderDebugText(r, (float)(cx + 20), (float)(cy + 1), label);
+            }
         } else {
             const LedPalette *p = &palette[i];
             Uint64 dt = now - g_last_ms[i];

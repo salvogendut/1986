@@ -8,7 +8,7 @@ By default, entering `GO64` displays an unsupported-mode notification and the
 machine remains in native C128 mode.
 
 For hardware testing only, enable **General > Tinker**, install the optional
-C64 BASIC and KERNAL ROMs listed below, then enable **Advanced > C64 Test
+C64 BASIC and KERNAL ROMs listed in [ROMS.md](ROMS.md), then enable **Advanced > C64 Test
 Mode**. `GO64` will then enter the C128's real C64 personality. The setting is
 Off by default and the gate cannot be armed without both ROMs. The same C128
 machine continues running—8502, VIC-IIe, SID, CIA, RAM, and IEC state are not
@@ -238,11 +238,15 @@ valuable disks. Read-only media and external host edits are protected, and
 Media refuses an eject/replacement while a write remains unsaved. The real
 drive does not yet support nonstandard raw tracks or burst serial.
 
-For a real **1581**, choose **1581 (D81 read-only)** in Media, supply a 32 KiB
+For a real **1581**, choose **1581 (D81, ROM required)** in Media, supply a 32 KiB
 `dos1581.bin` (or `dos1581-318045-02.bin`) in the ROM directory, and restart.
-`DIRECTORY` and program loading run through the drive's DOS ROM. This backend
-is currently read-only: writes report DOS write protection. Use D81 images;
-other formats leave its mechanism empty with an incompatible-media warning.
+`DIRECTORY`, program loading and `SAVE`/`DSAVE`/`BSAVE` run through the drive's
+DOS ROM. Each complete 512-byte physical sector is saved atomically; read-only
+files and external image edits are protected. Interrupted sectors are discarded,
+but sectors already completed remain saved, so wait for disk operations to
+finish before ejecting or resetting. Keep backups. Use D81 images; other formats
+leave its mechanism empty with an incompatible-media warning. Raw formatting
+(`HEADER`) and protected/deleted-mark tracks are not supported yet.
 
 With Second Drive enabled, 1571CR and 1581 models can be combined in either
 slot, including two of either model. Both share one IEC bus at distinct
@@ -283,17 +287,13 @@ approximations, so some music will sound different from a real 8580 or VICE.
 
 ## ROM layout
 
-Drop the machine ROMs into a directory and pass `--rom DIR` (or set `rom_dir`
-in `1986.conf`; the default is the install-time `pkgdatadir/roms`):
+See [ROMS.md](ROMS.md) for the complete filename and size checklist, accepted
+aliases, KERNAL/Z80 BIOS layout, browser-build requirements and troubleshooting.
+The native machine set is `basic.bin`, `kernal.bin` and `chargen.bin`;
+real 1571CR/1581 operation additionally needs the corresponding DOS ROM.
+Fast virtual drives do not need a DOS ROM.
 
-| File          | Size     | Purpose                       |
-|---------------|----------|-------------------------------|
-| `kernal.rom`  | 0x4000   | C128 KERNAL ($C000-$FFFF)     |
-| `basic.rom`   | 0x8000   | BASIC 7.0 (low + high)        |
-| `chargen.rom` | 0x2000   | C64 + native-C128 character banks |
-| `basic64.rom` | 0x2000   | Optional C64 BASIC V2 test ROM    |
-| `kernal64.rom`| 0x2000   | Optional C64 KERNAL test ROM      |
-
-These ROMs are copyrighted Commodore and are not bundled. The emulator still
-renders its test pattern without them. The optional files may instead use the
-VICE-set names `basic64-901226-01.bin` and `kernal64-901227-03.bin`.
+Select the directory with `--rom DIR`, **General > ROMS PATH**, or `rom_dir`
+in `1986.conf`, then restart. Without an override, 1986 first checks `roms/`
+beside the executable, then its install-time `pkgdatadir/roms`. ROMs are not
+bundled; the emulator can display its test pattern without them.

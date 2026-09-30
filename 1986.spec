@@ -39,7 +39,7 @@ appstream-util validate-relax --nonet %{buildroot}%{_datadir}/metainfo/io.github
 
 %files
 %license LICENSE
-%doc README.md INSTALL.md USAGE.md CONTROLS.md
+%doc README.md ROMS.md INSTALL.md USAGE.md CONTROLS.md
 %{_bindir}/%{name}
 %{_mandir}/man1/%{name}.1*
 %{_datadir}/applications/io.github.salvogendut.Emulator1986.desktop

@@ -649,7 +649,7 @@ static void overlay_activate(Overlay *ov) {
                 *type = *type == 1571 ? 1581 : 1571;
                 notify_post(*type == 1571
                     ? "1571CR TYPE SELECTED - RESTART TO APPLY"
-                    : "1581 READ-ONLY TYPE SELECTED - RESTART TO APPLY");
+                    : "1581 TYPE SELECTED - RESTART TO APPLY");
                 save_config(ov);
             } else if (media_item(ov, ov->row) == MEDIA_SNAPSHOT_LOAD) {
                 open_snapshot_dialog(ov, false);
@@ -1293,7 +1293,7 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
                 int type = item == MEDIA_TYPE2 ? ov->cfg->drive2_type :
                                                   ov->cfg->drive_type;
                 snprintf(vbuf, sizeof(vbuf), "%s", type == 1571
-                         ? "1571CR (ROM required)" : "1581 (D81 read-only)");
+                         ? "1571CR (ROM required)" : "1581 (D81, ROM required)");
             } else {
                 const char *path = media_path(ov, item);
                 if (path && path[0])

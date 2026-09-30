@@ -210,14 +210,25 @@ When enabled with 1571CR selected for both drives, a second independent
 VIA1 senses its own #8-#11 address straps and the common ATN edge, while the
 drives keep separate CPU clocks, media, GCR writes, LEDs, and activity/audio
 history. The visual monitor stacks Drive 2 above Drive 1. Disabling Drive 2
-releases its IEC outputs after pending writes have been flushed. Because the
-KERNAL traps and ROM-level IEC cannot be mixed, selecting 1581 for either
-enabled drive falls back to the fast virtual pair at the next launch.
+releases its IEC outputs after pending GCR writes have been flushed. KERNAL
+traps and ROM-level IEC cannot be mixed: a missing DOS ROM for either enabled
+drive falls back to the fast virtual pair at the next launch.
 The core is a sibling of the command-level `VirtualDrive`, never behind its
 interface; the modes will share only neutral disk-image/media code. The
 Advanced real-drive gate selects this backend after restart when its DOS ROM
-is present. Media stores 1571/1581
-hardware type independently for each drive; 1581 is only a future selection.
+is present. Media stores 1571/1581 hardware type independently for each drive.
+
+The 1581 backend shares the independent NMOS drive CPU engine, with its own
+2 MHz scheduler, 8 KiB RAM, DOS ROM, CIA and WD1770. CIA PB4 uses the 1581's
+ATN acknowledge gate instead of the 1571 XOR gate on the shared IEC bus.
+Decoded D81 physical sectors map to pairs of 256-byte DOS blocks with the
+1581 head polarity inverted. WD read/write transfers use DRQ byte timing;
+complete 512-byte writes atomically replace the image after checking host
+permissions and external edits. Incomplete sectors are discarded on abort.
+Both slots feed independent monitor histories and write-failure notifications.
+Burst serial, raw formatting/tracks, exact mechanism timing and 8520 binary
+TOD remain follow-ups. See [drive details](docs/DRIVES.md) and the complete
+[ROM checklist](ROMS.md).
 
 The cassette implementation in `tape.c` follows VICE 3.10's distinction
 between TAP and T64. TAP v0/v1/v2 stores timed flux gaps: the 8502 `$01`

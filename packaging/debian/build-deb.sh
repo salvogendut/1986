@@ -22,7 +22,7 @@ trap 'rm -rf "$stage"' EXIT HUP INT TERM
 make install DESTDIR="$stage"
 install -d "$stage/DEBIAN" "$stage/usr/share/doc/1986"
 install -m 0644 LICENSE "$stage/usr/share/doc/1986/copyright"
-install -m 0644 README.md INSTALL.md USAGE.md "$stage/usr/share/doc/1986/"
+install -m 0644 README.md ROMS.md INSTALL.md USAGE.md "$stage/usr/share/doc/1986/"
 
 # dpkg-shlibdeps expects source-package metadata in debian/control, even
 # with -O. Keep that temporary metadata out of the finished binary package.

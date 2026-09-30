@@ -2,6 +2,9 @@
 
 This is the browser host for the same C128DCR core used by the desktop application. It provides VIC-IIe and VDC video, SID audio, keyboard and gamepad input, one disk drive, one datasette, and one native C128 cartridge slot.
 
+See [ROM requirements](../ROMS.md#browser-build) for the exact filenames and
+sizes expected by the browser build.
+
 Build inside the development container:
 
 ```sh
