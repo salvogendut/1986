@@ -22,11 +22,19 @@ static bool drive_busy(const GcrDrive *g) {
     return g->motor && (g->led || g->write_mode);
 }
 
+static bool real_drive_busy(const C128 *c, unsigned slot) {
+    if (c->real_drive_type[slot] == 1581) {
+        const Drive1581 *d = &c->real1581[slot];
+        return d->fdc.motor && (d->led || (d->fdc.status & WD1770_BUSY));
+    }
+    return drive_busy(slot ? &c->second_real_drive.gcr : &c->integrated_drive.gcr);
+}
+
 bool c128_drive_warp_active(const C128 *c) {
     if (!c->cfg->unthrottled_drive || c->paused) return false;
     /* Follow the running backend, not the restart-pending preference. */
-    return (c->drive_raw_iec && drive_busy(&c->integrated_drive.gcr)) ||
-           (c->drive2_raw_iec && drive_busy(&c->second_real_drive.gcr));
+    return (c->drive_raw_iec && real_drive_busy(c, 0)) ||
+           (c->drive2_raw_iec && real_drive_busy(c, 1));
 }
 
 /* The C128 KERNAL copies its banked FETCH, STASH and CMPARE primitives to
@@ -58,7 +66,7 @@ void c128_refresh_vic_bank(C128 *c) {
 }
 
 /* The 8502 core calls I/O handlers during an instruction, at the bus cycle
- * of the access. Synchronize the 1571 before sampling or changing IEC lines:
+ * of the access. Synchronize the drives before sampling or changing IEC lines:
  * advancing only after the instruction can miss GEOS fast-serial edges. */
 static void drive_sync_to_cpu(C128 *c) {
     if (!c->drive_clock_denominator) return;
@@ -70,36 +78,105 @@ static void drive_sync_to_cpu(C128 *c) {
         c->drive_clock_fraction = 0;
         return;
     }
-    unsigned drive_hz_per_frame = c->integrated_drive.clock_2mhz ? 40000u : 20000u;
+    unsigned drive_hz_per_frame = c->real_drive_type[0] == 1581 ||
+                                  c->integrated_drive.clock_2mhz ? 40000u : 20000u;
     u64 scaled = c->drive_clock_fraction + elapsed * drive_hz_per_frame;
     int budget = (int)(scaled / c->drive_clock_denominator);
     c->drive_clock_fraction = (unsigned)(scaled % c->drive_clock_denominator);
-    drive1571cr_advance(&c->integrated_drive, budget);
+    if (c->real_drive_type[0] == 1581) drive1581_advance(&c->real1581[0], budget);
+    else drive1571cr_advance(&c->integrated_drive, budget);
     if (c->drive2_raw_iec) {
-        unsigned hz2 = c->second_real_drive.clock_2mhz ? 40000u : 20000u;
+        unsigned hz2 = c->real_drive_type[1] == 1581 ||
+                       c->second_real_drive.clock_2mhz ? 40000u : 20000u;
         u64 scaled2 = c->drive2_clock_fraction + elapsed * hz2;
         int budget2 = (int)(scaled2 / c->drive_clock_denominator);
         c->drive2_clock_fraction = (unsigned)(scaled2 % c->drive_clock_denominator);
-        drive1571cr_advance(&c->second_real_drive, budget2);
+        if (c->real_drive_type[1] == 1581) drive1581_advance(&c->real1581[1], budget2);
+        else drive1571cr_advance(&c->second_real_drive, budget2);
     }
 }
 
 static void drive_via_port_change(void *ctx, unsigned port, u8 pins) {
-    if (port == 1) iec_bus_set_drive(&((C128 *)ctx)->iec_bus, pins);
+    C128 *c = ctx;
+    if (port == 1 && c->real_drive_type[0] != 1581) iec_bus_set_drive(&c->iec_bus, pins);
 }
 
 static void drive2_via_port_change(void *ctx, unsigned port, u8 pins) {
-    if (port == 1) iec_bus_set_drive2(&((C128 *)ctx)->iec_bus, pins);
+    C128 *c = ctx;
+    if (port == 1 && c->real_drive_type[1] != 1581) iec_bus_set_drive2(&c->iec_bus, pins);
+}
+
+static void drive1581_port_change(void *ctx, u8 pins) {
+    C128 *c = ctx;
+    if (c->real_drive_type[0] == 1581) iec_bus_set_drive(&c->iec_bus, pins);
+}
+
+static void drive2_1581_port_change(void *ctx, u8 pins) {
+    C128 *c = ctx;
+    if (c->real_drive_type[1] == 1581) iec_bus_set_drive2(&c->iec_bus, pins);
+}
+
+static void drive1581_inputs(void *ctx, unsigned unit, bool atn, bool clock, bool data) {
+    Drive1581 *d = ctx;
+    drive1581_set_unit(d, unit);
+    drive1581_set_iec(d, atn, clock, data);
+}
+
+static bool real_rom_loaded(const C128 *c, unsigned slot) {
+    if (c->real_drive_type[slot] == 1581) return c->real1581[slot].rom_loaded;
+    return slot ? c->second_real_drive.rom_loaded : c->integrated_drive.rom_loaded;
+}
+
+static void connect_real_drive(C128 *c, unsigned slot, unsigned unit) {
+    if (c->real_drive_type[slot] == 1581)
+        iec_bus_attach_1581(&c->iec_bus, slot, drive1581_inputs, &c->real1581[slot], unit);
+    else if (slot)
+        iec_bus_attach_second(&c->iec_bus, &c->second_real_drive.via1, unit);
+    else iec_bus_attach_first(&c->iec_bus, &c->integrated_drive.via1, unit);
+}
+
+bool c128_configure_real_drives(C128 *c) {
+    c->real_drive_type[0] = c->cfg->drive_type;
+    c->real_drive_type[1] = c->cfg->drive2_type;
+    c->drive_raw_iec = c->cfg->real_disk_drive && real_rom_loaded(c, 0) &&
+                      (!c->cfg->second_drive || real_rom_loaded(c, 1));
+    c->drive2_raw_iec = c->drive_raw_iec && c->cfg->second_drive;
+    connect_real_drive(c, 0, (unsigned)c->cfg->drive_unit);
+    connect_real_drive(c, 1, (unsigned)c->cfg->drive2_unit);
+    iec_bus_enable_second(&c->iec_bus, c->drive2_raw_iec);
+    return c->drive_raw_iec;
+}
+
+bool c128_enable_second_real_drive(C128 *c, bool enabled) {
+    if (!enabled && c->drive2_raw_iec && c->real_drive_type[1] != 1581 &&
+        gcr_drive_flush(&c->second_real_drive.gcr) != DISK_SAVE_OK) return false;
+    bool was_real = c->drive2_raw_iec;
+    c->drive2_raw_iec = enabled && c->drive_raw_iec && real_rom_loaded(c, 1);
+    if (c->drive2_raw_iec && !was_real) {
+        if (c->real_drive_type[1] == 1581) drive1581_reset(&c->real1581[1]);
+        else drive1571cr_reset(&c->second_real_drive);
+        drive_monitor_reset(&c->drive2_monitor);
+        c->drive2_clock_fraction = 0;
+        c->drive2_media_generation = (unsigned)-1;
+    }
+    iec_bus_enable_second(&c->iec_bus, c->drive2_raw_iec);
+    return true; /* missing ROM: save the preference, but leave device absent */
 }
 
 static int flush_integrated_drive(void *ctx) {
     C128 *c = ctx;
-    return gcr_drive_flush(&c->integrated_drive.gcr) == DISK_SAVE_OK ? 0 : -1;
+    if (gcr_drive_flush(&c->integrated_drive.gcr) != DISK_SAVE_OK) return -1;
+    gcr_drive_attach(&c->integrated_drive.gcr, NULL);
+    wd1770_attach(&c->real1581[0].fdc, NULL);
+    return 0;
 }
 
 static int flush_second_real_drive(void *ctx) {
     C128 *c = ctx;
-    return gcr_drive_flush(&c->second_real_drive.gcr) == DISK_SAVE_OK ? 0 : -1;
+    if (gcr_drive_flush(&c->second_real_drive.gcr) != DISK_SAVE_OK) return -1;
+    gcr_drive_attach(&c->second_real_drive.gcr, NULL);
+    wd1770_attach(&c->real1581[1].fdc, NULL);
+    return 0;
 }
 
 static void tape_read_pulse(void *ctx) {
@@ -698,6 +775,9 @@ void c128_init(C128 *c, Config *cfg) {
     drive_set_media_change_hook(&c->drive2, flush_second_real_drive, c);
     drive1571cr_init(&c->integrated_drive);
     drive1571cr_init(&c->second_real_drive);
+    drive1581_init(&c->real1581[0]);
+    drive1581_init(&c->real1581[1]);
+    c->real_drive_type[0] = c->real_drive_type[1] = 1571;
     iec_bus_init(&c->iec_bus, &c->integrated_drive.via1);
     iec_bus_set_unit(&c->iec_bus, cfg->drive_unit);
     iec_bus_attach_second(&c->iec_bus, &c->second_real_drive.via1,
@@ -706,6 +786,8 @@ void c128_init(C128 *c, Config *cfg) {
                           drive_via_port_change, c);
     via6522_set_port_hook(&c->second_real_drive.via1,
                           drive2_via_port_change, c);
+    drive1581_set_port_hook(&c->real1581[0], drive1581_port_change, c);
+    drive1581_set_port_hook(&c->real1581[1], drive2_1581_port_change, c);
 
     /* Reset is deferred: the host loads machine ROMs after c128_init(), and
      * the reset vector must be read from the loaded KERNAL ROM. */
@@ -735,9 +817,13 @@ static void c128_reset_internal(C128 *c, bool power_cycle) {
     if (power_cycle) {
         drive1571cr_power_cycle(&c->integrated_drive);
         drive1571cr_power_cycle(&c->second_real_drive);
+        drive1581_power_cycle(&c->real1581[0]);
+        drive1581_power_cycle(&c->real1581[1]);
     } else {
         drive1571cr_reset(&c->integrated_drive);
         drive1571cr_reset(&c->second_real_drive);
+        drive1581_reset(&c->real1581[0]);
+        drive1581_reset(&c->real1581[1]);
     }
     drive_monitor_reset(&c->drive_monitor);
     drive_monitor_reset(&c->drive2_monitor);
@@ -848,24 +934,46 @@ static void c128_cpu_bus_wait(C128 *c, bool write, bool io) {
     }
 }
 
+static void real_drive_media(C128 *c, unsigned slot) {
+    Drive *media = slot ? &c->drive2 : &c->drive;
+    Drive1571Cr *gcr = slot ? &c->second_real_drive : &c->integrated_drive;
+    unsigned *generation = slot ? &c->drive2_media_generation : &c->drive_media_generation;
+    if (*generation == media->media_generation) return;
+    DiskImage *image = media->disk_attached ? &media->image : NULL;
+    if (c->real_drive_type[slot] == 1581) {
+        if (!wd1770_attach(&c->real1581[slot].fdc, image)) {
+            wd1770_attach(&c->real1581[slot].fdc, NULL);
+            if (slot ? c->drive2_raw_iec : c->drive_raw_iec) {
+                notify_post("1581 DRIVE %u NEEDS A D81 IMAGE", slot + 1);
+                fprintf(stderr, "1986: drive %u: 1581 requires an ordinary D81; hardware has no disk\n", slot + 1);
+            }
+        }
+    } else {
+        gcr_drive_attach(&gcr->gcr, image);
+        gcr_drive_update_via(&gcr->gcr, &gcr->via2);
+    }
+    *generation = media->media_generation;
+}
+
+static bool real_drive_monitor(C128 *c, unsigned slot) {
+    DriveMonitor *monitor = slot ? &c->drive2_monitor : &c->drive_monitor;
+    if (c->real_drive_type[slot] == 1581) {
+        Drive1581 *d = &c->real1581[slot];
+        return drive_monitor_update(monitor, d->fdc.motor, d->led,
+            2 * (d->fdc.head_track + 1), (unsigned)d->fdc.head_steps,
+            (unsigned)d->fdc.read_bytes, 0);
+    }
+    GcrDrive *g = slot ? &c->second_real_drive.gcr : &c->integrated_drive.gcr;
+    return drive_monitor_update(monitor, g->motor, g->led, g->half_track,
+                                 g->step_events, g->read_events, g->write_events);
+}
+
 int c128_frame(C128 *c) {
     if (c->paused && !c->debug.step_pending) return 0;
     bool resuming_frame = c->debug.partial_frame;
     c->tape.frame_edges = 0;
-    if (c->drive_media_generation != c->drive.media_generation) {
-        gcr_drive_attach(&c->integrated_drive.gcr,
-            c->drive.disk_attached ? &c->drive.image : NULL);
-        gcr_drive_update_via(&c->integrated_drive.gcr,
-                             &c->integrated_drive.via2);
-        c->drive_media_generation = c->drive.media_generation;
-    }
-    if (c->drive2_media_generation != c->drive2.media_generation) {
-        gcr_drive_attach(&c->second_real_drive.gcr,
-            c->drive2.disk_attached ? &c->drive2.image : NULL);
-        gcr_drive_update_via(&c->second_real_drive.gcr,
-                             &c->second_real_drive.via2);
-        c->drive2_media_generation = c->drive2.media_generation;
-    }
+    real_drive_media(c, 0);
+    real_drive_media(c, 1);
     /* The raster clock, not a per-line CPU budget, determines the end of a
      * frame. BA stalls and D030 changes can now occur inside an instruction. */
     c->drive_clock_denominator = CPU_PAL_FRAME_CYCLES;
@@ -933,21 +1041,9 @@ int c128_frame(C128 *c) {
         cia_tod_tick(&c->cia2);
     }
     c->total_cycles += (u64)total;
-    if (c->drive_raw_iec && drive_monitor_update(&c->drive_monitor,
-            c->integrated_drive.gcr.motor,
-            c->integrated_drive.gcr.led,
-            c->integrated_drive.gcr.half_track,
-            c->integrated_drive.gcr.step_events,
-            c->integrated_drive.gcr.read_events,
-            c->integrated_drive.gcr.write_events))
+    if (c->drive_raw_iec && real_drive_monitor(c, 0))
         leds_ping(LED_FDC_A);
-    if (c->drive2_raw_iec && drive_monitor_update(&c->drive2_monitor,
-            c->second_real_drive.gcr.motor,
-            c->second_real_drive.gcr.led,
-            c->second_real_drive.gcr.half_track,
-            c->second_real_drive.gcr.step_events,
-            c->second_real_drive.gcr.read_events,
-            c->second_real_drive.gcr.write_events))
+    if (c->drive2_raw_iec && real_drive_monitor(c, 1))
         leds_ping(LED_FDC_B);
     GcrDrive *gcr = &c->integrated_drive.gcr;
     if (c->drive_raw_iec && gcr->write_error != DISK_SAVE_OK &&
@@ -979,7 +1075,7 @@ int c128_frame(C128 *c) {
                 c128_frame_count, c->tape.play_button, c->tape.motor_on,
                 c->tape.position, c->tape.payload_end,
                 c->tape.frame_edges, c->cpu.pc);
-    if (drive_probe_active(c) && getenv("C128_1571_TRACE") &&
+    if (drive_probe_active(c) && c->real_drive_type[0] != 1581 && getenv("C128_1571_TRACE") &&
         c->frames_since_reset % 50 == 0) {
         fprintf(stderr, "[1571] frame=%d pc=$%04x cycles=%llu via1=$%02x/$%02x pcr=$%02x ifr=$%02x ier=$%02x ca1=%d irq=%d CIA2=$%02x/$%02x IEC=%d%d%d host=%u drive=%u lines=%u ram79=$%02x ram7a=$%02x ram83=$%02x ram84=$%02x GCR=m%d led%d s%u h%u z%u p%u $%02x sync%d R%u W%u%s\n",
                 c->frames_since_reset, c->integrated_drive.cpu.pc,

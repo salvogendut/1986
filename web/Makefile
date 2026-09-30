@@ -10,6 +10,7 @@ SRCS := \
 	../src/vic.c ../src/vdc.c ../src/cia.c ../src/sid.c ../src/z80.c \
 	../src/vice/maincpu.c ../src/vice/interrupt.c \
 	../src/disk_image.c ../src/drive.c ../src/drive1571cr.c ../src/drive_cpu6502.c \
+	../src/drive1581.c ../src/wd1770.c \
 	../src/drive_monitor.c ../src/tape.c ../src/gcr_drive.c \
 	../src/iec_bus.c ../src/via6522.c ../src/virtual_drive.c
 
@@ -25,7 +26,7 @@ all: $(DIST_DIR)/1986.js $(addprefix $(DIST_DIR)/,$(WEB_ASSETS)) $(DIST_DIR)/bra
 # Rebuild every core object when those layouts change, including old builds
 # which predate this dependency.
 $(OBJS): ../src/display.h ../src/config.h ../src/c128.h \
-	../src/drive1571cr.h ../src/drive_cpu6502.h
+	../src/drive1571cr.h ../src/drive_cpu6502.h ../src/drive1581.h ../src/wd1770.h ../src/iec_bus.h
 
 $(DIST_DIR)/1986.js: $(OBJS) $(ROM_FILES) | $(DIST_DIR)
 	$(EMCC) $(CFLAGS) $(OBJS) -o $@ -lm \

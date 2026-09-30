@@ -21,6 +21,9 @@
 #                               kernal64.rom and kernal64-901227-03.bin accepted)
 #   dos1571cr.bin 0x8000 bytes — integrated 1571CR DOS ROM (optional while
 #                                the physical-IEC drive backend is unfinished)
+#   dos1581.bin   0x8000 bytes — optional real 1581 DOS ROM; the filename
+#                                dos1581-318045-02.bin is also accepted.
+#                                D81 hardware backend is currently read-only.
 #
 # These ROMs are copyright Commodore and are not redistributed here. Obtain
 # them from a source you are entitled to use (for example by dumping your own

@@ -649,7 +649,7 @@ static void overlay_activate(Overlay *ov) {
                 *type = *type == 1571 ? 1581 : 1571;
                 notify_post(*type == 1571
                     ? "1571CR TYPE SELECTED - RESTART TO APPLY"
-                    : "1581 HARDWARE UNAVAILABLE - RESTART TO APPLY");
+                    : "1581 READ-ONLY TYPE SELECTED - RESTART TO APPLY");
                 save_config(ov);
             } else if (media_item(ov, ov->row) == MEDIA_SNAPSHOT_LOAD) {
                 open_snapshot_dialog(ov, false);
@@ -713,19 +713,17 @@ static void overlay_activate(Overlay *ov) {
                 case ADV_DRIVE_AUDIO:
                     ov->cfg->drive_audio_monitor = !ov->cfg->drive_audio_monitor;
                     notify_post(ov->cfg->drive_audio_monitor
-                        ? "1571 DRIVE AUDIO MONITOR ON"
-                        : "1571 DRIVE AUDIO MONITOR OFF");
+                        ? "DRIVE AUDIO MONITOR ON"
+                        : "DRIVE AUDIO MONITOR OFF");
                     break;
                 case ADV_DRIVE_VISUAL:
                     ov->cfg->drive_visual_monitor = !ov->cfg->drive_visual_monitor;
                     notify_post(ov->cfg->drive_visual_monitor
-                        ? "1571 DRIVE VISUAL MONITOR ON"
-                        : "1571 DRIVE VISUAL MONITOR OFF");
+                        ? "DRIVE VISUAL MONITOR ON"
+                        : "DRIVE VISUAL MONITOR OFF");
                     break;
                 case ADV_SECOND_DRIVE:
-                    if (ov->c128->drive2_raw_iec &&
-                        gcr_drive_flush(&ov->c128->second_real_drive.gcr) !=
-                            DISK_SAVE_OK) {
+                    if (!c128_enable_second_real_drive(ov->c128, !ov->cfg->second_drive)) {
                         notify_post("DRIVE 2 WRITE COULD NOT BE SAVED - DISCONNECT CANCELLED");
                         break;
                     }
@@ -733,22 +731,10 @@ static void overlay_activate(Overlay *ov) {
                     leds_set_enabled(LED_FDC_B, ov->cfg->second_drive);
                     drive_reset(&ov->c128->drive2);
                     drive_set_unit(&ov->c128->drive2, ov->cfg->drive2_unit);
-                    bool was_real2 = ov->c128->drive2_raw_iec;
-                    ov->c128->drive2_raw_iec = ov->cfg->second_drive &&
-                        ov->c128->drive_raw_iec &&
-                        ov->cfg->drive2_type == 1571 &&
-                        ov->c128->second_real_drive.rom_loaded;
-                    if (ov->c128->drive2_raw_iec && !was_real2) {
-                        drive1571cr_reset(&ov->c128->second_real_drive);
-                        drive_monitor_reset(&ov->c128->drive2_monitor);
-                        ov->c128->drive2_media_generation = (unsigned)-1;
-                    }
-                    iec_bus_enable_second(&ov->c128->iec_bus,
-                                          ov->c128->drive2_raw_iec);
                     notify_post(ov->cfg->second_drive
                         ? (ov->c128->drive_raw_iec && !ov->c128->drive2_raw_iec
-                           ? "SECOND 1571 UNAVAILABLE - RESTART FOR FAST MODE"
-                           : "SECOND DRIVE CONNECTED")
+                            ? "SECOND DRIVE ROM UNAVAILABLE - RESTART TO APPLY"
+                            : "SECOND DRIVE CONNECTED")
                         : "SECOND DRIVE DISCONNECTED");
                     break;
                 case ADV_UNIFIED_CAPTURE:
@@ -1054,17 +1040,17 @@ static void draw_row(SDL_Renderer *r, int lw, float y,
 
 static void draw_drive_scope_track(SDL_Renderer *r, float plot_x,
                                    float plot_w, float track_y, int number,
-                                   int unit, const GcrDrive *g,
+                                   int unit, int type, unsigned side,
                                    const DriveMonitor *monitor) {
     const float plot_y = track_y + 23.0f;
     const float plot_h = 34.0f;
     const float center_y = plot_y + plot_h * 0.5f;
     char status[96];
     snprintf(status, sizeof(status),
-             "DRIVE %d #%d  MOTOR %s  TRACK %u.%c  SIDE %u  R %u  W %u  STEP %u",
-             number, unit, g->motor ? "ON" : "OFF",
-             g->half_track / 2, (g->half_track & 1) ? '5' : '0',
-             g->side, g->read_events, g->write_events, g->step_events);
+             "DRIVE %d #%d %d  MOTOR %s  TRACK %u.%c  SIDE %u  R %u  W %u  STEP %u",
+             number, unit, type, monitor->motor ? "ON" : "OFF",
+             monitor->half_track / 2, (monitor->half_track & 1) ? '5' : '0',
+             side, monitor->last_reads, monitor->last_writes, monitor->last_steps);
     SDL_SetRenderDrawColor(r, 175, 240, 245, 255);
     SDL_RenderDebugText(r, plot_x, track_y + 6.0f, status);
     SDL_SetRenderDrawColor(r, 105, 145, 155, 130);
@@ -1125,8 +1111,11 @@ void overlay_render_drive_scope(const Overlay *ov, SDL_Renderer *r) {
     float drive1_y = panel_y;
     if (ov->c128->drive2_raw_iec) {
         draw_drive_scope_track(r, plot_x, plot_w, panel_y, 2,
-                               ov->cfg->drive2_unit,
-                               &ov->c128->second_real_drive.gcr,
+                               ov->c128->iec_bus.drive2_unit,
+                               ov->c128->real_drive_type[1],
+                               ov->c128->real_drive_type[1] == 1581
+                                   ? ov->c128->real1581[1].fdc.side ^ 1
+                                   : ov->c128->second_real_drive.gcr.side,
                                &ov->c128->drive2_monitor);
         SDL_SetRenderDrawColor(r, 90, 130, 140, 140);
         SDL_RenderLine(r, margin, panel_y + track_h,
@@ -1134,8 +1123,11 @@ void overlay_render_drive_scope(const Overlay *ov, SDL_Renderer *r) {
         drive1_y += track_h;
     }
     draw_drive_scope_track(r, plot_x, plot_w, drive1_y, 1,
-                           ov->cfg->drive_unit,
-                           &ov->c128->integrated_drive.gcr,
+                           ov->c128->iec_bus.drive_unit,
+                           ov->c128->real_drive_type[0],
+                           ov->c128->real_drive_type[0] == 1581
+                               ? ov->c128->real1581[0].fdc.side ^ 1
+                               : ov->c128->integrated_drive.gcr.side,
                            &ov->c128->drive_monitor);
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
 }
@@ -1301,7 +1293,7 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
                 int type = item == MEDIA_TYPE2 ? ov->cfg->drive2_type :
                                                   ov->cfg->drive_type;
                 snprintf(vbuf, sizeof(vbuf), "%s", type == 1571
-                         ? "1571CR (ROM required)" : "1581 (not implemented)");
+                         ? "1571CR (ROM required)" : "1581 (D81 read-only)");
             } else {
                 const char *path = media_path(ov, item);
                 if (path && path[0])

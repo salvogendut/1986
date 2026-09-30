@@ -6,7 +6,8 @@ neutral disk-image/media layer, but they do not share an emulated drive CPU.
 | Backend | Purpose | Images | Drive CPU/DOS ROM |
 |---------|---------|--------|-------------------|
 | Fast virtual drive | Convenient command-level file access | D64, D71, D81, PRG | No |
-| Real Disk Drive | Experimental hardware-level 1571CR behavior | D64, D71 | Yes |
+| Real Disk Drive: 1571CR | Experimental hardware-level drive | D64, D71 | Yes |
+| Real Disk Drive: 1581 | Experimental, read-only hardware-level drive | D81 | Yes |
 
 ## Fast virtual drive
 
@@ -20,7 +21,7 @@ Binary `M-W` and `M-R` access 32 KiB of virtual drive RAM. `M-E` is accepted
 but uploaded drive code is not executed; software whose loader depends on
 running custom drive code needs the ROM-backed backend.
 
-D81 support describes the image/filesystem format, not 1581 hardware
+In the fast backend, D81 support describes the filesystem, not hardware
 emulation. D81 partitions, REL files, formatting, and some DOS commands remain
 unfinished. Raw block writes can damage a filesystem, so keep backups.
 
@@ -65,20 +66,34 @@ to hear loading music or drive sounds at their normal pace.
 The following are not yet implemented:
 
 - 1571 burst/fast serial;
-- WD1770/FDC2 MFM behavior;
+- the 1571's WD1770/FDC2 MFM behavior;
 - precise sub-instruction mechanism timing;
-- persistence of nonstandard raw or protected tracks;
-- a hardware-level 1581 backend.
+- persistence of nonstandard raw or protected tracks.
 
-If either enabled drive selects 1581 hardware, both drives fall back to the
-fast virtual backend after restart. Mixed virtual and ROM-backed devices on
+If an enabled drive's selected DOS ROM is missing, both drives fall back to
+the fast virtual backend after restart, with a console diagnostic. Mixed
+virtual and ROM-backed devices on
 the same emulated IEC bus are not currently supported.
 
-## 1581 hardware work in progress (#152)
+## ROM-backed 1581 (read-only, #152)
 
-The first standalone core is implemented, but is **not yet connected to the
-application's Real Disk Drive selector**. Selecting 1581 still uses the
-fallback described above; this is not yet a usable real-drive option.
+Enable **Advanced > Real Disk Drive**, select **1581 (D81 read-only)** for
+either drive in Media, supply a 32 KiB `dos1581.bin` in the machine ROM
+directory, and restart. The VICE filename `dos1581-318045-02.bin` is also
+recognized. ROMs are not supplied with the emulator.
+
+`DIRECTORY`, `LOAD`, and `BLOAD` use the native KERNAL and DOS ROM over the
+physical slow IEC bus. Two 1581s, or a 1571CR and a 1581 in either slot, share
+that bus at distinct addresses #8–#11. Hardware type and unit changes require
+restart; toggling Second Drive reconnects the existing running model.
+Each device has its own LED, monitor history and audio. The existing audio
+samples are reused as an approximate mechanism monitor, not a 1581-specific
+sound model. Unthrottled drive also recognizes 1581 controller activity.
+
+Use ordinary 80-track D81 media. D64/D71/PRG media in a real 1581 report an
+incompatible-media notification and leave its mechanism empty. Replacing or
+ejecting a disk cancels controller transfers before freeing the old image,
+and signals disk change so DOS invalidates its track cache.
 
 The core shares the independent NMOS 6502 instruction engine with the 1571,
 and has its own 2 MHz clock budget, 8 KiB RAM, 32 KiB ROM, CIA timers/IRQs,
@@ -93,10 +108,12 @@ media-change handling, and read/seek activity counters. Sector spacing is
 approximated; this is not yet a raw MFM-track or protection emulator. All
 images report write protection, and write commands cannot modify them.
 
-The next steps are shared IEC bus/scheduler integration for either drive,
-ROM discovery and overlay selection, per-drive monitors, atomic sector
-writes, and end-to-end `DIRECTORY`/`LOAD`/`SAVE` comparisons. Burst serial,
-the 8520 binary TOD counter, and raw-track commands remain unimplemented.
+All media are currently **write-protected**, even if the host file is
+writable. BASIC write attempts report the DOS write-protect error and do not
+change the image. Atomic sector writes and further VICE comparisons are the
+next step. Burst serial, the 8520 binary TOD counter, raw-track commands,
+and drive snapshot state remain unimplemented. The browser frontend still
+offers its existing real 1571 switch; 1581 selection is desktop-only for now.
 
 Tests use synthetic firmware and generated media by default. An optional
 private-ROM check boots DOS 318045-02 and submits five read jobs spanning
@@ -109,7 +126,18 @@ C128_1581_ROM=/path/to/dos1581-318045-02.bin ./tests/test-drive1581
 ```
 
 No DOS ROM is included or copied by this test. Its disposable D81 is removed
-afterwards. The optional test does not exercise the host IEC/KERNAL path.
+afterwards. A separate windowless host test covers native `DIRECTORY`/`BLOAD`,
+write protection, media replacement, two 1581s at #10/#11, and mixed models:
+
+```sh
+make -C tests test-real-drives
+C128_TEST_ROM_DIR=/path/to/machine-roms \
+C128_1581_ROM=/path/to/dos1581-318045-02.bin \
+C128_TEST_1571_ROM=/path/to/dos1571cr.bin ./tests/test-real-drives
+```
+
+Omit the 1571 variable to skip the mixed-model cases. Without private ROM
+variables, this test exercises synthetic CPU clocks, bus gates and fallback.
 
 ## Write safety
 

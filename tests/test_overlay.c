@@ -74,6 +74,13 @@ void drive1571cr_reset(Drive1571Cr *d) { (void)d; }
 void iec_bus_enable_second(IecBus *bus, bool enabled) {
     bus->drive2_enabled = enabled;
 }
+bool c128_enable_second_real_drive(C128 *c, bool enabled) {
+    c->drive2_raw_iec = enabled && c->drive_raw_iec &&
+        (c->real_drive_type[1] == 1581 ? c->real1581[1].rom_loaded :
+                                       c->second_real_drive.rom_loaded);
+    iec_bus_enable_second(&c->iec_bus, c->drive2_raw_iec);
+    return true;
+}
 
 static char picker_location[CONFIG_PATH_MAX];
 static char picker_filter[128];

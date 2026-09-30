@@ -3,7 +3,7 @@
 #include "cia.h"
 #include "wd1770.h"
 
-/* Standalone 2 MHz 1581 board. Not yet selected by the application backend.
+/* Independent 2 MHz 1581 board, connected through the shared slow IEC bus.
  * CIA timer/IRQ/serial functionality is shared with the host; the 8520's
  * binary TOD counter and IEC burst-serial wiring remain future work. */
 enum { DRIVE1581_CLOCK_HZ = 2000000 };

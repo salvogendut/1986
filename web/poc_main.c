@@ -44,10 +44,7 @@ static void install_drive_backend(void) {
         .take_status = c128_iec_take_status,
         .c64_mode = browser_c64_mode,
     };
-    g_c128.drive_raw_iec = g_config.real_disk_drive &&
-        g_c128.integrated_drive.rom_loaded;
-    g_c128.drive2_raw_iec = false;
-    iec_bus_enable_second(&g_c128.iec_bus, false);
+    c128_configure_real_drives(&g_c128);
     if (!g_c128.drive_raw_iec)
         cpu_install_iec_traps(g_c128.mem.kernal, &iec);
 }

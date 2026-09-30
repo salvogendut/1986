@@ -105,6 +105,8 @@ present, but the `GO64` test toggle does not need to be enabled.
 - The SID filter and combined waveforms are approximate.
 - The real 1571 path lacks burst serial, WD1770/FDC2 MFM, exact mechanism
   timing, and nonstandard raw/protection-track persistence.
+- The real 1581 reads D81 through its DOS ROM, but remains write-protected;
+  burst serial, 8520 TOD and raw/protected MFM tracks are not implemented.
 - The virtual drive does not execute uploaded drive code through `M-E`.
 - Snapshots, tape recording, and some keyboard/layout polish remain future work.
 

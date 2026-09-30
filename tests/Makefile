@@ -15,9 +15,11 @@ endif
 TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-frame-pacer test-joyport test-c128-keyboard test-mos6502dis test-gifcap test-videocap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc test-snapshot
 TESTS += test-drive-warp
 TESTS += test-machine-clock test-drive1581 test-wd1770
+TESTS += test-real-drives
 
 MACHINE_SOURCES = $(addprefix ../src/,c128.c cpu.c mem.c mmu.c vic.c vdc.c \
     cia.c sid.c z80.c kbd.c joyport.c tape.c drive.c drive1571cr.c drive_cpu6502.c \
+    drive1581.c wd1770.c \
     disk_image.c virtual_drive.c gcr_drive.c via6522.c iec_bus.c \
     drive_monitor.c config.c vice/maincpu.c vice/interrupt.c)
 test-machine-clock: test_machine_clock.c $(MACHINE_SOURCES) $(wildcard ../src/*.h) ../src/vice/6510core.c
@@ -32,7 +34,7 @@ all: $(TESTS)
 # These tests embed Display/C128 or consume the VDC framebuffer dimensions.
 test-c128-keyboard test-overlay test-vdc test-snapshot: ../src/display.h
 test-c128-keyboard test-overlay test-drive test-prg-drive test-drive-warp test-snapshot: ../src/config.h
-test-c128-keyboard test-overlay test-drive-warp test-snapshot: ../src/c128.h ../src/drive1571cr.h ../src/drive_cpu6502.h
+test-c128-keyboard test-overlay test-drive-warp test-snapshot: ../src/c128.h ../src/drive1571cr.h ../src/drive_cpu6502.h ../src/drive1581.h ../src/wd1770.h ../src/iec_bus.h
 
 test-cpu: test_cpu.c ../src/cpu.c ../src/cpu.h ../src/vice/maincpu.c ../src/vice/interrupt.c ../src/vice/6510core.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
@@ -172,6 +174,7 @@ test-snapshot: test_snapshot.c ../src/snapshot.c ../src/snapshot.h ../src/tape.c
 check: $(TESTS)
 	./test-cpu
 	./test-machine-clock
+	./test-real-drives
 	./test-mmu
 	./test-mem
 	./test-cartridge
@@ -219,3 +222,8 @@ test-drive1581: test_drive1581.c ../src/drive1581.c ../src/drive1581.h ../src/dr
 test-wd1770: test_wd1770.c ../src/wd1770.c ../src/wd1770.h ../src/disk_image.c ../src/disk_image.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_wd1770.c ../src/wd1770.c ../src/disk_image.c -o $@
+
+test-real-drives: test_real_drives.c $(MACHINE_SOURCES) ../src/paste.c $(wildcard ../src/*.h) ../src/vice/6510core.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra \
+		-ffunction-sections -fdata-sections $(GC_SECTIONS_LDFLAGS) -I../src \
+		test_real_drives.c $(MACHINE_SOURCES) ../src/paste.c $(SDL3_LIBS) -lm -o $@

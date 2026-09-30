@@ -9,7 +9,7 @@ Z80-based CP/M are all first-class targets.
 
 The emulator currently boots Commodore BASIC 7.0 to `READY.`, boots CP/M Plus
 to its `A>` prompt, runs native C128 software, and provides both fast virtual
-disk access and an experimental ROM-backed 1571CR path.
+disk access and experimental ROM-backed 1571CR and read-only 1581 paths.
 
 ## Highlights
 
@@ -23,6 +23,8 @@ disk access and an experimental ROM-backed 1571CR path.
   image write-back through the fast virtual drive.
 - Experimental ROM-backed 1571CR emulation with line-level IEC, D64/D71 GCR
   reads and writes, per-drive activity LEDs, and audio/visual monitors.
+- ROM-backed 1581 D81 reads, including mixed 1571/1581 pairs on the same IEC
+  bus. The 1581 backend is currently write-protected.
 - Native C128 cartridges, raw function ROMs, the U36 internal ROM socket, and
   TAP/T64 cassette support.
 - Unified or separate VIC/VDC windows, persistent configuration, screenshots,
@@ -91,7 +93,7 @@ CI artifacts, and repository continue to exclude ROM dumps. See
 | [Status](docs/STATUS.md) | Implemented hardware, C128/C64 scope, and known limitations |
 | [Usage](USAGE.md) | Configuration, media, CP/M, cartridges, tape, mouse, and disk writes |
 | [Controls](CONTROLS.md) | Host keys, C128 keyboard mappings, and overlay controls |
-| [Drives](docs/DRIVES.md) | Fast virtual drive and experimental 1571CR architecture |
+| [Drives](docs/DRIVES.md) | Fast virtual drive and experimental 1571CR/1581 architecture |
 | [Z80/CP/M](docs/Z80-CPM.md) | Reset BIOS, shared-RAM trampoline, CPU handoff, and timing invariants |
 | [ML monitor](docs/ML-MONITOR.md) | 8502/Z80 disassembly, memory, stepping, and CPU-tagged breakpoints |
 | [Snapshots](docs/SNAPSHOTS.md) | Save/load state and the limits of VICE `.vsf` interchange |
