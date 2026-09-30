@@ -3,6 +3,7 @@
 #include "via6522.h"
 #include "cia.h"
 #include "gcr_drive.h"
+#include "drive_cpu6502.h"
 #include <stdbool.h>
 
 /* Standalone integrated 1571CR machine. This is deliberately independent of
@@ -21,12 +22,7 @@ typedef enum {
 typedef u8 (*Drive1571CrIoRead)(void *ctx, Drive1571CrIo chip, u16 addr);
 typedef void (*Drive1571CrIoWrite)(void *ctx, Drive1571CrIo chip, u16 addr, u8 value);
 
-typedef struct {
-    u8 a, x, y, sp, p;
-    u16 pc;
-    u64 cycles;
-    bool irq, nmi_pending, jammed;
-} Drive1571CrCpu;
+typedef DriveCpu6502 Drive1571CrCpu;
 
 typedef struct {
     u8 ram[0x800];

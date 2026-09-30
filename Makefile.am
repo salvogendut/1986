@@ -35,6 +35,9 @@ dist_man1_MANS = 1986.1
 	src/disk_image.c \
 	src/drive.c \
 	src/drive1571cr.c \
+	src/drive_cpu6502.c \
+	src/drive1581.c \
+	src/wd1770.c \
 	src/drive_monitor.c \
 	src/tape.c \
 	src/gcr_drive.c \
@@ -74,6 +77,9 @@ noinst_HEADERS = \
 	src/disk_image.h \
 	src/drive.h \
 	src/drive1571cr.h \
+	src/drive_cpu6502.h \
+	src/drive1581.h \
+	src/wd1770.h \
 	src/drive_monitor.h \
 	src/tape.h \
 	src/drive_sound_samples.h \
@@ -153,7 +159,7 @@ EXTRA_DIST = LICENSE README.md Development.md USAGE.md CONTROLS.md INSTALL.md \
 	tests/test_joyport.c tests/test_c128_keyboard.c tests/test_gifcap.c tests/test_videocap.c \
 	tests/test_mos6502dis.c \
 	tests/test_d64.c tests/test_d64_save.c tests/test_disk_formats.c \
-	tests/test_drive.c tests/test_drive1571cr.c tests/test_drive_monitor.c tests/test_tape.c tests/test_gcr_drive.c tests/test_gcr_write.c tests/test_via6522.c tests/test_iec_bus.c tests/test_prg_drive.c tests/test_vdrive_blocks.c tests/test_overlay.c \
+	tests/test_drive.c tests/test_drive1571cr.c tests/test_drive1581.c tests/test_wd1770.c tests/test_drive_monitor.c tests/test_tape.c tests/test_gcr_drive.c tests/test_gcr_write.c tests/test_via6522.c tests/test_iec_bus.c tests/test_prg_drive.c tests/test_vdrive_blocks.c tests/test_overlay.c \
 	tests/test_display_footer.c tests/test_leds.c tests/test_vic.c tests/test_vdc.c \
 	tests/test_snapshot.c
 

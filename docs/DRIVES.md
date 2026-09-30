@@ -74,6 +74,43 @@ If either enabled drive selects 1581 hardware, both drives fall back to the
 fast virtual backend after restart. Mixed virtual and ROM-backed devices on
 the same emulated IEC bus are not currently supported.
 
+## 1581 hardware work in progress (#152)
+
+The first standalone core is implemented, but is **not yet connected to the
+application's Real Disk Drive selector**. Selecting 1581 still uses the
+fallback described above; this is not yet a usable real-drive option.
+
+The core shares the independent NMOS 6502 instruction engine with the 1571,
+and has its own 2 MHz clock budget, 8 KiB RAM, 32 KiB ROM, CIA timers/IRQs,
+IEC pin interface, side/motor/LED outputs, and WD1770 register window. The
+address map, CIA wiring, head polarity, and WD command timing were checked
+against VICE 3.10's `memiec.c`, `cia1581d.c`, `wd1770.c`, and `fdd.c`.
+
+The WD1770 currently reads ordinary 80-track D81 images through decoded
+512-byte physical sectors (two CBM DOS blocks). It implements seek/step,
+read-sector, read-address, data-ready/lost-data status, force-interrupt,
+media-change handling, and read/seek activity counters. Sector spacing is
+approximated; this is not yet a raw MFM-track or protection emulator. All
+images report write protection, and write commands cannot modify them.
+
+The next steps are shared IEC bus/scheduler integration for either drive,
+ROM discovery and overlay selection, per-drive monitors, atomic sector
+writes, and end-to-end `DIRECTORY`/`LOAD`/`SAVE` comparisons. Burst serial,
+the 8520 binary TOD counter, and raw-track commands remain unimplemented.
+
+Tests use synthetic firmware and generated media by default. An optional
+private-ROM check boots DOS 318045-02 and submits five read jobs spanning
+both sides and tracks 1/40/80, checking the returned bytes:
+
+```sh
+make -C tests test-drive1581 test-wd1770
+./tests/test-wd1770
+C128_1581_ROM=/path/to/dos1581-318045-02.bin ./tests/test-drive1581
+```
+
+No DOS ROM is included or copied by this test. Its disposable D81 is removed
+afterwards. The optional test does not exercise the host IEC/KERNAL path.
+
 ## Write safety
 
 Both backends protect read-only images and detect external host-file changes.
