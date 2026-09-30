@@ -47,6 +47,47 @@ static void module_header(FILE *f, const char *name, int major, int minor,
     put32(f, payload + 22);
 }
 
+/* Construct the immediately preceding private ABI from a current file,
+ * retaining every other VSF module and its original bytes. */
+static void make_legacy_vic(const char *path, const char *legacy) {
+    FILE *f = fopen(path, "rb");
+    if (!f) { CHECK(false, "open current snapshot fixture"); return; }
+    fseek(f, 0, SEEK_END);
+    size_t n = (size_t)ftell(f);
+    rewind(f);
+    u8 *bytes = malloc(n);
+    if (!bytes) { fclose(f); CHECK(false, "allocate legacy fixture"); return; }
+    CHECK(fread(bytes, 1, n, f) == n, "read snapshot fixture");
+    fclose(f);
+    bool converted = false;
+    for (size_t at = 58; at + 22 <= n;) {
+        u8 *h = bytes + at;
+        u32 size = h[18] | h[19] << 8 | h[20] << 16 | (u32)h[21] << 24;
+        if (size < 22 || size > n - at) break;
+        if (!memcmp(h, "1986STATE", 9)) {
+            size_t old = offsetof(Vic, beam_half_clock);
+            size_t removed = sizeof(Vic) - old;
+            size_t vic = at + 22 + 36 + 32 + sizeof(Z80) + sizeof(Mmu) +
+                         RAM_TOTAL + 0x800 + 1;
+            memmove(bytes + vic + old, bytes + vic + sizeof(Vic),
+                    n - vic - sizeof(Vic));
+            size -= removed; n -= removed;
+            for (unsigned b = 0; b < 4; b++) {
+                h[18 + b] = size >> (8 * b);
+                h[22 + 16 + b] = old >> (8 * b);
+            }
+            converted = true;
+            break;
+        }
+        at += size;
+    }
+    CHECK(converted, "find private snapshot module");
+    f = fopen(legacy, "wb");
+    CHECK(f && fwrite(bytes, 1, n, f) == n, "write legacy snapshot fixture");
+    if (f) fclose(f);
+    free(bytes);
+}
+
 static void make_vice_projection(const char *path) {
     FILE *f = fopen(path, "wb");
     char machine[16] = "C128";
@@ -69,6 +110,7 @@ int main(void) {
     static C128 c;
     const char *path = "/tmp/1986-test-snapshot.vsf";
     const char *vice = "/tmp/1986-test-vice.vsf";
+    const char *legacy = "/tmp/1986-test-legacy-vic.vsf";
     c.vdc.fb_w = 800; c.vdc.fb_h = 400;
     c.vdc.fb = calloc((size_t)c.vdc.fb_w * c.vdc.fb_h, sizeof(*c.vdc.fb));
     c.vdc.display_fb = calloc((size_t)c.vdc.fb_w * c.vdc.fb_h,
@@ -80,6 +122,11 @@ int main(void) {
     c.mem.mmu.mcr = 0x42; c.mem.mmu.page1 = 0x73;
     c.z80.pc = 0xCAFE; c.z80.af = 0xBEEF; c.z80.iff1 = true;
     c.vic.raster_irq_line = 0x101; c.vic.sprite_enable = 0x81;
+    c.vic.beam_half_clock = 123456;
+    c.vic.clocked = true; c.vic.vc = 37; c.vic.vcbase = 40;
+    c.vic.fetch_row_counter = 5;
+    c.vic.sprite_line_data[60][2] = 0xaabbcc;
+    c.vic.beam_pixels[70][50] = 0x87;
     c.vdc.regs[12] = 0x20; c.vdc.ram[0x4567] = 0xCC;
     c.vdc.draw_screen_pending = true; c.vdc.draw_attribute_pending = true;
     c.cia1.ta_counter = 0x1234; c.cia2.tod[2] = 0x59;
@@ -103,6 +150,8 @@ int main(void) {
     c.z80.pc = 0; c.vic.sprite_enable = 0; c.vdc.ram[0x4567] = 0;
     c.vdc.draw_screen_pending = false; c.vdc.draw_attribute_pending = false;
     c.cia1.ta_counter = 0; c.sid.regs[0x18] = 0; c.total_cycles = 0;
+    c.vic.beam_half_clock = 0; c.vic.clocked = false;
+    c.vic.sprite_line_data[60][2] = 0; c.vic.beam_pixels[70][50] = 0;
     core_state.pc = 0;
     CHECK(snapshot_load(&c, path) == SNAPSHOT_OK, "load full snapshot");
     CHECK(c.mem.ram[0x1234] == 0xA7 && c.mem.color_ram[0x321] == 0x0E,
@@ -118,6 +167,21 @@ int main(void) {
     CHECK(core_state.pc == 0x9abc && core_state.clock == 0x102030405ULL,
           "8502 core round trip");
     CHECK(c.vdc.fb == host_vdc_fb, "host VDC pointer preserved");
+    CHECK(c.vic.beam_half_clock == 123456 && c.vic.clocked &&
+          c.vic.vc == 37 && c.vic.vcbase == 40 && c.vic.fetch_row_counter == 5 &&
+          c.vic.sprite_line_data[60][2] == 0xaabbcc &&
+          c.vic.beam_pixels[70][50] == 0x87,
+          "VIC beam, fetch counters and captured pixels round trip");
+    CHECK(!c.cpu_clock_active && c.cpu_clock_synced == core_state.clock,
+          "snapshot restores an inactive CPU clock cursor");
+
+    make_legacy_vic(path, legacy);
+    CHECK(snapshot_load(&c, legacy) == SNAPSHOT_OK,
+          "load pre-timing VIC snapshot");
+    CHECK(c.vic.sprite_enable == 0x81 && !c.vic.clocked &&
+          c.vic.beam_half_clock == 0 && c.vic.vertical_border &&
+          c.vdc.ram[0x4567] == 0xcc && core_state.pc == 0x9abc,
+          "legacy snapshot retains machine state and restarts the beam");
 
     make_vice_projection(vice);
     core_state.pc = 0xabcd;
@@ -129,7 +193,7 @@ int main(void) {
           c.mem.mmu.mcr == 0x9a,
           "rejected VICE snapshot does not partially mutate the machine");
 
-    remove(path); remove(vice);
+    remove(path); remove(vice); remove(legacy);
     free(c.vdc.display_fb);
     free(c.vdc.fb);
     if (failures) return 1;

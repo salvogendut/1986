@@ -1,4 +1,5 @@
 #include "vic.h"
+#include <stddef.h>
 #include <string.h>
 
 /* C64/C128 colour palette (RGB). */
@@ -56,6 +57,9 @@ void vic_init(Vic *v) {
 }
 
 void vic_reset(Vic *v) {
+    memset((u8 *)v + offsetof(Vic, beam_half_clock), 0,
+           sizeof(*v) - offsetof(Vic, beam_half_clock));
+    v->vertical_border = true;
     v->border_color = 0;         /* black */
     v->bg_color[0] = 0;
     v->bg_color[1] = 0;
@@ -116,6 +120,37 @@ static void vic_set_raster_irq_line(Vic *v, u16 line) {
     v->raster_irq_line = line;
 }
 
+static void vic_badline_write(Vic *v, u8 val) {
+    if (!v->clocked) return;
+    unsigned line = v->current_raster;
+    if (line == 48 && (val & 0x10)) v->fetch_den_latched = true;
+    if (!v->fetch_den_latched || line < 48 || line > 247) return;
+    bool old = (v->vmode & 7) == (line & 7);
+    bool bad = (val & 7) == (line & 7);
+    if (old == bad) return;
+    unsigned cycle = v->cycle;
+    if (bad) {
+        if (cycle <= 57) {
+            v->bad_line = true;
+            if (cycle <= 13) v->fetch_row_counter = 0;
+            if (cycle >= 11 && cycle < 54) {
+                v->late_fetch = (u8)(cycle < 14 ? 14 : cycle + 3);
+                v->vc = (v->vcbase + (v->fetch_display_state && cycle > 14
+                                      ? cycle - 14 : 0)) & 0x3ff;
+            }
+            v->fetch_display_state = true;
+        } else v->force_display = true;
+        v->rc_checked = true;
+    } else {
+        if (cycle < 11) v->bad_line = false;
+        if (cycle > 0) {
+            v->fetch_display_state = true;
+            if (cycle > 13 && !v->rc_checked) v->fetch_row_counter = 0;
+            v->rc_checked = true;
+        }
+    }
+}
+
 void vic_write(Vic *v, u16 addr, u8 val) {
     unsigned reg = addr & 0x3F;
     if (reg <= 0x0F) {
@@ -128,6 +163,7 @@ void vic_write(Vic *v, u16 addr, u8 val) {
     switch (reg) {
         case 0x10: v->sprite_x_msb = val; break;
         case 0x11:
+            vic_badline_write(v, val);
             v->vmode = val;
             vic_set_raster_irq_line(v,
                 (u16)((v->raster_irq_line & 0xFF) | ((val & 0x80) << 1)));
@@ -287,7 +323,7 @@ static void vic_latch_matrix_fetch(Vic *v, const Mem *m, unsigned line,
     bool badline = v->fetch_den_latched && line >= 48 && line <= 247 &&
                    (line & 0x07) == (state->d011 & 0x07);
     if (badline) {
-        v->fetch_matrix_row++;
+        if (v->fetch_matrix_row < 0) v->fetch_matrix_row = 0;
         v->fetch_row_counter = 0;
         v->fetch_display_state = true;
         v->fetch_matrix_valid = v->fetch_matrix_row >= 0 &&
@@ -332,9 +368,10 @@ static void vic_latch_matrix_fetch(Vic *v, const Mem *m, unsigned line,
     }
 
     if (v->fetch_display_state) {
-        if (v->fetch_row_counter == 7)
+        if (v->fetch_row_counter == 7) {
             v->fetch_display_state = false;
-        else
+            v->fetch_matrix_row++;
+        } else
             v->fetch_row_counter++;
     }
 }
@@ -382,6 +419,205 @@ void vic_latch_raster(Vic *v, const Mem *m, unsigned line) {
 #define VIC_SPRITE_X_OFFSET  (VIC_TEXT_X - 24)
 #define VIC_FIRST_VISIBLE_LINE  16
 
+/* PAL cycles are numbered 0..62, as in VICE. Matrix DMA starts with BA at
+ * cycle 11, C accesses at 14, and G accesses at 15. VC is reloaded from
+ * VCBASE each line; only RC reaching seven commits the next matrix row.
+ * In particular FLI can fetch a matrix on every line WITHOUT advancing it
+ * by forty characters each time. */
+static bool vic_badline_condition(const Vic *v) {
+    return v->fetch_den_latched && v->current_raster >= 48 &&
+        v->current_raster <= 247 &&
+        (v->current_raster & 7) == (v->vmode & 7);
+}
+
+bool vic_cpu_ba_low(const Vic *v) {
+    if (v->fast_mode) return false;
+    if (v->bad_line && v->cycle >= 11 && v->cycle < 54) return true;
+    for (unsigned s = 0; s < VIC_SPRITES; s++) {
+        /* Three-cycle BA warning followed by the two PHI2 data accesses.
+         * Adjacent active sprites naturally join into a single DMA burst. */
+        unsigned start = (54 + s * 2) % 63;
+        if ((v->sprite_dma & (1u << s)) &&
+            (v->cycle + 63 - start) % 63 < 5) return true;
+    }
+    return false;
+}
+
+static void vic_beam_graphics(Vic *v, const Mem *m, unsigned col) {
+    unsigned line = v->current_raster;
+    u8 screen = v->fetch_matrix_data[col];
+    u8 color = v->fetch_color_data[col] & 15;
+    unsigned mode = (v->vmode >> 5) & 3;
+    VicRasterState s = {.bank_addr = v->bank_addr, .d011 = v->vmode,
+                        .d018 = v->ctrl2};
+    u8 bits = 0;
+    if (v->fetch_display_state) {
+        u16 address;
+        if (mode & 1) {
+            address = ((v->ctrl2 & 8) << 10) |
+                      ((v->vc & 0x3ff) << 3) | v->fetch_row_counter;
+            bits = vic_fetch_memory_byte(&s, m, v->bank_addr + address);
+        } else {
+            bits = vic_fetch_text_byte(&s, m, screen, v->fetch_row_counter);
+        }
+        v->vc = (v->vc + 1) & 0x3ff;
+    } else {
+        /* Idle isn't a blank bitmap: the VIC repeatedly fetches $3fff
+         * ($39ff with ECM) and uses black foreground. RFO's 2 MHz opener
+         * deliberately avoids badlines and exposes this idle pattern. */
+        bits = vic_fetch_memory_byte(&s, m,
+                    v->bank_addr + ((mode & 2) ? 0x39ff : 0x3fff));
+        screen = color = 0;
+    }
+    bool multicolor = (v->ctrl1 & 0x10) &&
+        ((mode & 1) || ((color & 8) && mode == 0));
+    u8 colors[4] = {v->bg_color[0], v->bg_color[1], v->bg_color[2], color};
+    if (mode & 1) {
+        colors[1] = screen >> 4;
+        colors[2] = screen & 15;
+    } else if (multicolor) colors[3] &= 7;
+    else if (mode == 2) colors[0] = v->bg_color[screen >> 6];
+    unsigned left = VIC_TEXT_X + ((v->ctrl1 & 8) ? 0 : 7);
+    unsigned right = VIC_TEXT_X + VIC_TEXT_W - ((v->ctrl1 & 8) ? 0 : 9);
+    for (unsigned p = 0; p < 8; p++) {
+        unsigned x = VIC_TEXT_X + col * 8 + p + (v->ctrl1 & 7);
+        if (x < left || x >= right || v->vertical_border) continue;
+        bool fg;
+        u8 ink;
+        if (multicolor) {
+            unsigned code = (bits >> (6 - (p & ~1u))) & 3;
+            ink = colors[code]; fg = (code & 2) != 0;
+        } else {
+            fg = (bits & (0x80 >> p)) != 0;
+            ink = (mode & 1) ? (fg ? screen >> 4 : screen & 15)
+                             : (fg ? color : colors[0]);
+        }
+        if (mode == 3 || (mode == 2 && (v->ctrl1 & 0x10))) ink = 0;
+        v->beam_pixels[line][x] = (ink & 15) | (fg ? 0x80 : 0);
+    }
+}
+
+static void vic_beam_cycle(Vic *v, const Mem *m) {
+    unsigned line = v->current_raster, cycle = v->cycle;
+    if (cycle == 0) {
+        if (line == 0) {
+            v->fetch_den_latched = false;
+            v->fetch_display_state = false;
+            v->vcbase = v->vc = 0;
+            v->fetch_row_counter = 0;
+        }
+        if (line == 48 && (v->vmode & 0x10)) v->fetch_den_latched = true;
+        v->bad_line = false;
+        v->rc_checked = false;
+        v->force_display = false;
+        v->late_fetch = 0;
+        unsigned top = (v->vmode & 8) ? 51 : 55;
+        unsigned bottom = (v->vmode & 8) ? 251 : 247;
+        if (line == bottom) v->vertical_border = true;
+        if (line == top && (v->vmode & 0x10)) v->vertical_border = false;
+        memset(v->beam_pixels[line], 0x40 | v->border_color,
+               sizeof(v->beam_pixels[line]));
+        vic_capture_state(v, m, &v->raster_state[line]);
+        v->raster_state_valid[line] = true;
+        vic_tick(v);
+    }
+    if (cycle == 11) {
+        v->bad_line = vic_badline_condition(v);
+    }
+    if (cycle == 14) {
+        v->vc = v->vcbase;
+        if (v->bad_line) {
+            v->fetch_row_counter = 0;
+            v->fetch_display_state = true;
+            v->rc_checked = true;
+        }
+    }
+    if (cycle >= 14 && cycle < 54 && v->bad_line) {
+        unsigned col = cycle - 14;
+        unsigned cell = (v->vcbase + col) & 0x3ff;
+        VicRasterState s = {.bank_addr = v->bank_addr};
+        u32 base = v->bank_addr + ((v->ctrl2 & 0xf0) << 6);
+        unsigned cbank = mem_c64_mode(m) ? 0 : (m->pla_data >> 1) & 1;
+        v->fetch_matrix_data[col] = cycle < v->late_fetch ? 0xff :
+            vic_fetch_memory_byte(&s, m, base + cell);
+        v->fetch_color_data[col] = m->color_ram[cbank * 0x400 + cell] & 15;
+    }
+    if (cycle >= 11 && cycle < 59) {
+        unsigned x = (cycle - 11) * 8;
+        for (unsigned p = 0; p < 8; p++) {
+            bool border = v->vertical_border || x + p < VIC_TEXT_X ||
+                x + p >= VIC_TEXT_X + VIC_TEXT_W;
+            /* Don't erase pixels spilled here by horizontal fine scrolling. */
+            if (v->beam_pixels[line][x + p] & 0x40)
+                v->beam_pixels[line][x + p] = border
+                    ? (0x40 | v->border_color) : v->bg_color[0];
+        }
+    }
+    if (cycle >= 15 && cycle < 55) vic_beam_graphics(v, m, cycle - 15);
+    if (cycle == 54) {
+        vic_capture_state(v, m, &v->raster_state[line]);
+        v->sprite_line_active[(line + 1) % VIC_RASTER_LINES] = 0;
+        for (unsigned s = 0; s < VIC_SPRITES; s++) {
+            unsigned bit = 1u << s;
+            if ((v->sprite_enable & bit) && v->sprite_y[s] == (line & 255)) {
+                v->sprite_dma |= bit;
+                v->sprite_dma_row[s] = 0;
+                v->sprite_dma_repeat &= ~bit;
+            } else if (v->sprite_dma & bit) {
+                if (!(v->sprite_y_expand & bit) || (v->sprite_dma_repeat & bit))
+                    if (++v->sprite_dma_row[s] == 21) v->sprite_dma &= ~bit;
+                v->sprite_dma_repeat ^= bit;
+            }
+        }
+    }
+    /* Sprite 0..2 fetch at the right edge; 3..7 after the line wraps.
+     * Once DMA starts, changing Y schedules a subsequent appearance: it
+     * must not relocate the sprite rows already being displayed. Fetch
+     * the pointer and pattern here, before a later D018/RAM write. */
+    for (unsigned s = 0; s < VIC_SPRITES; s++) {
+        unsigned fetch = (57 + 2 * s) % 63;
+        if (cycle != fetch || !(v->sprite_dma & (1u << s))) continue;
+        unsigned target = cycle >= 57 ? (line + 1) % VIC_RASTER_LINES : line;
+        VicRasterState state = {.bank_addr = v->bank_addr};
+        unsigned screen = (v->ctrl2 & 0xf0) << 6;
+        u8 pointer = vic_fetch_memory_byte(&state, m,
+                          v->bank_addr + screen + 0x3f8 + s);
+        unsigned address = v->bank_addr + (pointer << 6) +
+                           v->sprite_dma_row[s] * 3;
+        u32 bits = 0;
+        for (unsigned b = 0; b < 3; b++)
+            bits = (bits << 8) | vic_fetch_memory_byte(&state, m, address + b);
+        v->sprite_line_data[target][s] = bits;
+        v->sprite_line_active[target] |= 1u << s;
+    }
+    if (cycle == 57) {
+        if (v->fetch_row_counter == 7) {
+            v->vcbase = v->vc;
+            v->fetch_display_state = false;
+        }
+        if (v->fetch_display_state || v->bad_line) {
+            v->fetch_row_counter = (v->fetch_row_counter + 1) & 7;
+            v->fetch_display_state = true;
+        }
+        if (v->force_display) v->fetch_display_state = true;
+    }
+}
+
+void vic_clock_half(Vic *v, const Mem *m) {
+    if (!v->clocked) {
+        v->clocked = true;
+        v->current_raster = (v->beam_half_clock / 126) % VIC_RASTER_LINES;
+        v->cycle = (v->beam_half_clock / 2) % 63;
+        vic_beam_cycle(v, m);
+    }
+    ++v->beam_half_clock;
+    if (!(v->beam_half_clock & 1)) {
+        v->current_raster = (v->beam_half_clock / 126) % VIC_RASTER_LINES;
+        v->cycle = (v->beam_half_clock / 2) % 63;
+        vic_beam_cycle(v, m);
+    }
+}
+
 static void vic_draw_sprites(Vic *v, Mem *m, Display *d, const u8 *foreground) {
     u8 occupied[C128_SCREEN_W * C128_SCREEN_H];
     memset(occupied, 0, sizeof(occupied));
@@ -397,7 +633,8 @@ static void vic_draw_sprites(Vic *v, Mem *m, Display *d, const u8 *foreground) {
         /* Draw 7 first and 0 last: lower-numbered sprites have priority. */
         for (int sprite = VIC_SPRITES - 1; sprite >= 0; sprite--) {
             u8 sprite_bit = (u8)(1u << sprite);
-            if (!(state->sprite_enable & sprite_bit))
+            if (!((v->clocked ? v->sprite_line_active[raster]
+                             : state->sprite_enable) & sprite_bit))
                 continue;
 
             unsigned x = state->sprite_x[sprite]
@@ -407,13 +644,14 @@ static void vic_draw_sprites(Vic *v, Mem *m, Display *d, const u8 *foreground) {
             int x_scale = (state->sprite_x_expand & sprite_bit) ? 2 : 1;
             int y_scale = (state->sprite_y_expand & sprite_bit) ? 2 : 1;
             int source_y = (dy - origin_y) / y_scale;
-            if (dy < origin_y || source_y < 0 || source_y >= 21)
+            if (!v->clocked && (dy < origin_y || source_y < 0 || source_y >= 21))
                 continue;
             bool multicolor = (state->sprite_multicolor & sprite_bit) != 0;
             bool behind = (state->sprite_priority & sprite_bit) != 0;
             u8 pointer = state->sprite_pointer[sprite];
             u32 data_base = state->bank_addr + ((u32)pointer << 6);
-            u32 bits = ((u32)m->ram[data_base + source_y * 3] << 16)
+            u32 bits = v->clocked ? v->sprite_line_data[raster][sprite] :
+                       ((u32)m->ram[data_base + source_y * 3] << 16)
                      | ((u32)m->ram[data_base + source_y * 3 + 1] << 8)
                      | m->ram[data_base + source_y * 3 + 2];
 
@@ -469,6 +707,19 @@ static void vic_draw_sprites(Vic *v, Mem *m, Display *d, const u8 *foreground) {
  * border around the text area. Characters are drawn 1:1 (8x8 pixels each),
  * then the eight hardware sprites are composited over the graphics plane. */
 void vic_render(Vic *v, Mem *m, Display *d) {
+    if (v->clocked) {
+        u8 foreground[C128_SCREEN_W * C128_SCREEN_H];
+        for (unsigned y = 0; y < C128_SCREEN_H; y++) {
+            for (unsigned x = 0; x < C128_SCREEN_W; x++) {
+                u8 sample = v->beam_pixels[y + VIC_FIRST_VISIBLE_LINE][x];
+                unsigned off = y * C128_SCREEN_W + x;
+                d->pixels[off] = VIC_COLORS[sample & 15];
+                foreground[off] = (sample & 0x80) != 0;
+            }
+        }
+        vic_draw_sprites(v, m, d, foreground);
+        return;
+    }
     u8 foreground[C128_SCREEN_W * C128_SCREEN_H];
     int matrix_row[VIC_RASTER_LINES];
     u8 matrix_line[VIC_RASTER_LINES];
@@ -496,7 +747,7 @@ void vic_render(Vic *v, Mem *m, Display *d) {
         bool badline = den_latched && line >= 48 && line <= 247 &&
                        (line & 0x07) == (state->d011 & 0x07);
         if (badline) {
-            row++;
+            if (row < 0) row = 0;
             row_counter = 0;
             display_state = true;
             screen_base = state->bank_addr + ((state->d018 & 0xF0) << 6);
@@ -507,9 +758,10 @@ void vic_render(Vic *v, Mem *m, Display *d) {
             matrix_base[line] = screen_base;
         }
         if (display_state) {
-            if (row_counter == 7)
+            if (row_counter == 7) {
                 display_state = false;
-            else
+                row++;
+            } else
                 row_counter++;
         }
     }

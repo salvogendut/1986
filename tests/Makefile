@@ -1,4 +1,5 @@
 CC ?= cc
+.DEFAULT_GOAL := all
 CFLAGS ?= -O2
 CPPFLAGS ?=
 
@@ -13,6 +14,16 @@ endif
 
 TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-frame-pacer test-joyport test-c128-keyboard test-mos6502dis test-gifcap test-videocap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc test-snapshot
 TESTS += test-drive-warp
+TESTS += test-machine-clock
+
+MACHINE_SOURCES = $(addprefix ../src/,c128.c cpu.c mem.c mmu.c vic.c vdc.c \
+    cia.c sid.c z80.c kbd.c joyport.c tape.c drive.c drive1571cr.c \
+    disk_image.c virtual_drive.c gcr_drive.c via6522.c iec_bus.c \
+    drive_monitor.c config.c vice/maincpu.c vice/interrupt.c)
+test-machine-clock: test_machine_clock.c $(MACHINE_SOURCES) $(wildcard ../src/*.h) ../src/vice/6510core.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra \
+		-ffunction-sections -fdata-sections $(GC_SECTIONS_LDFLAGS) -I../src \
+		test_machine_clock.c $(MACHINE_SOURCES) $(SDL3_LIBS) -lm -o $@
 
 .PHONY: all check clean
 
@@ -22,7 +33,7 @@ all: $(TESTS)
 test-c128-keyboard test-overlay test-vdc test-snapshot: ../src/display.h
 test-c128-keyboard test-overlay test-drive test-prg-drive test-drive-warp test-snapshot: ../src/config.h
 
-test-cpu: test_cpu.c ../src/cpu.c ../src/cpu.h ../src/vice/maincpu.c ../src/vice/interrupt.c
+test-cpu: test_cpu.c ../src/cpu.c ../src/cpu.h ../src/vice/maincpu.c ../src/vice/interrupt.c ../src/vice/6510core.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_cpu.c ../src/cpu.c ../src/vice/maincpu.c ../src/vice/interrupt.c -lm -o $@
 
@@ -159,6 +170,7 @@ test-snapshot: test_snapshot.c ../src/snapshot.c ../src/snapshot.h ../src/tape.c
 
 check: $(TESTS)
 	./test-cpu
+	./test-machine-clock
 	./test-mmu
 	./test-mem
 	./test-cartridge

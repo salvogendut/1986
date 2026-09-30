@@ -8,8 +8,8 @@
  *
  * The VIC-IIe drives the 320x200 display in 40-column mode (40x25
  * characters, 8x8 glyphs from the character ROM, colour from the nibble RAM
- * at $D800). The raster counter is derived from the CPU cycle count so the
- * KERNAL's raster-wait loops see the scanline advance.
+ * at $D800). A shared half-cycle clock drives its raster and fetch pipeline
+ * independently of the 8502's 1/2 MHz speed and memory-bus stalls.
  */
 
 #define VIC_CHARS_X  40
@@ -89,6 +89,26 @@ typedef struct {
     u8 fetch_matrix_data[VIC_CHARS_X];
     u8 fetch_color_data[VIC_CHARS_X];
     bool fast_mode;     /* VIC-IIe $D030 bit 0: 8502 requests 2 MHz */
+
+    /* Timed fetch/display pipeline. Keep the legacy snapshot prefix above
+     * unchanged; older snapshots can restart the beam at a frame boundary. */
+    u64 beam_half_clock;
+    bool clocked;
+    bool bad_line;
+    bool vertical_border;
+    bool rc_checked;
+    bool force_display;
+    u16 vc, vcbase;
+    u8 cycle;
+    u8 late_fetch;
+    u8 sprite_dma;
+    u8 sprite_dma_row[VIC_SPRITES];
+    u8 sprite_dma_repeat;
+    u8 sprite_line_active[VIC_RASTER_LINES];
+    u32 sprite_line_data[VIC_RASTER_LINES][VIC_SPRITES];
+    /* Palette index plus foreground (bit 7) and border (bit 6), captured
+     * while the beam runs, not reconstructed from end-of-frame RAM. */
+    u8 beam_pixels[VIC_RASTER_LINES][C128_SCREEN_W];
 } Vic;
 
 void vic_init(Vic *v);
@@ -104,5 +124,7 @@ void vic_set_raster_line(Vic *v, unsigned line);
 bool vic_tick(Vic *v);
 void vic_begin_frame(Vic *v, const Mem *m);
 void vic_latch_raster(Vic *v, const Mem *m, unsigned line);
-/* Render one full frame (raster 0..199) into the display buffer. */
+void vic_clock_half(Vic *v, const Mem *m);
+bool vic_cpu_ba_low(const Vic *v);
+/* Copy the PAL viewport (rasters 16..303) into the display buffer. */
 void vic_render(Vic *v, Mem *m, Display *d);

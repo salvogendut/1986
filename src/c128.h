@@ -109,6 +109,9 @@ typedef struct {
     int     z80_frame_debt; /* Z80 T-state overrun carried across raster frames */
     u64     bus_cycles;     /* shared one-MHz peripheral/bus clock */
     u64     total_cycles;
+    /* Host-side synchronization cursor, rebuilt after reset/snapshot load. */
+    u64 cpu_clock_synced;
+    bool cpu_clock_active;
 } C128;
 
 void c128_init(C128 *c, Config *cfg);

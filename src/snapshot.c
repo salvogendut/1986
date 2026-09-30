@@ -265,7 +265,6 @@ static SnapshotResult load_private(C128 *c, const ModuleView *module) {
         2 * sizeof(Cia) + sizeof(Sid) + sizeof(Kbd) + sizeof(JoyPorts) +
         4 + 5 * 4 + 2 * 8 +       /* machine flags, debts, clocks */
         4 + 8 + 4 + 4 + 1 + 1 + 8 + 8 + 8; /* tape transport */
-    if (module->size != expected) return SNAPSHOT_ERR_STATE;
     Reader r = {module->payload, module->size, 0, false};
     if (read_u32(&r) != PRIVATE_MAGIC || read_u16(&r) != PRIVATE_SCHEMA)
         return SNAPSHOT_ERR_STATE;
@@ -275,9 +274,14 @@ static SnapshotResult load_private(C128 *c, const ModuleView *module) {
     u32 vic_size = read_u32(&r), cia_size = read_u32(&r);
     u32 sid_size = read_u32(&r), kbd_size = read_u32(&r);
     u32 joy_size = read_u32(&r);
+    /* The cycle-timed VIC appends state to the original snapshot prefix.
+     * Keep loading pre-timing snapshots; their next frame rebuilds the beam. */
+    bool legacy_vic = vic_size == offsetof(Vic, beam_half_clock);
+    if (module->size != expected - sizeof(Vic) + vic_size)
+        return SNAPSHOT_ERR_STATE;
     if (r.failed || !little || !host_little_endian() || bool_size != sizeof(bool) ||
         z80_size != sizeof(Z80) || mmu_size != sizeof(Mmu) ||
-        vic_size != sizeof(Vic) || cia_size != sizeof(Cia) ||
+        (!legacy_vic && vic_size != sizeof(Vic)) || cia_size != sizeof(Cia) ||
         sid_size != sizeof(Sid) || kbd_size != sizeof(Kbd) ||
         joy_size != sizeof(JoyPorts))
         return SNAPSHOT_ERR_STATE;
@@ -289,7 +293,9 @@ static SnapshotResult load_private(C128 *c, const ModuleView *module) {
     read_blob(&r, c->mem.ram, sizeof(c->mem.ram));
     read_blob(&r, c->mem.color_ram, sizeof(c->mem.color_ram));
     c->mem.pla_data = read_u8(&r);
-    read_blob(&r, &c->vic, sizeof(c->vic));
+    memset(&c->vic, 0, sizeof(c->vic));
+    read_blob(&r, &c->vic, vic_size);
+    if (legacy_vic) c->vic.vertical_border = true;
 
     u32 vdc_prefix = read_u32(&r);
     if (vdc_prefix != offsetof(Vdc, fb)) return SNAPSHOT_ERR_STATE;
@@ -314,6 +320,8 @@ static SnapshotResult load_private(C128 *c, const ModuleView *module) {
     if (r.failed) return SNAPSHOT_ERR_STATE;
 
     cpu_state_set(&c->cpu, &cpu);
+    c->cpu_clock_active = false;
+    c->cpu_clock_synced = cpu.clock;
     mem_set_processor_port(&c->mem, cpu.io_ddr, cpu.io_port);
     cpu_set_stack_page(c->mem.ram + mem_cpu_page_offset(&c->mem, 1));
     c128_set_4080(c, c->col_mode_80);
