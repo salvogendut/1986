@@ -73,23 +73,24 @@ static const char *const keyboard_map_lines[] = {
 #define ADV_VDC_RAM             5
 #define ADV_DOUBLE_Z80          6
 #define ADV_REAL_DISK_DRIVE     7
-#define ADV_DRIVE_AUDIO         8
-#define ADV_DRIVE_VISUAL        9
-#define ADV_SECOND_DRIVE        10
-#define ADV_UNIFIED_CAPTURE     11
-#define ADV_GIF_WIDTH           12
-#define ADV_GIF_FPS             13
-#define ADV_GIF_ENCODER         14
-#define ADV_TAPE_AUDIO          15
-#define ADV_TAPE_VIDEO          16
-#define ADV_NOTIFICATIONS       17
-#define ADV_DEBUG               18
-#define ADV_JOY_HIDAPI          19
-#define ADV_KEYBOARD_MAP        20
-#define ADV_C64_TEST            21
-#define ADV_RESET               22
-#define ADV_VERSION             23
-#define ADV_ROWS                24
+#define ADV_UNTHROTTLED_DRIVE   8
+#define ADV_DRIVE_AUDIO         9
+#define ADV_DRIVE_VISUAL        10
+#define ADV_SECOND_DRIVE        11
+#define ADV_UNIFIED_CAPTURE     12
+#define ADV_GIF_WIDTH           13
+#define ADV_GIF_FPS             14
+#define ADV_GIF_ENCODER         15
+#define ADV_TAPE_AUDIO          16
+#define ADV_TAPE_VIDEO          17
+#define ADV_NOTIFICATIONS       18
+#define ADV_DEBUG               19
+#define ADV_JOY_HIDAPI          20
+#define ADV_KEYBOARD_MAP        21
+#define ADV_C64_TEST            22
+#define ADV_RESET               23
+#define ADV_VERSION             24
+#define ADV_ROWS                25
 
 static int cycle_gif_width(int width) {
     switch (width) {
@@ -702,6 +703,12 @@ static void overlay_activate(Overlay *ov) {
                 case ADV_REAL_DISK_DRIVE:
                     ov->cfg->real_disk_drive = !ov->cfg->real_disk_drive;
                     notify_post("DRIVE MODE CHANGED - RESTART TO APPLY");
+                    break;
+                case ADV_UNTHROTTLED_DRIVE:
+                    ov->cfg->unthrottled_drive = !ov->cfg->unthrottled_drive;
+                    notify_post(ov->cfg->unthrottled_drive
+                        ? "UNTHROTTLED DRIVE ON - REAL DRIVE REQUIRED"
+                        : "UNTHROTTLED DRIVE OFF");
                     break;
                 case ADV_DRIVE_AUDIO:
                     ov->cfg->drive_audio_monitor = !ov->cfg->drive_audio_monitor;
@@ -1344,6 +1351,11 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         draw_row(r, panel_w, y, "Real Disk Drive",
                  ov->cfg->real_disk_drive ? "On" : "Off",
                  ov->row == ADV_REAL_DISK_DRIVE); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "Unthrottled drive",
+                 !ov->cfg->unthrottled_drive ? "Off" :
+                 (ov->c128->drive_raw_iec || ov->c128->drive2_raw_iec)
+                    ? "On" : "On (inactive)",
+                 ov->row == ADV_UNTHROTTLED_DRIVE); y += OV_LINE_H;
         draw_row(r, panel_w, y, "Drive Audio Monitor",
                  ov->cfg->drive_audio_monitor ? "On" : "Off",
                  ov->row == ADV_DRIVE_AUDIO); y += OV_LINE_H;

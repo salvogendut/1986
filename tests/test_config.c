@@ -17,6 +17,7 @@ int main(void) {
     CHECK(!cfg.double_z80_frequency, "doubled Z80 frequency defaults off");
     CHECK(!cfg.unified_capture, "unified GIF capture defaults off");
     CHECK(!cfg.real_disk_drive, "real drive defaults off");
+    CHECK(!cfg.unthrottled_drive, "automatic drive warp defaults off");
     CHECK(!cfg.drive_audio_monitor, "drive audio monitor defaults off");
     CHECK(!cfg.drive_visual_monitor, "drive visual monitor defaults off");
     CHECK(!cfg.c64_test_mode, "experimental C64 personality defaults off");
@@ -41,6 +42,8 @@ int main(void) {
           "config without display mode defaults to 80 columns");
     CHECK(!legacy_cfg.real_disk_drive,
           "config without real-drive selection defaults off");
+    CHECK(!legacy_cfg.unthrottled_drive,
+          "legacy config defaults automatic drive warp off");
     CHECK(!legacy_cfg.double_z80_frequency,
           "legacy config keeps stock Z80 frequency");
     CHECK(!legacy_cfg.second_drive && legacy_cfg.drive2_unit == 9,
@@ -54,6 +57,7 @@ int main(void) {
     cfg.double_z80_frequency = true;
     cfg.unified_capture = true;
     cfg.real_disk_drive = true;
+    cfg.unthrottled_drive = true;
     cfg.drive_audio_monitor = true;
     cfg.drive_visual_monitor = true;
     cfg.c64_test_mode = true;
@@ -85,6 +89,7 @@ int main(void) {
     CHECK(back.double_z80_frequency, "doubled Z80 frequency roundtrip");
     CHECK(back.unified_capture, "unified GIF capture roundtrip");
     CHECK(back.real_disk_drive, "real-drive preference roundtrip");
+    CHECK(back.unthrottled_drive, "automatic drive warp roundtrip");
     CHECK(back.drive_audio_monitor, "drive audio monitor roundtrip");
     CHECK(back.drive_visual_monitor, "drive visual monitor roundtrip");
     CHECK(back.c64_test_mode, "experimental C64 personality gate roundtrip");
@@ -126,6 +131,8 @@ int main(void) {
           "mode-only save preserves U36 setting");
     CHECK(back.real_disk_drive,
           "mode-only save preserves real-drive preference");
+    CHECK(back.unthrottled_drive,
+          "mode-only save preserves automatic drive warp");
     CHECK(back.drive_audio_monitor,
           "mode-only save preserves drive audio preference");
     CHECK(back.drive_visual_monitor,

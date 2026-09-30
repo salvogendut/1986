@@ -245,6 +245,11 @@ mixed physical and virtual IEC is not available. Advanced has independent audio
 and visual drive monitors, both Off by default; the visual
 scope sits above the function-key footer and shows Drive 2's track above
 Drive 1's. The audio monitor mixes both drives' mechanism sounds.
+**Advanced > Unthrottled drive** (Off by default) runs at full host speed while
+either real drive is busy, then restores normal pacing when both are idle.
+It takes effect immediately, is remembered across restarts, and has no effect
+on fast virtual drives. Audio is muted during acceleration; visual monitors
+remain available. See [drive details](docs/DRIVES.md#rom-backed-1571cr).
 If a write error appears, resolve it before quitting: the original image stays
 intact, but unsaved in-memory GCR data cannot survive exit.
 
