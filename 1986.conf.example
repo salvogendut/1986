@@ -41,12 +41,12 @@ unthrottled_drive = 0
 drive_audio_monitor = 0
 # Independent translucent motor/head waveform panel, default off
 drive_visual_monitor = 0
-# Optional second fast virtual drive (IEC units must differ)
+# Optional second drive, virtual or real (IEC units must differ)
 second_drive = 0
 drive_unit = 8
 drive2_unit = 9
 # Hardware models selected in Media when Real Disk Drive is On.
-# 1571CR supports normal GCR sector reads/writes on D64/D71; 1581 hardware is future.
+# 1571CR reads/writes D64/D71; 1581 reads/writes D81. See ROMS.md for DOS ROMs.
 drive_type = 1571
 drive2_type = 1571
 disk =
@@ -64,7 +64,7 @@ gif_fps = 25
 gif_ffmpeg = 0
 unified_capture = 0
 
-# Directory holding the machine ROM images (kernal.rom, basic.rom, chargen.rom)
+# Directory holding machine and optional drive ROMs; see ROMS.md for filenames.
 rom_dir =
 
 # Last directories visited in the Overlay pickers. These are independent of

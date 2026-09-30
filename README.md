@@ -9,7 +9,7 @@ Z80-based CP/M are all first-class targets.
 
 The emulator currently boots Commodore BASIC 7.0 to `READY.`, boots CP/M Plus
 to its `A>` prompt, runs native C128 software, and provides both fast virtual
-disk access and experimental ROM-backed 1571CR and read-only 1581 paths.
+disk access and experimental ROM-backed 1571CR and 1581 paths.
 
 ## Highlights
 
@@ -23,8 +23,9 @@ disk access and experimental ROM-backed 1571CR and read-only 1581 paths.
   image write-back through the fast virtual drive.
 - Experimental ROM-backed 1571CR emulation with line-level IEC, D64/D71 GCR
   reads and writes, per-drive activity LEDs, and audio/visual monitors.
-- ROM-backed 1581 D81 reads, including mixed 1571/1581 pairs on the same IEC
-  bus. The 1581 backend is currently write-protected.
+- ROM-backed 1581 D81 reads and atomic sector writes, including mixed
+  1571/1581 pairs on the same IEC bus. Each drive's LED label identifies its
+  running type and IEC address; see [write safety and limitations](docs/DRIVES.md).
 - Native C128 cartridges, raw function ROMs, the U36 internal ROM socket, and
   TAP/T64 cassette support.
 - Unified or separate VIC/VDC windows, persistent configuration, screenshots,
@@ -50,7 +51,7 @@ start in C64 mode. Native C128 and CP/M operation remain the product focus.
 1986 does **not** distribute Commodore machine or drive ROMs. Obtain compatible
 images from a source you are authorized to use, then place them in `roms/` or
 select their directory with `--rom`. Required filenames are documented in
-[roms/README](roms/README).
+[ROMS.md](ROMS.md), including the extra DOS ROM needed for each real drive.
 
 On Fedora:
 
@@ -90,6 +91,7 @@ CI artifacts, and repository continue to exclude ROM dumps. See
 
 | Document | Contents |
 |----------|----------|
+| [ROM requirements](ROMS.md) | Required filenames, sizes, optional drive/C64 ROMs, and missing-ROM troubleshooting |
 | [Status](docs/STATUS.md) | Implemented hardware, C128/C64 scope, and known limitations |
 | [Usage](USAGE.md) | Configuration, media, CP/M, cartridges, tape, mouse, and disk writes |
 | [Controls](CONTROLS.md) | Host keys, C128 keyboard mappings, and overlay controls |

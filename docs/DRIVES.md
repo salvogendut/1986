@@ -7,7 +7,7 @@ neutral disk-image/media layer, but they do not share an emulated drive CPU.
 |---------|---------|--------|-------------------|
 | Fast virtual drive | Convenient command-level file access | D64, D71, D81, PRG | No |
 | Real Disk Drive: 1571CR | Experimental hardware-level drive | D64, D71 | Yes |
-| Real Disk Drive: 1581 | Experimental, read-only hardware-level drive | D81 | Yes |
+| Real Disk Drive: 1581 | Experimental hardware-level drive, sector reads/writes | D81 | Yes |
 
 ## Fast virtual drive
 
@@ -75,15 +75,15 @@ the fast virtual backend after restart, with a console diagnostic. Mixed
 virtual and ROM-backed devices on
 the same emulated IEC bus are not currently supported.
 
-## ROM-backed 1581 (read-only, #152)
+## ROM-backed 1581 (#152)
 
-Enable **Advanced > Real Disk Drive**, select **1581 (D81 read-only)** for
+Enable **Advanced > Real Disk Drive**, select **1581 (D81, ROM required)** for
 either drive in Media, supply a 32 KiB `dos1581.bin` in the machine ROM
 directory, and restart. The VICE filename `dos1581-318045-02.bin` is also
 recognized. ROMs are not supplied with the emulator.
 
-`DIRECTORY`, `LOAD`, and `BLOAD` use the native KERNAL and DOS ROM over the
-physical slow IEC bus. Two 1581s, or a 1571CR and a 1581 in either slot, share
+`DIRECTORY`, `LOAD`/`BLOAD`, and `SAVE`/`DSAVE`/`BSAVE` use the native KERNAL
+and DOS ROM over the physical slow IEC bus. Two 1581s, or a 1571CR and a 1581 in either slot, share
 that bus at distinct addresses #8–#11. Hardware type and unit changes require
 restart; toggling Second Drive reconnects the existing running model.
 Each device has its own LED, monitor history and audio. The existing audio
@@ -101,18 +101,32 @@ IEC pin interface, side/motor/LED outputs, and WD1770 register window. The
 address map, CIA wiring, head polarity, and WD command timing were checked
 against VICE 3.10's `memiec.c`, `cia1581d.c`, `wd1770.c`, and `fdd.c`.
 
-The WD1770 currently reads ordinary 80-track D81 images through decoded
+The WD1770 reads/writes ordinary 80-track D81 images through decoded
 512-byte physical sectors (two CBM DOS blocks). It implements seek/step,
-read-sector, read-address, data-ready/lost-data status, force-interrupt,
-media-change handling, and read/seek activity counters. Sector spacing is
-approximated; this is not yet a raw MFM-track or protection emulator. All
-images report write protection, and write commands cannot modify them.
+single/multiple read/write-sector, read-address, data-ready/lost-data status,
+force-interrupt, media-change handling, and read/write/seek activity counters.
+Sector spacing is approximated; this is not yet a raw MFM-track or protection
+emulator. CIA PB6 and WD status expose the mounted image's write protection.
 
-All media are currently **write-protected**, even if the host file is
-writable. BASIC write attempts report the DOS write-protect error and do not
-change the image. Atomic sector writes and further VICE comparisons are the
-next step. Burst serial, the 8520 binary TOD counter, raw-track commands,
-and drive snapshot state remain unimplemented. The browser frontend still
+Each physical 512-byte sector is staged until its transfer and CRC interval
+finish, then both 256-byte halves are persisted in one atomic image replacement.
+An external file edit or host I/O failure fails the command and leaves that
+sector unmodified in the live image; errors also appear in a notification and
+the terminal. After a host I/O failure, the controller inhibits further writes
+and reports `WRITE PROTECT` to DOS so SAVE returns instead of retrying forever.
+The notification retains the host-error cause. Resolve the file conflict or
+permission problem, then eject/reinsert the image to reload it and clear the
+inhibit (controller reset also clears it, but cannot resolve stale image data).
+Write-protected media reject writes. Reset, eject, side/motor
+changes, force-interrupt and missed data requests discard an incomplete sector.
+Unlike real raw media, this decoded implementation does not preserve partially
+overwritten sectors after lost data. Completed sectors stay saved: atomicity is
+per sector, **not per whole SAVE**, so do not interrupt a DOS operation and
+assume its filesystem changes will roll back. Always use backups.
+
+Raw formatting (`HEADER`), deleted-data address marks, burst serial, the 8520
+binary TOD counter, raw-track commands, and drive snapshot state remain
+unimplemented. The browser frontend still
 offers its existing real 1571 switch; 1581 selection is desktop-only for now.
 
 Tests use synthetic firmware and generated media by default. An optional
@@ -120,14 +134,17 @@ private-ROM check boots DOS 318045-02 and submits five read jobs spanning
 both sides and tracks 1/40/80, checking the returned bytes:
 
 ```sh
-make -C tests test-drive1581 test-wd1770
+make -C tests test-drive1581 test-wd1770 test-wd1770-write
 ./tests/test-wd1770
+./tests/test-wd1770-write
 C128_1581_ROM=/path/to/dos1581-318045-02.bin ./tests/test-drive1581
 ```
 
 No DOS ROM is included or copied by this test. Its disposable D81 is removed
 afterwards. A separate windowless host test covers native `DIRECTORY`/`BLOAD`,
-write protection, media replacement, two 1581s at #10/#11, and mixed models:
+BSAVE with byte-exact persisted files, DSAVE/DLOAD/RUN across power cycling,
+write protection, external-edit errors returning to BASIC without data loss,
+media replacement, two 1581s at #10/#11, and mixed models:
 
 ```sh
 make -C tests test-real-drives
@@ -151,6 +168,9 @@ Always keep backups of valuable images.
 
 Each enabled drive has its own footer LED. In ROM-backed mode the indicator
 follows motor, head, ROM LED, and actual byte activity rather than a timer.
+Beside the lamp, `D1`/`D2` show the running type (`1571` for 1571CR, `1581`,
+or `FAST`) with the IEC address below. A missing-ROM fallback therefore shows
+`FAST`, not the hardware type requested in Media.
 
 **Advanced > Drive Audio Monitor** mixes approximate 1541-family motor/head
 samples into the SID output. **Drive Visual Monitor** plots reads above the

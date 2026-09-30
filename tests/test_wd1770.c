@@ -31,7 +31,7 @@ static void command(Wd1770 *f, u8 cmd, u8 track, u8 sector) {
 
 int main(void) {
     DiskImage image = { .format = DISK_FORMAT_D81, .tracks = 80, .size = 819200,
-                        .writable = true }; /* still protected by this slice */
+                        .writable = false };
     image.data = malloc(image.size);
     if (!image.data) return 1;
     for (int t = 0; t < 80; ++t)
@@ -192,6 +192,6 @@ int main(void) {
     CHECK(f.image == &image && f.head_track == 79 && !(f.status & WD1770_BUSY),
           "reset keeps medium/head position but cancels controller state");
     free(image.data);
-    if (!failures) puts("WD1770 read-only D81 tests passed");
+    if (!failures) puts("WD1770 D81 read/protection tests passed");
     return failures ? 1 : 0;
 }

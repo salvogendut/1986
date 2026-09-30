@@ -82,6 +82,13 @@ int  disk_image_read_sector(const DiskImage *d, int track, int sector, u8 *buf);
 DiskSaveResult disk_image_write_sector(DiskImage *d, int track, int sector,
                                        const u8 *buf);
 
+/* Atomically persist BOTH 256-byte halves of a physical 1581 sector.
+ * Track is 1..80, side uses D81 ordering (0..1), sector is 1..10.
+ * The live image and host file stay unchanged if write-back fails. */
+DiskSaveResult disk_image_write_d81_sector(DiskImage *d, unsigned track,
+                                          unsigned side, unsigned sector,
+                                          const u8 *buf);
+
 /* Persist selected decoded sectors of one D64/D71 GCR track in one atomic
  * image replacement. sector_data contains all track sectors consecutively;
  * bit N of sector_mask selects sector N. The live image stays unchanged on

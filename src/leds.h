@@ -38,6 +38,8 @@ typedef enum {
 void leds_set_enabled(LedId id, bool enabled);
 /* Keep each drive lamp's visible IEC device number in sync with Media. */
 void leds_set_drive_unit(LedId id, int unit);
+/* Running backend: 1571 (1571CR), 1581, or 0 for the fast virtual drive. */
+void leds_set_drive_type(LedId id, int type);
 /* Update the frequency printed beside the 8502 activity lamp. */
 void leds_set_cpu_frequency(unsigned mhz);
 /* Update the effective frequency printed beside the Z80 activity lamp. */

@@ -122,6 +122,7 @@ static void run_command(const char *text, unsigned frames) {
         paste_tick(&p, &c.kbd);
         c128_frame(&c);
     }
+    CHECK(p.pos == p.len && !p.held, "complete keyboard paste before the next command");
     paste_free(&p);
 }
 
@@ -198,11 +199,63 @@ static void host_case(const char *dir, const char *rom1581, const char *rom1571,
         CHECK(load_ok, "BLOAD returns this device's exact PRG bytes to host RAM");
         DriveMonitor *monitor = slot ? &c.drive2_monitor : &c.drive_monitor;
         CHECK(monitor->last_reads && monitor->history_count, "physical reads reach per-drive monitor");
+        if ((slot ? second : first) == 1581) {
+            u8 saved[1538], actual[1538];
+            saved[0] = 0; saved[1] = 0x60;
+            for (unsigned i = 2; i < sizeof(saved); ++i)
+                saved[i] = (u8)(i * 17 + unit * 3 + (i >> 8));
+            memcpy(c.mem.ram + 0x6000, saved + 2, sizeof(saved) - 2);
+            snprintf(command, sizeof(command),
+                     "BSAVE\"SAVED%u\",U%u,B0,P24576 TO P26112", slot + 1, unit);
+            run_command(command, 2000);
+            run_command("PRINT DS$", 150);
+            bool ok = screen_contains("00, OK") || screen_contains("00,OK");
+            if (!ok) dump_screen();
+            CHECK(ok, "native BSAVE finishes with DOS OK");
+            DiskImage persisted = {0};
+            DiskDirEntry entry;
+            snprintf(command, sizeof(command), "SAVED%u", slot + 1);
+            bool stored = disk_image_open(&persisted, paths[slot]) == 0 &&
+                disk_image_find_file(&persisted, command, &entry) == 0 && entry.closed &&
+                disk_image_read_file(&persisted, &entry, actual, sizeof(actual)) == sizeof(actual) &&
+                !memcmp(actual, saved, sizeof(saved));
+            CHECK(stored, "fresh host open sees closed saved file and exact bytes across physical sectors");
+            disk_image_close(&persisted);
+            CHECK(monitor->last_writes && c.real1581[slot].fdc.sectors_written,
+                  "1581 physical writes reach monitor and committed-sector counters");
+            memset(c.mem.ram + 0x6000, 0, sizeof(saved) - 2);
+            snprintf(command, sizeof(command), "BLOAD\"SAVED%u\",U%u,B0,P24576", slot + 1, unit);
+            run_command(command, 1500);
+            CHECK(!memcmp(c.mem.ram + 0x6000, saved + 2, sizeof(saved) - 2),
+                  "native BLOAD reads back the saved data");
+        }
     }
     if (!second) {
+        run_command("NEW", 150);
+        run_command("10 PRINT\"1581 ROUNDTRIP PASSED\"", 300);
+        run_command("DSAVE\"HELLO\",U8", 2000);
+        run_command("PRINT DS$", 150);
+        DiskImage basic_disk = {0};
+        DiskDirEntry basic_entry;
+        bool basic_saved = disk_image_open(&basic_disk, paths[0]) == 0 &&
+              disk_image_find_file(&basic_disk, "HELLO", &basic_entry) == 0 && basic_entry.closed;
+        if (!basic_saved) dump_screen();
+        CHECK(basic_saved,
+              "native DSAVE creates a closed BASIC program on the host image");
+        disk_image_close(&basic_disk);
+        c128_power_cycle(&c);
+        for (unsigned i = 0; i < 1000 && !screen_contains("READY."); ++i) c128_frame(&c);
+        run_command(NULL, 20);
+        run_command("DLOAD\"HELLO\",U8", 1500);
+        run_command("PRINT CHR$(147)", 100);
+        run_command("RUN", 150);
+        if (!screen_contains("1581 ROUNDTRIP PASSED")) dump_screen();
+        CHECK(screen_contains("1581 ROUNDTRIP PASSED"),
+              "BASIC program reloads and runs after full machine/drive power cycle");
         /* This must be a DOS write-protect error, never a virtual-drive write. */
         DiskImage before = {0};
         CHECK(disk_image_open(&before, paths[0]) == 0, "capture original disk before denied write");
+        c.drive.image.writable = false;
         run_command("BSAVE\"DENIED\",U8,B0,P16384 TO P16640", 650);
         run_command("PRINT DS$", 150);
         bool protected = screen_contains("WRITE PROTECT");
@@ -212,6 +265,7 @@ static void host_case(const char *dir, const char *rom1581, const char *rom1571,
         CHECK(disk_image_open(&after, paths[0]) == 0 && before.size == after.size &&
               !memcmp(before.data, after.data, before.size), "denied write leaves entire host image unchanged");
         disk_image_close(&before); disk_image_close(&after);
+        c.drive.image.writable = true;
         int replacement = mkstemp(paths[1]);
         CHECK(replacement >= 0, "replacement media fixture");
         if (replacement >= 0) {
@@ -230,13 +284,45 @@ static void host_case(const char *dir, const char *rom1581, const char *rom1571,
             bool changed = screen_contains("NEW-DISK") && !screen_contains("PROBE1");
             if (!changed) dump_screen();
             CHECK(changed, "DOS invalidates cached tracks after disk replacement");
+            DiskImage external = {0};
+            CHECK(disk_image_open(&external, paths[1]) == 0, "capture replacement before external conflict");
+            if (external.data) {
+                FILE *edited = fopen(paths[1], "r+b");
+                CHECK(edited != NULL, "open disposable D81 for simulated external edit");
+                if (edited) {
+                    external.data[0] ^= 0xff;
+                    CHECK(fputc(external.data[0], edited) != EOF && fclose(edited) == 0,
+                          "modify host image behind the controller");
+                    run_command("PRINT CHR$(147)", 150);
+                    run_command("BSAVE\"CONFLICT\",U8,B0,P16384 TO P16640", 3000);
+                    run_command("PRINT DS$", 150);
+                    bool failed = screen_contains("WRITE PROTECT");
+                    if (!failed) {
+                        dump_screen();
+                        fprintf(stderr, "conflict: hostPC=%04x drivePC=%04x WD=%02x CMD=%02x T%u S%u written=%llu jobs=%02x/%02x/%02x/%02x\n",
+                            c.cpu.pc, c.real1581[0].cpu.pc, c.real1581[0].fdc.status,
+                            c.real1581[0].fdc.command, c.real1581[0].fdc.track,
+                            c.real1581[0].fdc.sector, (unsigned long long)c.real1581[0].fdc.sectors_written,
+                            c.real1581[0].ram[2], c.real1581[0].ram[3],
+                            c.real1581[0].ram[4], c.real1581[0].ram[5]);
+                    }
+                    CHECK(failed && c.real1581[0].fdc.write_error == DISK_SAVE_IO_ERROR,
+                          "host persistence failure propagates through native DOS, never reports successful SAVE");
+                    DiskImage unchanged = {0};
+                    CHECK(disk_image_open(&unchanged, paths[1]) == 0 &&
+                          !memcmp(unchanged.data, external.data, external.size),
+                          "failed native SAVE preserves external edit and all original host sectors");
+                    disk_image_close(&unchanged);
+                }
+            }
+            disk_image_close(&external);
             CHECK(drive_attach_disk(&c.drive, NULL) == 0 && !c.real1581[0].fdc.image &&
                   c.real1581[0].fdc.disk_changed,
                   "eject immediately clears controller media, even before the next frame");
             unlink(paths[1]);
         }
     }
-    printf("host IEC %d/%d: DIRECTORY and BLOAD verified for %u device(s)\n", first, second, count);
+    printf("host IEC %d/%d: DIRECTORY, BLOAD and 1581 BSAVE verified for %u device(s)\n", first, second, count);
     release_machine();
     for (unsigned slot = 0; slot < count; ++slot) unlink(paths[slot]);
 }

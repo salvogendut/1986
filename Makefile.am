@@ -143,7 +143,7 @@ icon512dir         = $(datadir)/icons/hicolor/512x512/apps
 dist_icon512_DATA  = icons/512x512/apps/io.github.salvogendut.Emulator1986.png
 
 # Files shipped in the dist tarball but not built (license, docs, examples).
-EXTRA_DIST = LICENSE README.md Development.md USAGE.md CONTROLS.md INSTALL.md \
+EXTRA_DIST = LICENSE README.md ROMS.md Development.md USAGE.md CONTROLS.md INSTALL.md \
 	ROADMAP.md docs/STATUS.md docs/DRIVES.md docs/Z80-CPM.md docs/ML-MONITOR.md docs/SNAPSHOTS.md \
 	1986.conf.example 1986_logo.png 1986.png 1986.spec \
 	screenshots/vicii-basic.png screenshots/vdc-basic.png \
@@ -156,7 +156,7 @@ EXTRA_DIST = LICENSE README.md Development.md USAGE.md CONTROLS.md INSTALL.md \
 	tests/Makefile tests/test_cpu.c tests/test_mmu.c tests/test_mem.c \
 	tests/test_cartridge.c tests/test_cia.c tests/test_sid.c tests/test_config.c \
 	tests/test_frame_pacer.c tests/test_drive_warp.c tests/test_machine_clock.c \
-	tests/test_real_drives.c \
+	tests/test_real_drives.c tests/test_wd1770_write.c \
 	tests/test_joyport.c tests/test_c128_keyboard.c tests/test_gifcap.c tests/test_videocap.c \
 	tests/test_mos6502dis.c \
 	tests/test_d64.c tests/test_d64_save.c tests/test_disk_formats.c \

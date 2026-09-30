@@ -105,7 +105,7 @@ u8 drive1581_read(Drive1581 *d, u16 addr) {
         if (reg == 1) {
             u8 input = (d->data_high ? 0 : 1) | (d->clock_high ? 0 : 4) |
                        (d->atn_high ? 0 : 0x80);
-            /* PB6 low is write-protected; this first slice never writes. */
+            if (!wd1770_write_protected(&d->fdc)) input |= 0x40;
             return (u8)((d->cia.prb & d->cia.ddrb) | (input & ~d->cia.ddrb));
         }
         u8 value = cia_read(&d->cia, addr);

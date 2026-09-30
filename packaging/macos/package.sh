@@ -29,6 +29,7 @@ mkdir -p "$macos/roms"
 cp "$root/roms/README" "$macos/roms/"
 cp "$root/LICENSE" "$resources/LICENSE.txt"
 cp "$root/README.md" "$resources/README.md"
+cp "$root/ROMS.md" "$resources/ROMS.md"
 
 for size in 16 32 128 256 512; do
     cp "$root/icons/${size}x${size}/apps/io.github.salvogendut.Emulator1986.png" \

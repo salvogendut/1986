@@ -61,6 +61,8 @@ handoff rather than bypassing it with host traps.
 - Optional U36 internal function-ROM slot for raw 8/16/32 KiB images.
 - Experimental ROM-backed 1571CR execution with slow IEC and D64/D71 GCR sector
   reads/writes. See [DRIVES.md](DRIVES.md) for its safety rules and limitations.
+- ROM-backed 1581 with D81 sector reads and atomic writes, independently
+  selectable in either slot alongside a 1571CR or another 1581.
 
 ## Desktop interface
 
@@ -105,8 +107,8 @@ present, but the `GO64` test toggle does not need to be enabled.
 - The SID filter and combined waveforms are approximate.
 - The real 1571 path lacks burst serial, WD1770/FDC2 MFM, exact mechanism
   timing, and nonstandard raw/protection-track persistence.
-- The real 1581 reads D81 through its DOS ROM, but remains write-protected;
-  burst serial, 8520 TOD and raw/protected MFM tracks are not implemented.
+- The real 1581 reads/writes D81 through its DOS ROM; burst serial, 8520 TOD,
+  raw formatting and raw/protected/deleted-mark MFM tracks are not implemented.
 - The virtual drive does not execute uploaded drive code through `M-E`.
 - Snapshots, tape recording, and some keyboard/layout polish remain future work.
 

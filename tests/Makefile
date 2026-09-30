@@ -15,7 +15,7 @@ endif
 TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-frame-pacer test-joyport test-c128-keyboard test-mos6502dis test-gifcap test-videocap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc test-snapshot
 TESTS += test-drive-warp
 TESTS += test-machine-clock test-drive1581 test-wd1770
-TESTS += test-real-drives
+TESTS += test-real-drives test-wd1770-write
 
 MACHINE_SOURCES = $(addprefix ../src/,c128.c cpu.c mem.c mmu.c vic.c vdc.c \
     cia.c sid.c z80.c kbd.c joyport.c tape.c drive.c drive1571cr.c drive_cpu6502.c \
@@ -195,6 +195,7 @@ check: $(TESTS)
 	./test-drive1571cr
 	./test-drive1581
 	./test-wd1770
+	./test-wd1770-write
 	./test-drive-monitor
 	./test-tape
 	./test-gcr-drive
@@ -222,6 +223,10 @@ test-drive1581: test_drive1581.c ../src/drive1581.c ../src/drive1581.h ../src/dr
 test-wd1770: test_wd1770.c ../src/wd1770.c ../src/wd1770.h ../src/disk_image.c ../src/disk_image.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_wd1770.c ../src/wd1770.c ../src/disk_image.c -o $@
+
+test-wd1770-write: test_wd1770_write.c ../src/wd1770.c ../src/wd1770.h ../src/disk_image.c ../src/disk_image.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
+		test_wd1770_write.c ../src/wd1770.c ../src/disk_image.c -o $@
 
 test-real-drives: test_real_drives.c $(MACHINE_SOURCES) ../src/paste.c $(wildcard ../src/*.h) ../src/vice/6510core.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra \

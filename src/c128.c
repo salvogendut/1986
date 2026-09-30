@@ -961,7 +961,7 @@ static bool real_drive_monitor(C128 *c, unsigned slot) {
         Drive1581 *d = &c->real1581[slot];
         return drive_monitor_update(monitor, d->fdc.motor, d->led,
             2 * (d->fdc.head_track + 1), (unsigned)d->fdc.head_steps,
-            (unsigned)d->fdc.read_bytes, 0);
+            (unsigned)d->fdc.read_bytes, (unsigned)d->fdc.write_bytes);
     }
     GcrDrive *g = slot ? &c->second_real_drive.gcr : &c->integrated_drive.gcr;
     return drive_monitor_update(monitor, g->motor, g->led, g->half_track,
@@ -1045,6 +1045,19 @@ int c128_frame(C128 *c) {
         leds_ping(LED_FDC_A);
     if (c->drive2_raw_iec && real_drive_monitor(c, 1))
         leds_ping(LED_FDC_B);
+    for (unsigned slot = 0; slot < 2; ++slot) {
+        Wd1770 *fdc = &c->real1581[slot].fdc;
+        if ((slot ? c->drive2_raw_iec : c->drive_raw_iec) &&
+            c->real_drive_type[slot] == 1581 &&
+            fdc->write_error != DISK_SAVE_OK && !fdc->write_error_reported) {
+            notify_post(fdc->write_error == DISK_SAVE_WRITE_PROTECT
+                ? "1581 DRIVE %u DISK IS WRITE PROTECTED"
+                : "1581 DRIVE %u WRITE COULD NOT BE SAVED", slot + 1);
+            fprintf(stderr, "1986: drive %u: 1581 write failed (error %d)\n",
+                    slot + 1, (int)fdc->write_error);
+            fdc->write_error_reported = true;
+        }
+    }
     GcrDrive *gcr = &c->integrated_drive.gcr;
     if (c->drive_raw_iec && gcr->write_error != DISK_SAVE_OK &&
         !gcr->write_error_reported) {

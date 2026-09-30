@@ -881,6 +881,31 @@ DiskSaveResult disk_image_write_sector(DiskImage *d, int track, int sector,
     return DISK_SAVE_OK;
 }
 
+DiskSaveResult disk_image_write_d81_sector(DiskImage *d, unsigned track,
+                                          unsigned side, unsigned sector,
+                                          const u8 *buf) {
+    if (!d || !d->data || !d->writable || d->format != DISK_FORMAT_D81)
+        return DISK_SAVE_WRITE_PROTECT;
+    if (!buf || d->tracks != 80 || d->size != 819200 ||
+        track < 1 || track > 80 || side > 1 || sector < 1 || sector > 10)
+        return DISK_SAVE_IO_ERROR;
+    size_t offset = ((track - 1) * 40 + side * 20 + (sector - 1) * 2) * 256u;
+    u8 *next = malloc(d->size);
+    if (!next) return DISK_SAVE_IO_ERROR;
+    memcpy(next, d->data, d->size);
+    memcpy(next + offset, buf, 512);
+    /* Use one replacement, not two calls to write_sector: a failed second
+     * half must never leave a torn physical sector. Even an identical write
+     * validates the host file, so an external edit cannot look successful. */
+    if (persist_image(d, next) != 0) {
+        free(next);
+        return DISK_SAVE_IO_ERROR;
+    }
+    memcpy(d->data + offset, next + offset, 512);
+    free(next);
+    return DISK_SAVE_OK;
+}
+
 DiskSaveResult disk_image_write_gcr_track(DiskImage *d, int track,
                                           const u8 *sector_data,
                                           unsigned sector_mask) {

@@ -1,5 +1,9 @@
 # 1986 machine ROMs
 #
+# The complete filename/size checklist, optional drive ROM requirements,
+# and missing-ROM troubleshooting are in ROMS.md at the repository root:
+# https://github.com/salvogendut/1986/blob/main/ROMS.md
+#
 # Drop the machine ROM images into this directory (or point --rom at a
 # directory that holds them) and the emulator loads them by name. A native
 # C128DCR set uses these images:
@@ -19,11 +23,11 @@
 #                               basic64.rom and basic64-901226-01.bin accepted)
 #   kernal64.bin  0x2000 bytes — C64 KERNAL (optional development test mode;
 #                               kernal64.rom and kernal64-901227-03.bin accepted)
-#   dos1571cr.bin 0x8000 bytes — integrated 1571CR DOS ROM (optional while
-#                                the physical-IEC drive backend is unfinished)
+#   dos1571cr.bin 0x8000 bytes — required for the real 1571CR backend;
+#                                not needed for the fast virtual drive.
 #   dos1581.bin   0x8000 bytes — optional real 1581 DOS ROM; the filename
 #                                dos1581-318045-02.bin is also accepted.
-#                                D81 hardware backend is currently read-only.
+#                                Used for real D81 reads and sector writes.
 #
 # These ROMs are copyright Commodore and are not redistributed here. Obtain
 # them from a source you are entitled to use (for example by dumping your own

@@ -414,11 +414,11 @@ int main(int argc, char **argv) {
     if (c.drive_raw_iec) {
         fprintf(stderr, "1986: drive 1: %d on line-level IEC #%u%s\n",
                 c.real_drive_type[0], c.iec_bus.drive_unit,
-                c.real_drive_type[0] == 1581 ? " (D81 read-only)" : "");
+                c.real_drive_type[0] == 1581 ? " (D81)" : "");
         if (c.drive2_raw_iec)
             fprintf(stderr, "1986: drive 2: %d on line-level IEC #%u%s\n",
                     c.real_drive_type[1], c.iec_bus.drive2_unit,
-                    c.real_drive_type[1] == 1581 ? " (D81 read-only)" : "");
+                    c.real_drive_type[1] == 1581 ? " (D81)" : "");
     }
     else {
         if (cfg.real_disk_drive)
@@ -843,6 +843,10 @@ int main(int argc, char **argv) {
         notify_tick(20);
 
         /* --- Frame present --- */
+        /* Show the active backend, including paired fast fallback when a DOS
+         * ROM is unavailable; a pending Media type change needs a restart. */
+        leds_set_drive_type(LED_FDC_A, c.drive_raw_iec ? c.real_drive_type[0] : 0);
+        leds_set_drive_type(LED_FDC_B, c.drive2_raw_iec ? c.real_drive_type[1] : 0);
         display_upload(&c.display);
         overlay_render_drive_scope(&overlay, display_active_renderer(&c.display));
         overlay_render_tape_scope(&overlay, display_active_renderer(&c.display));

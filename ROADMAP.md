@@ -258,8 +258,11 @@ cycle-level 1571 implementation without conflating their interfaces.
 - [x] Real 1581 shared IEC/scheduler integration for either drive, ROM discovery,
   Media selection, per-drive monitors and drive warp; native `DIRECTORY` and
   `BLOAD`, mixed 1571/1581 pairs, disk replacement and write protection tested.
-- [ ] Add safe 1581 sector writes and validate host `SAVE`; follow with burst
-  serial, 8520 TOD and raw MFM tracks (#152).
+- [x] 1581 WD1770 single/multiple-sector writes with atomic 512-byte persistence,
+  host-file protection/conflict checks, write activity monitors, native BSAVE
+  round-trips in both slots and DSAVE/DLOAD after power cycling (#152).
+- [ ] Broaden 1581 compatibility: burst serial, 8520 TOD, raw formatting/MFM
+  tracks and drive snapshot state (#152).
 - [x] Separate, live Drive 1/Drive 2 activity LEDs in both display windows
   (#92); real-drive pulses follow motor, seek, and GCR reads (#100).
 - [x] Independent saved, default-off sample-based audio and activity waveform

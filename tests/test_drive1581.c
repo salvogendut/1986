@@ -177,7 +177,13 @@ int main(void) {
     drive1581_write(&d, 0x4001, 0x0a);
     CHECK(!drive1581_data_released(&d) && !drive1581_clock_released(&d),
           "PB1/PB3 pull the shared lines low");
-    CHECK(!(drive1581_read(&d, 0x4001) & 0x40), "read-only slice asserts PB6 write protection");
+    CHECK(!(drive1581_read(&d, 0x4001) & 0x40), "no media asserts PB6 write protection");
+    DiskImage pins_image = {.writable = true};
+    d.fdc.image = &pins_image;
+    CHECK(drive1581_read(&d, 0x4001) & 0x40, "writable medium releases PB6 protection");
+    pins_image.writable = false;
+    CHECK(!(drive1581_read(&d, 0x4001) & 0x40), "read-only medium asserts PB6 protection");
+    d.fdc.image = NULL;
 
     drive1581_reset(&d);
     drive1581_write(&d, 0x400d, 0x81);
