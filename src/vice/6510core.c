@@ -494,7 +494,10 @@
      CLK_ADD(CLK, CLK_INT_CYCLE),                              \
      LOAD((addr) + reg_y_read))
 
-#define LOAD_IND_X(addr) (CLK_ADD(CLK, 3), LOAD(LOAD_ZERO_ADDR((addr) + reg_x_read)))
+/* The dummy and pointer reads are separate bus cycles. Lumping all three
+ * clocks before LOAD_ZERO_ADDR loses read cycles when VIC BA falls here
+ * (notably the CMP ($zp,X) raster delays used by Risen From Oblivion). */
+#define LOAD_IND_X(addr) maincpu_load_ind_x((BYTE)(addr), reg_x_read)
 
 #define LOAD_IND_Y(addr)                                                    \
     (CLK_ADD(CLK, 2), ((LOAD_ZERO_ADDR((addr)) & 0xff) + reg_y_read) > 0xff \

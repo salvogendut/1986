@@ -11,7 +11,24 @@ static int failures = 0;
     if (!(cond)) { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, msg); failures++; } \
 } while (0)
 
-static u8  bus_read (void *ctx, u16 addr) { (void)ctx; return ram[addr]; }
+static bool trace_bus;
+static unsigned trace_reads;
+static u16 trace_addr[16];
+static u64 trace_clock[16];
+static u64 ba_start, ba_end;
+static u8 bus_read(void *ctx, u16 addr) {
+    (void)ctx;
+    if (trace_bus) {
+        u64 clock = cpu_cycles();
+        if (clock >= ba_start && clock < ba_end)
+            cpu_stall((unsigned)(ba_end - clock));
+        if (trace_reads < 16) {
+            trace_addr[trace_reads] = addr;
+            trace_clock[trace_reads++] = cpu_cycles();
+        }
+    }
+    return ram[addr];
+}
 static void bus_write(void *ctx, u16 addr, u8 val) { (void)ctx; ram[addr] = val; }
 
 static void load(u16 addr, const u8 *bytes, int n) {
@@ -114,6 +131,24 @@ int main(void) {
     cpu_step_budget(&cpu, 40);
     CHECK(ram[0x0200] == 0xA5, "($FF),Y pointer wraps in zero page");
     CHECK(ram[0x0201] == 0xA5, "($FE,X) pointer wraps in zero page");
+
+    /* A VIC BA edge during CMP ($zp,X) stops the dummy read, not a lumped
+     * final pointer read. The remaining low/high/data reads still each
+     * consume their own cycle after DMA releases the CPU. */
+    ram[0x0600] = 0xc1; ram[0x0601] = 0x20;
+    ram[0x20] = 0x34; ram[0x21] = 0x12; ram[0x1234] = 0xa5;
+    ram[0xfffc] = 0; ram[0xfffd] = 6;
+    cpu_reset(&cpu);
+    trace_reads = 0; ba_start = 2; ba_end = 42; trace_bus = true;
+    int elapsed = cpu_step_budget(&cpu, 1);
+    trace_bus = false;
+    CHECK(elapsed == 46 && trace_reads == 6,
+          "indexed indirect read retains six cycles plus DMA delay");
+    CHECK(trace_addr[2] == 0x20 && trace_clock[2] == 42 &&
+          trace_addr[3] == 0x20 && trace_clock[3] == 43 &&
+          trace_addr[4] == 0x21 && trace_clock[4] == 44 &&
+          trace_addr[5] == 0x1234 && trace_clock[5] == 45,
+          "dummy, pointer low, pointer high, and data reads are ordered");
 
     /* Deferring a level IRQ must also clear the VICE core's delayed IRQ
      * latch.  Otherwise the interrupt can still be taken for a few cycles

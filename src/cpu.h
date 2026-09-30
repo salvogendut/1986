@@ -5,11 +5,9 @@
 /*
  * MOS 8502 / 6502 CPU core for the Commodore C128.
  *
- * This is a compact, binary-mode interpreter covering the standard opcode
- * set (no undocumented opcodes, decimal mode is stubbed). It is the intended
- * home for the 6502-like machinery that the reference implementation takes
- * from VICE (see DEVELOPMENT.md); the bus interface below is the single seam
- * the rest of the machine (MMU, memory, I/O) plugs into.
+ * Wraps the VICE-derived 6510 instruction core, including decimal mode and
+ * undocumented opcodes. The bus interface connects MMU, memory, I/O and
+ * VIC-IIe read-cycle stalls to that core.
  */
 
 /* Processor status flag bits */
@@ -78,6 +76,7 @@ void cpu_irq_defer(Cpu8502 *cpu);
 void cpu_nmi(Cpu8502 *cpu, bool level);
 void cpu_pc(Cpu8502 *cpu, u16 pc);
 u64  cpu_cycles(void);                /* total cycles executed (for raster sync) */
+void cpu_stall(unsigned cycles);      /* RDY / C128 I/O clock stretching */
 bool cpu_rmw_active(void);            /* current instruction has an RMW bus write */
 /* Consume an illegal/JAM opcode reported by the VICE-derived core. The core
  * remains cycle-bounded so the SDL event loop can reset instead of hanging. */

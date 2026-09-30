@@ -497,6 +497,10 @@ u64 cpu_cycles(void) {
     return (u64)maincpu_clk;
 }
 
+void cpu_stall(unsigned cycles) {
+    maincpu_clk += cycles;
+}
+
 bool cpu_rmw_active(void) {
     return maincpu_rmw_flag != 0;
 }

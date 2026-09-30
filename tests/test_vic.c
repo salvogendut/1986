@@ -24,6 +24,121 @@ static void set_sprite_pointer(Mem *mem, const Vic *vic, int sprite, u8 pointer)
     mem->ram[screen_base + 0x3F8 + (unsigned)sprite] = pointer;
 }
 
+static void beam_to(Vic *v, Mem *m, unsigned line, unsigned cycle) {
+    u64 target = (line * 63u + cycle) * 2u;
+    while (v->beam_half_clock < target) vic_clock_half(v, m);
+}
+
+static void test_beam(Vic *v, Mem *m, Display *d) {
+    vic_reset(v);
+    clear_video_memory(m);
+    mem_set_processor_port(m, 7, 0);
+    vic_write(v, 0xd016, 8);
+    m->ram[0x400] = 1;
+    m->color_ram[0] = 1;
+    memset(m->chargen + 0x1008, 0x80, 8);
+    beam_to(v, m, 51, 11);
+    CHECK(vic_cpu_ba_low(v), "badline asserts BA at cycle 11");
+    beam_to(v, m, 51, 54);
+    CHECK(!vic_cpu_ba_low(v), "matrix DMA releases BA at cycle 54");
+    CHECK(v->vc == 40 && v->vcbase == 0,
+          "G accesses advance VC but not VCBASE");
+    beam_to(v, m, 58, 57);
+    CHECK(v->vcbase == 40 && !v->fetch_display_state,
+          "RC seven commits the next row and returns to idle");
+    vic_render(v, m, d);
+    CHECK(pixel(d, 0, 0) == 0xffffff && pixel(d, 1, 0) == 0,
+          "timed text fetch uses the native character ROM");
+
+    /* Early FLI badlines reset RC every line, retaining the SAME forty
+     * screen addresses rather than running off a 25-row matrix. */
+    vic_reset(v);
+    vic_write(v, 0xd016, 8);
+    for (unsigned line = 48; line < 100; line++) {
+        beam_to(v, m, line, 10);
+        vic_write(v, 0xd011, 0x18 | (line & 7));
+        beam_to(v, m, line, 58);
+        CHECK(v->vcbase == 0 && v->fetch_row_counter == 1,
+              "early FLI badlines preserve VCBASE and reset RC");
+    }
+
+    /* RFO's late FLI writes are after the RC reset point. The color matrix
+     * still refetches, but RC must continue to advance through the bitmap. */
+    vic_reset(v);
+    vic_write(v, 0xd016, 8);
+    beam_to(v, m, 51, 58);
+    for (unsigned line = 52; line <= 58; line++) {
+        beam_to(v, m, line, 14);
+        unsigned rc = v->fetch_row_counter;
+        vic_write(v, 0xd011, 0x18 | (line & 7));
+        CHECK(v->fetch_row_counter == rc && vic_cpu_ba_low(v),
+              "late FLI enables DMA without resetting RC");
+        beam_to(v, m, line, 58);
+    }
+    CHECK(v->vcbase == 40, "late FLI advances one row after eight lines");
+
+    /* Writes within one line affect only pixels which have not been drawn. */
+    vic_reset(v);
+    clear_video_memory(m);
+    vic_write(v, 0xd016, 8);
+    vic_write(v, 0xd021, 2);
+    beam_to(v, m, 51, 30);
+    vic_write(v, 0xd021, 5);
+    beam_to(v, m, 51, 59);
+    vic_render(v, m, d);
+    CHECK(pixel(d, 0, 0) == 0x813338 && pixel(d, 200, 0) == 0x56ac4d,
+          "background register changes split the current raster");
+
+    /* Avoid the bottom-border comparison by switching RSEL after line247.
+     * The vertical-border latch must stay open over the frame boundary. */
+    vic_reset(v);
+    clear_video_memory(m);
+    vic_write(v, 0xd016, 8);
+    vic_write(v, 0xd021, 2);
+    m->ram[0x3fff] = 0x80;
+    beam_to(v, m, 248, 20);
+    vic_write(v, 0xd011, 0x13);
+    beam_to(v, m, 270, 54);
+    CHECK(!v->vertical_border &&
+          v->beam_pixels[270][VIC_TEXT_X] == 0x80 &&
+          v->beam_pixels[270][VIC_TEXT_X + 1] == 2,
+          "open border exposes repeated idle fetch with black foreground");
+    beam_to(v, m, VIC_RASTER_LINES + 20, 54);
+    CHECK(!v->vertical_border &&
+          v->beam_pixels[20][VIC_TEXT_X] == 0x80,
+          "open vertical border persists across frame wrap");
+
+    vic_reset(v);
+    vic_write(v, 0xd015, 1);
+    vic_write(v, 0xd001, 60);
+    beam_to(v, m, 60, 54);
+    CHECK(vic_cpu_ba_low(v), "enabled sprite starts DMA at its Y compare");
+    beam_to(v, m, 60, 59);
+    CHECK(!vic_cpu_ba_low(v), "single sprite releases BA after five clocks");
+    beam_to(v, m, 61, 54);
+    vic_write(v, 0xd030, 1);
+    CHECK(!vic_cpu_ba_low(v), "2 MHz bypasses VIC DMA stalls");
+
+    vic_reset(v);
+    clear_video_memory(m);
+    vic_write(v, 0xd015, 1);
+    vic_write(v, 0xd000, 24);
+    vic_write(v, 0xd001, 60);
+    vic_write(v, 0xd027, 1);
+    m->ram[0x7f8] = 0x20;
+    m->ram[0x800] = 0x80;
+    m->ram[0x803] = 0x40;
+    beam_to(v, m, 60, 59);
+    vic_write(v, 0xd001, 100); /* schedule next sprite, don't move this one */
+    m->ram[0x800] = 0;
+    beam_to(v, m, 62, 54);
+    vic_render(v, m, d);
+    CHECK(pixel(d, 0, 10) == 0xffffff && pixel(d, 1, 11) == 0xffffff,
+          "active sprite DMA retains rows across Y-register and RAM writes");
+    beam_to(v, m, 81, 54);
+    CHECK(!v->sprite_dma, "sprite DMA ends after twenty-one rows");
+}
+
 int main(void) {
     Vic vic;
     Mem *mem = calloc(1, sizeof(*mem));
@@ -639,6 +754,7 @@ int main(void) {
     CHECK(pixel(display, 0, 0) == 0x75CEC8,
           "$D506 can place sprite pointer and data in the second 64K bank");
 
+    test_beam(&vic, mem, display);
     free(display);
     free(mem);
     if (failures == 0) { printf("test-vic: OK\n"); return 0; }

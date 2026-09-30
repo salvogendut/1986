@@ -145,6 +145,17 @@
 #define LOAD_ZERO_ADDR(addr) \
     ((LOAD_ZERO((addr) + 1) << 8) | LOAD_ZERO(addr))
 
+static BYTE maincpu_load_ind_x(BYTE addr, BYTE x)
+{
+    (void)LOAD_ZERO(addr);
+    ++maincpu_clk;
+    BYTE low = LOAD_ZERO((BYTE)(addr + x));
+    ++maincpu_clk;
+    BYTE high = LOAD_ZERO((BYTE)(addr + x + 1));
+    ++maincpu_clk;
+    return LOAD((WORD)(low | ((WORD)high << 8)));
+}
+
 /* Those may be overridden by the machine stuff.  Probably we want them in
    the .def files, but if most of the machines do not use, we might keep it
    here and only override it where needed.  */

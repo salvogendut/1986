@@ -28,7 +28,10 @@ handoff rather than bypassing it with host traps.
 
 - VIC-IIe 40-column text and bitmap modes, eight hardware sprites, standard
   and multicolor pixels, expansion, priority, collision latches, raster IRQs,
-  and common per-line register effects.
+  and timed raster register effects. Matrix/graphics fetches use VC/VCBASE/RC
+  counters, including early and late forced badlines; the shared beam clock
+  stalls 8502 reads for matrix and sprite DMA. Sprite patterns are captured
+  during DMA, and idle fetches/open vertical borders are retained.
 - VDC 80-column text and standard 640x200 bitmap output, including fitted
   16/64 KiB RAM and register-controlled addressing behavior.
 - Unified display or separate VIC/VDC windows. The selected display is focused,
@@ -96,7 +99,8 @@ present, but the `GO64` test toggle does not need to be enabled.
 
 ## Important limitations
 
-- Emulation is not cycle exact; more VIC-IIe bad-line/raster validation remains.
+- Emulation is not cycle exact; VIC-IIe horizontal-border tricks, sub-cycle
+  sprite changes, and unusual CPU bus sequences still need further validation.
 - VDC interlace and advanced modes remain incomplete.
 - The SID filter and combined waveforms are approximate.
 - The real 1571 path lacks burst serial, WD1770/FDC2 MFM, exact mechanism

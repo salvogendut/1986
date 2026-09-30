@@ -9,6 +9,8 @@
 /* Frame counter for the z80.c debug instrumentation (ONE_K_TRACE_IM1). */
 int c128_frame_count = 0;
 
+static void c128_cpu_bus_wait(C128 *c, bool write, bool io);
+
 static bool drive_probe_active(const C128 *c) {
     return c->drive_raw_iec;
 }
@@ -60,7 +62,7 @@ void c128_refresh_vic_bank(C128 *c) {
  * advancing only after the instruction can miss GEOS fast-serial edges. */
 static void drive_sync_to_cpu(C128 *c) {
     if (!c->drive_clock_denominator) return;
-    u64 now = cpu_cycles();
+    u64 now = c->bus_cycles;
     if (now <= c->drive_host_cycle_synced) return;
     u64 elapsed = now - c->drive_host_cycle_synced;
     c->drive_host_cycle_synced = now;
@@ -352,6 +354,8 @@ u8 c128_cpu_port_value(const C128 *c) {
 
 u8 c128_mem_read(void *ctx, u16 addr) {
     C128 *c = ctx;
+    c128_cpu_bus_wait(c, false,
+        addr >= 0xd000 && addr < 0xe000 && mem_io_visible(&c->mem));
     /* 8502 on-chip I/O port at $0000 (DDR) and $0001 (port) drives the MMU. */
     if (addr == 0x0000) return c->cpu.io_ddr;
     if (addr == 0x0001) return c128_cpu_port_value(c);
@@ -364,6 +368,8 @@ u8 c128_mem_read(void *ctx, u16 addr) {
 
 void c128_mem_write(void *ctx, u16 addr, u8 val) {
     C128 *c = ctx;
+    c128_cpu_bus_wait(c, true,
+        addr >= 0xd000 && addr < 0xe000 && mem_io_visible(&c->mem));
     if (addr == 0x0000) { c->cpu.io_ddr = val; pla_update(c); tape_motor_update(c); return; }
     if (addr == 0x0001) { c->cpu.io_port = val; pla_update(c); tape_motor_update(c); return; }
     if (!mem_c64_mode(&c->mem) && addr >= 0xFF00 && addr <= 0xFF04) {
@@ -740,7 +746,7 @@ static void c128_reset_internal(C128 *c, bool power_cycle) {
     c->drive_clock_fraction = 0;
     c->drive2_clock_fraction = 0;
     c->drive_clock_denominator = 0;
-    c->drive_host_cycle_synced = cpu_cycles();
+    c->drive_host_cycle_synced = 0;
     c->drive_media_generation = (unsigned)-1;
     c->drive2_media_generation = (unsigned)-1;
     drive_set_unit(&c->drive2, c->cfg->drive2_unit);
@@ -753,6 +759,8 @@ static void c128_reset_internal(C128 *c, bool power_cycle) {
     c->cpu_frame_debt = 0;
     c->z80_frame_debt = 0;
     c->bus_cycles = 0;
+    c->cpu_clock_active = false;
+    c->cpu_clock_synced = cpu_cycles();
     leds_set_cpu_frequency(1);
     leds_set_z80_frequency(c->cfg && c->cfg->double_z80_frequency ? 4 : 2);
     /* Preserve the 40/80 column choice across resets. */
@@ -776,6 +784,70 @@ void c128_power_cycle(C128 *c) {
     c128_reset_internal(c, true);
 }
 
+/* Advance the shared clock independently of the 8502 clock. CPU reads,
+ * writes, RDY stalls and 1/2 MHz changes all meet here, so a raster write
+ * cannot be applied to the beginning of an already scanned line. */
+static void c128_clock_halves(C128 *c, unsigned halves) {
+    while (halves--) {
+        vic_clock_half(&c->vic, &c->mem);
+        if (c->vic.beam_half_clock & 1) continue;
+        ++c->bus_cycles;
+        if (c->vic.cycle == 0)
+            vdc_set_raster_line(&c->vdc, c->vic.current_raster);
+        cia_tick(&c->cia1, 1);
+        cia_tick(&c->cia2, 1);
+        tape_advance(&c->tape, 1, tape_read_pulse, &c->cia1);
+        int produced = sid_clock(&c->sid, 1,
+            c->audio_frame + c->audio_count,
+            C128_AUDIO_FRAME_CAPACITY - c->audio_count);
+        tape_mix_audio(&c->tape, c->audio_frame + c->audio_count,
+                       produced, c->cfg->tape_audio_monitor);
+        c->audio_count += produced;
+    }
+    drive_sync_to_cpu(c);
+    c128_refresh_interrupt_lines(c);
+}
+
+static void c128_sync_cpu(C128 *c) {
+    if (!c->cpu_clock_active) return;
+    u64 now = cpu_cycles();
+    /* The inherited core clock is 32 bits. Handle wrap, but not its short
+     * backwards adjustment while replacing a KERNAL trap instruction. */
+    u32 elapsed = (u32)(now - c->cpu_clock_synced);
+    if (!elapsed || elapsed > 0x80000000u) return;
+    bool fast = c->fast || c->vic.fast_mode;
+    c->cpu_clock_synced = now;
+    while (elapsed--) {
+        /* Five refresh accesses occupy PHI1 even at 2 MHz. */
+        if (fast && !(c->vic.beam_half_clock & 1) &&
+            c->vic.cycle >= 11 && c->vic.cycle <= 15) {
+            cpu_stall(1);
+            c->cpu_clock_synced = (u32)(c->cpu_clock_synced + 1);
+            c128_clock_halves(c, 1);
+        }
+        c128_clock_halves(c, fast ? 1 : 2);
+    }
+}
+
+static void c128_cpu_bus_wait(C128 *c, bool write, bool io) {
+    if (!c->cpu_clock_active) return;
+    c128_sync_cpu(c);
+    bool fast = c->fast || c->vic.fast_mode;
+    /* The core timestamps a read at its start, but STORE_ABS includes the
+     * write's final clock. VICE likewise subtracts one half-cycle before
+     * stretching a write and adds it back afterward. */
+    if (fast && io && (c->vic.beam_half_clock & 1) == (unsigned)write) {
+        cpu_stall(1);
+        c128_sync_cpu(c);
+    }
+    /* RDY stops read cycles, not writes: in particular RMW's two bus
+     * writes must be allowed to finish when BA falls. */
+    while (!write && !fast && vic_cpu_ba_low(&c->vic)) {
+        cpu_stall(1);
+        c128_sync_cpu(c);
+    }
+}
+
 int c128_frame(C128 *c) {
     if (c->paused && !c->debug.step_pending) return 0;
     bool resuming_frame = c->debug.partial_frame;
@@ -794,203 +866,62 @@ int c128_frame(C128 *c) {
                              &c->second_real_drive.via2);
         c->drive2_media_generation = c->drive2.media_generation;
     }
-    /* The PAL video clock always has 312 lines of 63 one-MHz cycles. D030 may
-     * switch the 8502 between one and two CPU cycles per video cycle at a
-     * raster interrupt, as Elite128 does to use 2 MHz only in the borders. */
-    c->drive_host_cycle_synced = cpu_cycles();
+    /* The raster clock, not a per-line CPU budget, determines the end of a
+     * frame. BA stalls and D030 changes can now occur inside an instruction. */
+    c->drive_clock_denominator = CPU_PAL_FRAME_CYCLES;
+    c->drive_host_cycle_synced = c->bus_cycles;
+    c->cpu_clock_synced = cpu_cycles();
     int total = 0;
-    int cpu_debt = c->cpu_frame_debt;
-    int z80_debt = c->z80_frame_debt;
-    bool debt_fast = c->cpu.fast;
-    bool ran_8502 = false;
-    bool ran_z80 = false;
-    bool debug_halted = false;
-    c->audio_count = 0;
+    bool ran_8502 = false, ran_z80 = false, debug_halted = false;
+    if (!resuming_frame) c->audio_count = 0;
     c128_refresh_vic_bank(c);
-    if (!resuming_frame) {
-        vic_set_raster_line(&c->vic, 0);
-        vic_begin_frame(&c->vic, &c->mem);
-    }
-    unsigned first_video_line = resuming_frame
-        ? c->debug.partial_video_line : 0;
-    for (unsigned video_line = first_video_line;
-         video_line < VIC_RASTER_LINES && !debug_halted; video_line++) {
-        vdc_set_raster_line(&c->vdc, video_line);
-        bool z80_line = !mmu_cpu_is_8502(&c->mem.mmu);
-        bool resumed_line = resuming_frame && video_line == first_video_line;
-        if (resumed_line &&
-            c->debug.partial_cpu != c128_debug_owner(c)) {
-            /* The instruction which stopped the debugger handed the bus to
-             * the other CPU. The normal scheduler changes CPU only at the
-             * next raster line, so finish this line without running it. */
-            if (c->debug.partial_cpu == C128_DEBUG_CPU_Z80)
-                z80_debt = c->debug.partial_progressed - c->debug.partial_target;
-            else
-                cpu_debt = c->debug.partial_progressed - c->debug.partial_target;
-        } else if (z80_line) {
-            /* A stock C128 feeds the Z80 two T-states per one-MHz video
-             * cycle.  The optional dot-clock modification supplies four
-             * during the same CPU phase, doubling effective Z80 throughput
-             * without accelerating the shared bus or peripherals. */
-            int z80_ratio = c->cfg && c->cfg->double_z80_frequency ? 4 : 2;
-            int target = resumed_line
-                ? c->debug.partial_target : 63 * z80_ratio - z80_debt;
-            int progressed = resumed_line ? c->debug.partial_progressed : 0;
-            while (progressed < target &&
-                   !mmu_cpu_is_8502(&c->mem.mmu)) {
-                if (debug_before_instruction(c, C128_DEBUG_CPU_Z80,
-                                             c->z80.pc)) {
-                    debug_halted = true;
-                    break;
-                }
-                int ran = z80_step(&c->z80, &c->z80_bus);
-                if (ran <= 0) break;
-                progressed += ran;
-                ran_z80 = true;
-
-                int peripheral_cycles = ran + c->z80_peripheral_remainder;
-                c->z80_peripheral_remainder = peripheral_cycles % z80_ratio;
-                peripheral_cycles /= z80_ratio;
-                total += peripheral_cycles;
-                c->bus_cycles += (u64)peripheral_cycles;
-                cia_tick(&c->cia1, peripheral_cycles);
-                cia_tick(&c->cia2, peripheral_cycles);
-                tape_advance(&c->tape, (unsigned)peripheral_cycles,
-                             tape_read_pulse, &c->cia1);
-                int produced = sid_clock(&c->sid, peripheral_cycles,
-                    c->audio_frame + c->audio_count,
-                    C128_AUDIO_FRAME_CAPACITY - c->audio_count);
-                tape_mix_audio(&c->tape, c->audio_frame + c->audio_count,
-                               produced, c->cfg->tape_audio_monitor);
-                c->audio_count += produced;
-                if (debug_after_instruction(c, C128_DEBUG_CPU_Z80,
-                                            c->z80.pc)) {
-                    debug_halted = true;
-                    break;
-                }
-            }
-            if (debug_halted) {
-                c->debug.partial_frame = true;
-                c->debug.partial_video_line = video_line;
-                c->debug.partial_cpu = C128_DEBUG_CPU_Z80;
-                c->debug.partial_target = target;
-                c->debug.partial_progressed = progressed;
-            } else z80_debt = progressed - target;
-        } else {
-            bool fast_now = c->fast || c->vic.fast_mode;
-            if (fast_now != debt_fast) {
-                cpu_debt = fast_now ? cpu_debt * 2 : (cpu_debt + 1) / 2;
-                debt_fast = fast_now;
-            }
-            c->cpu.fast = fast_now;
-            leds_set_cpu_frequency(fast_now ? 2 : 1);
-            unsigned drive_denominator = fast_now
-                ? 2u * CPU_PAL_FRAME_CYCLES : CPU_PAL_FRAME_CYCLES;
-            if (c->drive_clock_denominator &&
-                c->drive_clock_denominator != drive_denominator) {
-                c->drive_clock_fraction = (unsigned)(
-                    (u64)c->drive_clock_fraction * drive_denominator /
-                    c->drive_clock_denominator);
-                c->drive2_clock_fraction = (unsigned)(
-                    (u64)c->drive2_clock_fraction * drive_denominator /
-                    c->drive_clock_denominator);
-            }
-            c->drive_clock_denominator = drive_denominator;
-            int target = resumed_line
-                ? c->debug.partial_target
-                : 63 * (fast_now ? 2 : 1) - cpu_debt;
-            int progressed = resumed_line ? c->debug.partial_progressed : 0;
-            while (progressed < target &&
-                   mmu_cpu_is_8502(&c->mem.mmu)) {
-                /* Re-evaluate at every instruction boundary.  In particular,
-                 * this drops an already-high IRQ line while a KERNAL bank
-                 * primitive has KERNAL ROM temporarily mapped out. */
-                c128_refresh_interrupt_lines(c);
-                /* A full raster-line gap can swallow an IEC bit transition.
-                 * In true-drive mode, alternate one 8502 instruction with
-                 * the corresponding 1571 clock slice. */
-                /* $D505 can transfer the bus to the Z80 during any 8502
-                 * instruction.  Stop at every instruction boundary so the
-                 * inactive processor cannot run past the handoff. */
-                if (debug_before_instruction(c, C128_DEBUG_CPU_8502,
-                                             c->cpu.pc)) {
-                    debug_halted = true;
-                    break;
-                }
-                int ran = cpu_step_budget(&c->cpu, 1);
-                if (ran <= 0) break;
-                u16 jam_pc;
-                if (cpu_take_jam(&jam_pc)) {
-                    fprintf(stderr, "1986: 8502 JAM at $%04X; resetting machine\n",
-                            jam_pc);
-                    notify_post("8502 JAM AT $%04X - MACHINE RESET", jam_pc);
-                    c128_reset(c);
-                    return total;
-                }
-                int elapsed = ran;
-                total += ran;
-                progressed += ran;
-                ran_8502 = true;
-                drive_sync_to_cpu(c);
-                /* CIA, SID and tape retain the one-MHz peripheral clock while
-                 * the 8502 runs twice as many cycles in fast mode. */
-                int peripheral_cycles = elapsed;
-                if (fast_now) {
-                    peripheral_cycles += c->peripheral_fast_remainder;
-                    c->peripheral_fast_remainder = peripheral_cycles & 1;
-                    peripheral_cycles /= 2;
-                } else {
-                    c->peripheral_fast_remainder = 0;
-                }
-                c->bus_cycles += (u64)peripheral_cycles;
-                cia_tick(&c->cia1, peripheral_cycles);
-                cia_tick(&c->cia2, peripheral_cycles);
-                tape_advance(&c->tape, (unsigned)peripheral_cycles,
-                             tape_read_pulse, &c->cia1);
-                if (c->tape.play_button)
-                    cpu_irq(&c->cpu, cia_irq_line(&c->cia1) ||
-                            (c->vic.irq_status & 0x80));
-                int produced = sid_clock(&c->sid, peripheral_cycles,
-                    c->audio_frame + c->audio_count,
-                    C128_AUDIO_FRAME_CAPACITY - c->audio_count);
-                tape_mix_audio(&c->tape, c->audio_frame + c->audio_count,
-                               produced, c->cfg->tape_audio_monitor);
-                c->audio_count += produced;
-                if (debug_after_instruction(c, C128_DEBUG_CPU_8502,
-                                            c->cpu.pc)) {
-                    debug_halted = true;
-                    break;
-                }
-            }
-            if (debug_halted) {
-                c->debug.partial_frame = true;
-                c->debug.partial_video_line = video_line;
-                c->debug.partial_cpu = C128_DEBUG_CPU_8502;
-                c->debug.partial_target = target;
-                c->debug.partial_progressed = progressed;
-            } else cpu_debt = progressed - target;
+    u64 frame_end = (c->vic.beam_half_clock / (126 * VIC_RASTER_LINES) + 1) *
+                    (126 * VIC_RASTER_LINES);
+    while (c->vic.beam_half_clock < frame_end) {
+        bool z80 = !mmu_cpu_is_8502(&c->mem.mmu);
+        C128DebugCpu owner = z80 ? C128_DEBUG_CPU_Z80 : C128_DEBUG_CPU_8502;
+        u16 pc = z80 ? c->z80.pc : c->cpu.pc;
+        if (debug_before_instruction(c, owner, pc)) {
+            debug_halted = true;
+            break;
         }
-        if (debug_halted) break;
-        c->debug.partial_frame = false;
-        resuming_frame = false;
-        c128_refresh_vic_bank(c);
-        unsigned next_line = video_line + 1;
-        vic_set_raster_line(&c->vic, next_line);
-        if (next_line < VIC_RASTER_LINES)
-            vic_latch_raster(&c->vic, &c->mem, next_line);
-        bool vic_irq = vic_tick(&c->vic);
-        bool irq = cia_irq_line(&c->cia1) || vic_irq;
-        if (mmu_cpu_is_8502(&c->mem.mmu)) {
-            cpu_irq(&c->cpu, irq);
-            cpu_nmi(&c->cpu, cia_irq_line(&c->cia2) || c->restore_down);
+        c128_refresh_interrupt_lines(c);
+        if (z80) {
+            int ran = z80_step(&c->z80, &c->z80_bus);
+            if (ran <= 0) break;
+            unsigned ratio = c->cfg->double_z80_frequency ? 2 : 1;
+            unsigned halves = ran + c->z80_peripheral_remainder;
+            c->z80_peripheral_remainder = halves % ratio;
+            c128_clock_halves(c, halves / ratio);
+            total += ran / (2 * ratio);
+            ran_z80 = true;
+            c->cpu_clock_synced = cpu_cycles();
         } else {
-            c->z80.pending_irq = irq;
+            c->cpu.fast = c->fast || c->vic.fast_mode;
+            c->cpu_clock_active = true;
+            int ran = cpu_step_budget(&c->cpu, 1);
+            c128_sync_cpu(c);
+            c->cpu_clock_active = false;
+            if (ran <= 0) break;
+            u16 jam_pc;
+            if (cpu_take_jam(&jam_pc)) {
+                fprintf(stderr, "1986: 8502 JAM at $%04X; resetting machine\n", jam_pc);
+                notify_post("8502 JAM AT $%04X - MACHINE RESET", jam_pc);
+                c128_reset(c);
+                return total;
+            }
+            total += ran;
+            ran_8502 = true;
+        }
+        if (debug_after_instruction(c, owner, z80 ? c->z80.pc : c->cpu.pc)) {
+            debug_halted = true;
+            break;
         }
     }
-    if (!debug_halted) {
-        c->cpu_frame_debt = cpu_debt;
-        c->z80_frame_debt = z80_debt;
-    }
+    c->debug.partial_frame = debug_halted;
+    c->debug.partial_video_line = c->vic.current_raster;
+    c->cpu_frame_debt = c->z80_frame_debt = 0;
+    leds_set_cpu_frequency((c->fast || c->vic.fast_mode) ? 2 : 1);
     if (ran_8502)
         leds_ping(LED_CPU_8502);
     if (ran_z80)
