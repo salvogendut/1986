@@ -39,6 +39,7 @@ void config_set_defaults(Config *cfg) {
     cfg->drive_type = 1571;   /* Commodore 1571 */
     cfg->drive2_type = 1571;
     cfg->real_disk_drive = false;
+    cfg->unthrottled_drive = false;
     cfg->drive_audio_monitor = false;
     cfg->drive_visual_monitor = false;
     cfg->second_drive = false;
@@ -162,6 +163,7 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "drive_type")) cfg->drive_type = atoi(value);
     else if (!strcasecmp(key, "drive2_type")) cfg->drive2_type = atoi(value);
     else if (!strcasecmp(key, "real_disk_drive")) cfg->real_disk_drive = atoi(value) != 0;
+    else if (!strcasecmp(key, "unthrottled_drive")) cfg->unthrottled_drive = atoi(value) != 0;
     else if (!strcasecmp(key, "drive_audio_monitor")) cfg->drive_audio_monitor = atoi(value) != 0;
     else if (!strcasecmp(key, "drive_visual_monitor")) cfg->drive_visual_monitor = atoi(value) != 0;
     else if (!strcasecmp(key, "second_drive")) cfg->second_drive = atoi(value) != 0;
@@ -241,6 +243,7 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "drive_type = %d\n", cfg->drive_type);
     fprintf(f, "drive2_type = %d\n", cfg->drive2_type);
     fprintf(f, "real_disk_drive = %d\n", cfg->real_disk_drive ? 1 : 0);
+    fprintf(f, "unthrottled_drive = %d\n", cfg->unthrottled_drive ? 1 : 0);
     fprintf(f, "drive_audio_monitor = %d\n", cfg->drive_audio_monitor ? 1 : 0);
     fprintf(f, "drive_visual_monitor = %d\n", cfg->drive_visual_monitor ? 1 : 0);
     fprintf(f, "second_drive = %d\n", cfg->second_drive ? 1 : 0);

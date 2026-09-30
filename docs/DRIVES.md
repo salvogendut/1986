@@ -45,6 +45,23 @@ With Second Drive enabled and both hardware selectors set to 1571CR, two
 independent ROM-backed drives share the IEC bus. Each keeps its own CPU,
 address, image, write protection, LED, and monitor history.
 
+**Advanced > Unthrottled drive** (default Off) temporarily removes host frame
+pacing while either real drive is busy: its motor is running and its hardware
+busy LED or write gate is on. The whole machine speeds up together, preserving
+CPU/IEC/drive clock ratios, then returns to normal speed when neither drive is
+busy. Motor spin-down alone and error flashes with the motor stopped do not
+trigger acceleration. Custom loaders control these signals too: a loader that
+keeps the busy LED off while reading remains paced, while software leaving
+both motor and busy LED on stays accelerated until you turn this option off.
+
+The preference is saved and takes effect immediately with a running real
+drive. It is inactive with the fast virtual backend (including fallback due
+to unavailable drive hardware/ROMs). Pausing still pauses and paces the host
+loop; `--no-throttle` still requests continuous unthrottled operation.
+SID/tape/drive audio is muted and its queue cleared across acceleration
+transitions; LEDs and visual monitors keep updating. Leave this option Off
+to hear loading music or drive sounds at their normal pace.
+
 The following are not yet implemented:
 
 - 1571 burst/fast serial;
@@ -85,4 +102,3 @@ control port if required.
 
 See [USAGE.md](../USAGE.md) for media-overlay instructions and BASIC/DOS
 examples, and [Development.md](../Development.md) for implementation detail.
-

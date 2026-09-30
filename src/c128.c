@@ -13,6 +13,20 @@ static bool drive_probe_active(const C128 *c) {
     return c->drive_raw_iec;
 }
 
+static bool drive_busy(const GcrDrive *g) {
+    /* Motor spin-down can outlast LOAD considerably. Don't speed up the
+     * newly loaded program during that idle time, or on error LED flashes
+     * with the motor stopped. Writes remain busy even with the LED off. */
+    return g->motor && (g->led || g->write_mode);
+}
+
+bool c128_drive_warp_active(const C128 *c) {
+    if (!c->cfg->unthrottled_drive || c->paused) return false;
+    /* Follow the running backend, not the restart-pending preference. */
+    return (c->drive_raw_iec && drive_busy(&c->integrated_drive.gcr)) ||
+           (c->drive2_raw_iec && drive_busy(&c->second_real_drive.gcr));
+}
+
 /* The C128 KERNAL copies its banked FETCH, STASH and CMPARE primitives to
  * $02a2-$02cc.  Each temporarily maps KERNAL out through $ff00, performs one
  * indirect access, then restores the old configuration.  Our raster IRQ is

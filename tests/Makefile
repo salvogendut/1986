@@ -12,6 +12,7 @@ GC_SECTIONS_LDFLAGS = -Wl,--gc-sections
 endif
 
 TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config test-frame-pacer test-joyport test-c128-keyboard test-mos6502dis test-gifcap test-videocap test-d64 test-d64-save test-disk-formats test-drive test-drive1571cr test-drive-monitor test-tape test-gcr-drive test-gcr-write test-via6522 test-iec-bus test-prg-drive test-vdrive-blocks test-overlay test-display-footer test-leds test-vic test-vdc test-snapshot
+TESTS += test-drive-warp
 
 .PHONY: all check clean
 
@@ -19,6 +20,7 @@ all: $(TESTS)
 
 # These tests embed Display/C128 or consume the VDC framebuffer dimensions.
 test-c128-keyboard test-overlay test-vdc test-snapshot: ../src/display.h
+test-c128-keyboard test-overlay test-drive test-prg-drive test-drive-warp test-snapshot: ../src/config.h
 
 test-cpu: test_cpu.c ../src/cpu.c ../src/cpu.h ../src/vice/maincpu.c ../src/vice/interrupt.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
@@ -51,6 +53,11 @@ test-config: test_config.c ../src/config.c ../src/config.h
 test-frame-pacer: test_frame_pacer.c ../src/frame_pacer.c ../src/frame_pacer.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_frame_pacer.c ../src/frame_pacer.c -o $@
+
+test-drive-warp: test_drive_warp.c ../src/c128.c ../src/c128.h ../src/display.h ../src/frame_pacer.c ../src/frame_pacer.h ../src/config.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra \
+		-ffunction-sections -fdata-sections $(GC_SECTIONS_LDFLAGS) -I../src \
+		test_drive_warp.c ../src/c128.c ../src/frame_pacer.c ../src/config.c $(SDL3_LIBS) -o $@
 
 test-joyport: test_joyport.c ../src/joyport.c ../src/joyport.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
@@ -159,6 +166,7 @@ check: $(TESTS)
 	./test-sid
 	./test-config
 	./test-frame-pacer
+	./test-drive-warp
 	./test-joyport
 	./test-c128-keyboard
 	./test-mos6502dis

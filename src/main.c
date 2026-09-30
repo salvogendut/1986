@@ -453,6 +453,7 @@ int main(int argc, char **argv) {
     GamepadAxes gamepad_axes = {0};
     bool pc_shift_held = false;
     bool startup_focus_placed = false;
+    bool drive_warp_audio_muted = false;
     FramePacer frame_pacer;
     frame_pacer_init(&frame_pacer, SDL_GetTicksNS());
 
@@ -754,8 +755,16 @@ int main(int argc, char **argv) {
                                   poll_gamepad(&gamepad_axes, gamepad));
 
         /* --- Machine step --- */
+        bool drive_warp = c128_drive_warp_active(&c);
         if (!c.paused || c.debug.step_pending) {
             int cycles = c128_frame(&c);
+            /* Include both edges of a drive-busy transition so the first/last
+             * accelerated frame cannot leak into the real-time audio queue. */
+            drive_warp = !c.paused &&
+                (drive_warp || c128_drive_warp_active(&c));
+            if (audio_stream && drive_warp != drive_warp_audio_muted)
+                SDL_ClearAudioStream(audio_stream);
+            drive_warp_audio_muted = drive_warp;
             if (c.paused && mouse_captured)
                 release_mouse(&mouse_captured, &c.joyports);
             if (c.paused && audio_stream)
@@ -765,9 +774,10 @@ int main(int argc, char **argv) {
                               cfg.drive_audio_monitor && c.drive_raw_iec);
             drive_monitor_mix(&c.drive2_monitor, c.audio_frame, c.audio_count,
                               cfg.drive_audio_monitor && c.drive2_raw_iec);
-            /* Keep only a few frames queued if the host stalls. The SID core
-             * keeps clocking even without an available audio device. */
-            if (audio_stream && c.audio_count > 0 &&
+            /* Discard audio during warp instead of playing disjoint samples
+             * or building a backlog. Keep only a few frames queued if the
+             * host stalls. SID and monitor state still advance normally. */
+            if (audio_stream && !drive_warp && !c.paused && c.audio_count > 0 &&
                 SDL_GetAudioStreamQueued(audio_stream) <
                     6 * (int)(SID_SAMPLE_RATE / 50) * (int)sizeof(s16))
                 SDL_PutAudioStreamData(audio_stream, c.audio_frame,
@@ -841,7 +851,7 @@ int main(int argc, char **argv) {
          * after long host stalls instead of attempting an unbounded catch-up. */
         uint64_t wait_ns = frame_pacer_schedule(
             &frame_pacer, SDL_GetTicksNS(), emulated_frame_ns,
-            !no_throttle || c.paused);
+            (!no_throttle && !drive_warp) || c.paused);
         if (wait_ns) SDL_DelayNS(wait_ns);
     }
 

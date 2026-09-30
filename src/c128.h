@@ -142,6 +142,9 @@ bool c128_debug_breakpoint_enable(C128 *c, unsigned id, bool enabled);
 const C128DebugBreakpoint *c128_debug_breakpoint_at(const C128 *c, unsigned slot);
 C128DebugStopReason c128_debug_take_stop(C128 *c, C128DebugCpu *cpu, u16 *address);
 
+/* Host-only automatic warp request; never changes emulated clock ratios. */
+bool c128_drive_warp_active(const C128 *c);
+
 /* IEC serial-bus forwarding (installed via cpu_install_iec_traps). */
 void c128_iec_attention(void *ctx, u8 b);
 void c128_iec_send(void *ctx, u8 byte);

@@ -35,6 +35,8 @@ c64_test_mode = 0
 
 # Advanced: ROM-backed 1571 drive if dos1571cr.bin is present (restart to apply)
 real_disk_drive = 0
+# Full host speed while either real drive is busy (audio muted during warp)
+unthrottled_drive = 0
 # Original, quiet motor/step audio for the real 1571 (live toggle, default off)
 drive_audio_monitor = 0
 # Independent translucent motor/head waveform panel, default off

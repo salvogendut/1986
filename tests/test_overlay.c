@@ -291,7 +291,7 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.double_z80_frequency && z80_led_mhz == 4,
           "Advanced doubles the effective Z80 frequency and footer label");
-    for (int i = 0; i < 4; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 5; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.second_drive && second_led_enabled,
           "Second Drive toggle enables its device and LED");
@@ -316,7 +316,7 @@ int main(void) {
     CHECK(ov.row == 6, "Tinker Media includes U36 with Drive 2 enabled");
 
     key(&ov, SDL_SCANCODE_RIGHT);
-    for (int i = 0; i < 10; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 11; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!cfg.second_drive && !second_led_enabled,
           "Second Drive toggle disables its device and LED");
@@ -364,7 +364,7 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RIGHT);
     CHECK(ov.section == OV_ADVANCED && ov.row == 0,
           "Advanced opens at its first row for keyboard map");
-    for (int i = 0; i < 20; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    for (int i = 0; i < 21; ++i) key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.keyboard_map_visible, "Advanced opens the keyboard map");
     key(&ov, SDL_SCANCODE_LEFT);
@@ -384,7 +384,7 @@ int main(void) {
     CHECK(ov.visible, "reopen options for subsequent media checks");
 
     ov.section = OV_ADVANCED;
-    ov.row = 21;
+    ov.row = 22;
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(!cfg.c64_test_mode && !c->mem.mmu.c64_enabled,
           "C64 test gate refuses to arm without optional C64 ROMs");
@@ -641,13 +641,22 @@ int main(void) {
     CHECK(cfg.real_disk_drive, "Advanced enables real-drive preference");
     ov.row = 8;
     key(&ov, SDL_SCANCODE_RETURN);
-    CHECK(cfg.drive_audio_monitor, "Advanced enables drive audio monitor");
+    CHECK(cfg.unthrottled_drive, "Advanced enables automatic drive warp");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(!cfg.unthrottled_drive, "Advanced disables automatic drive warp");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.unthrottled_drive && !c->drive_raw_iec,
+          "warp preference can be armed without changing the live backend");
     ov.row = 9;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.drive_audio_monitor, "Advanced enables drive audio monitor");
+    ov.row = 10;
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.drive_visual_monitor, "Advanced enables drive visual monitor");
     key(&ov, SDL_SCANCODE_F9); /* persist the Advanced change on close */
     CHECK(config_load(&saved, config_file) && saved.drive_audio_monitor &&
-          saved.drive_visual_monitor, "drive monitor toggles persist");
+          saved.drive_visual_monitor && saved.unthrottled_drive,
+          "drive monitor and automatic warp toggles persist");
     key(&ov, SDL_SCANCODE_F9);
     ov.section = OV_MEDIA;
     ov.row = 1;
@@ -657,7 +666,7 @@ int main(void) {
     CHECK(config_load(&saved, config_file) && saved.drive_type == 1581,
           "drive 1 hardware selection persists");
     ov.section = OV_ADVANCED;
-    ov.row = 10;
+    ov.row = 11;
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.second_drive, "enable second drive for independent type selection");
     ov.section = OV_MEDIA;
@@ -703,7 +712,7 @@ int main(void) {
             ov.visible = true;
             if (getenv("C128_OVERLAY_PREVIEW_KEYBOARD")) {
                 ov.section = OV_ADVANCED;
-                ov.row = 20;
+                ov.row = 21;
                 ov.keyboard_map_visible = true;
             } else if (getenv("C128_OVERLAY_PREVIEW_ABOUT")) {
                 ov.section = OV_GENERAL;
@@ -711,7 +720,7 @@ int main(void) {
                 ov.about_visible = true;
             } else {
                 ov.section = OV_ADVANCED;
-                ov.row = 10;
+                ov.row = 11;
             }
             SDL_SetRenderDrawColor(renderer, 0x20, 0x40, 0x20, 255);
             SDL_RenderClear(renderer);
