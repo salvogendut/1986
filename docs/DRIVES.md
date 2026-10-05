@@ -84,8 +84,15 @@ recognized. ROMs are not supplied with the emulator.
 
 `DIRECTORY`, `LOAD`/`BLOAD`, and `SAVE`/`DSAVE`/`BSAVE` use the native KERNAL
 and DOS ROM over the physical slow IEC bus. Two 1581s, or a 1571CR and a 1581 in either slot, share
-that bus at distinct addresses #8–#11. Hardware type and unit changes require
-restart; toggling Second Drive reconnects the existing running model.
+that bus at distinct addresses #8–#11. Changing either hardware type in Media
+immediately reconnects the selected model and power-cycles the C128 and both
+drives, using the already-loaded DOS ROMs. This clears volatile RAM and the
+running program, but retains mounted media and the display selection. Pending
+GCR writes must flush successfully first; missing required ROMs or flush
+failures cancel the change without resetting the machine or saving a false
+selection. Incompatible media stay selected but leave the new mechanism empty.
+Unit changes take effect at startup or this type-change power cycle; toggling
+Second Drive reconnects the existing running model.
 Each device has its own LED, monitor history and audio. The existing audio
 samples are reused as an approximate mechanism monitor, not a 1581-specific
 sound model. Unthrottled drive also recognizes 1581 controller activity.
@@ -144,7 +151,8 @@ No DOS ROM is included or copied by this test. Its disposable D81 is removed
 afterwards. A separate windowless host test covers native `DIRECTORY`/`BLOAD`,
 BSAVE with byte-exact persisted files, DSAVE/DLOAD/RUN across power cycling,
 write protection, external-edit errors returning to BASIC without data loss,
-media replacement, two 1581s at #10/#11, and mixed models:
+media replacement, two 1581s at #10/#11, mixed models, and native boot/directory/
+load after switching both slots in both directions without restarting:
 
 ```sh
 make -C tests test-real-drives

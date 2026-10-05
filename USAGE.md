@@ -250,9 +250,20 @@ leave its mechanism empty with an incompatible-media warning. Raw formatting
 
 With Second Drive enabled, 1571CR and 1581 models can be combined in either
 slot, including two of either model. Both share one IEC bus at distinct
-addresses, with separate images and LEDs. Model/address changes require
-restart. If an enabled device's ROM is missing, both drives fall back to the
-fast virtual backend; mixed physical and virtual IEC is not available.
+addresses, with separate images and LEDs. Changing either **Drive type** in
+Media immediately applies the new model and **power-cycles the whole C128 and
+both drives**, clearing RAM and any running program. Save your work and wait
+for disk operations to finish first. The display selection and mounted media
+are retained, and the footer LED labels update to the running models. An image
+incompatible with the new hardware stays selected but leaves its mechanism
+empty: use D64/D71 for 1571CR and D81 for 1581.
+
+The switch is cancelled if a required ROM is missing or a pending GCR write
+cannot be saved. Adding ROMs or changing the Real Disk Drive gate still needs
+an application restart; IEC address changes take effect at that restart or
+the next drive-type power cycle. At startup, a missing enabled-device ROM
+falls back to the fast virtual pair; mixed physical and virtual IEC is not
+available.
 Advanced has independent audio
 and visual drive monitors, both Off by default; the visual
 scope sits above the function-key footer and shows Drive 2's track above

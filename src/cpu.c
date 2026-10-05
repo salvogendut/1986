@@ -123,6 +123,9 @@ static const C128Trap g_c64_serial_traps[] = {
     (sizeof(g_c64_serial_traps) / sizeof(g_c64_serial_traps[0]))
 
 static IecCallbacks g_iec;
+static u8 *g_iec_kernal, *g_c64_iec_kernal;
+static u8 g_iec_original[N_SERIAL_TRAPS];
+static u8 g_c64_iec_original[N_C64_SERIAL_TRAPS];
 static TapeCallbacks g_tape;
 static bool g_tape_active;
 static u8 *g_tape_kernal;
@@ -274,11 +277,13 @@ DWORD traps_handler(void) {
  * patched, so the boot does not hang). */
 void cpu_install_iec_traps(u8 *kernal, const IecCallbacks *cb) {
     if (cb) g_iec = *cb;
+    if (!kernal) return;
     for (size_t i = 0; i < N_SERIAL_TRAPS; i++) {
         unsigned off = g_serial_traps[i].addr - 0xE000;
-        if (off < 0x2000)
-            kernal[off] = TRAP_OPCODE;
+        if (g_iec_kernal != kernal) g_iec_original[i] = kernal[off];
+        kernal[off] = TRAP_OPCODE;
     }
+    g_iec_kernal = kernal;
 }
 
 void cpu_install_c64_iec_traps(u8 *kernal64, const IecCallbacks *cb) {
@@ -286,7 +291,26 @@ void cpu_install_c64_iec_traps(u8 *kernal64, const IecCallbacks *cb) {
     if (!kernal64) return;
     for (size_t i = 0; i < N_C64_SERIAL_TRAPS; ++i) {
         unsigned off = g_c64_serial_traps[i].addr - 0xE000;
-        if (off < 0x2000) kernal64[off] = TRAP_OPCODE;
+        if (g_c64_iec_kernal != kernal64) g_c64_iec_original[i] = kernal64[off];
+        kernal64[off] = TRAP_OPCODE;
+    }
+    g_c64_iec_kernal = kernal64;
+}
+
+void cpu_remove_iec_traps(u8 *kernal, u8 *kernal64) {
+    if (kernal && g_iec_kernal == kernal) {
+        for (size_t i = 0; i < N_SERIAL_TRAPS; ++i) {
+            unsigned off = g_serial_traps[i].addr - 0xe000;
+            if (kernal[off] == TRAP_OPCODE) kernal[off] = g_iec_original[i];
+        }
+        g_iec_kernal = NULL;
+    }
+    if (kernal64 && g_c64_iec_kernal == kernal64) {
+        for (size_t i = 0; i < N_C64_SERIAL_TRAPS; ++i) {
+            unsigned off = g_c64_serial_traps[i].addr - 0xe000;
+            if (kernal64[off] == TRAP_OPCODE) kernal64[off] = g_c64_iec_original[i];
+        }
+        g_c64_iec_kernal = NULL;
     }
 }
 
@@ -384,6 +408,7 @@ void clk_guard_destroy(clk_guard_t *g) {
 
 void cpu_init(Cpu8502 *cpu, CpuBus bus) {
     memset(cpu, 0, sizeof(*cpu));
+    g_iec_kernal = g_c64_iec_kernal = NULL;
     g_bus = bus;
     cpu->bus = bus;
 

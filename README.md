@@ -26,6 +26,8 @@ disk access and experimental ROM-backed 1571CR and 1581 paths.
 - ROM-backed 1581 D81 reads and atomic sector writes, including mixed
   1571/1581 pairs on the same IEC bus. Each drive's LED label identifies its
   running type and IEC address; see [write safety and limitations](docs/DRIVES.md).
+  Changing a drive type in Media immediately power-cycles the C128 and activates
+  the selected hardware—save your work before switching.
 - Native C128 cartridges, raw function ROMs, the U36 internal ROM socket, and
   TAP/T64 cassette support.
 - Unified or separate VIC/VDC windows, persistent configuration, screenshots,

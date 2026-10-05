@@ -17,7 +17,10 @@ Without an explicit folder, the desktop first checks `roms/` beside the
 executable, then its installation ROM directory (normally
 `/usr/share/1986/roms` in Linux packages). All machine and drive ROMs are
 loaded from the selected folder. Restart after adding ROMs or changing the
-ROM folder, Real Disk Drive setting, or drive hardware type.
+ROM folder or Real Disk Drive setting. Changing a drive hardware type in Media
+instead triggers an immediate full power cycle using the already-loaded ROMs.
+If a required drive ROM is unavailable, the change is cancelled and the current
+hardware stays active; add the ROM and restart before trying again.
 
 Use the exact filenames below, including case. Only one accepted name is
 needed for each image; alternatives are tried in the order shown.

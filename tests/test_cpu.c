@@ -270,6 +270,31 @@ int main(void) {
           "C64 T64 trap uses C64 workspace rather than C128 workspace");
     cpu_set_c64_tape_traps(&ram[0xE000], NULL);
 
+    /* Hardware selection can leave a fast-drive fallback at runtime. IEC
+     * patching must be reversible and must not touch separate T64 traps. */
+    cpu_remove_iec_traps(&ram[0xe000], NULL);
+    u8 native[8192], compat[8192], native_before[8192], compat_before[8192];
+    for (unsigned i = 0; i < sizeof(native); ++i) {
+        native[i] = (u8)(i * 13 + 0x31);
+        compat[i] = (u8)(i * 7 + 0x17);
+    }
+    native[0x8d3] = compat[0x172f] = 0x02; /* independent tape patches */
+    memcpy(native_before, native, sizeof(native));
+    memcpy(compat_before, compat, sizeof(compat));
+    for (int pass = 0; pass < 2; ++pass) {
+        cpu_install_iec_traps(native, &iec);
+        cpu_install_c64_iec_traps(compat, &iec);
+        cpu_install_iec_traps(native, &iec); /* repeated install keeps originals */
+        cpu_install_c64_iec_traps(compat, &iec);
+        CHECK(native[0x569] == 0x02 && compat[0xea9] == 0x02, "both IEC trap sets installed");
+        cpu_remove_iec_traps(native, compat);
+        CHECK(!memcmp(native, native_before, sizeof(native)) &&
+              !memcmp(compat, compat_before, sizeof(compat)),
+              "physical IEC restores both ROMs exactly and leaves tape patches alone");
+        cpu_remove_iec_traps(native, compat); /* idempotent */
+        CHECK(!memcmp(native, native_before, sizeof(native)), "removing inactive traps is harmless");
+    }
+
     if (failures == 0) { printf("test-cpu: OK\n"); return 0; }
     printf("test-cpu: %d failure(s)\n", failures);
     return 1;

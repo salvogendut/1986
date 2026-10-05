@@ -30,6 +30,7 @@ typedef struct {
     bool         visible;
     bool         about_visible;
     bool         keyboard_map_visible;
+    bool         power_cycled; /* host clears queued audio/paste after hardware changes */
     OvSection    section;
     int          row;
     Config      *cfg;

@@ -644,13 +644,22 @@ static void overlay_activate(Overlay *ov) {
                     notify_post("REAL DRIVE 2 ADDRESS CHANGED - RESTART TO APPLY");
             } else if (media_item(ov, ov->row) == MEDIA_TYPE1 ||
                        media_item(ov, ov->row) == MEDIA_TYPE2) {
-                int *type = media_item(ov, ov->row) == MEDIA_TYPE1
-                          ? &ov->cfg->drive_type : &ov->cfg->drive2_type;
-                *type = *type == 1571 ? 1581 : 1571;
-                notify_post(*type == 1571
-                    ? "1571CR TYPE SELECTED - RESTART TO APPLY"
-                    : "1581 TYPE SELECTED - RESTART TO APPLY");
-                save_config(ov);
+                unsigned slot = media_item(ov, ov->row) == MEDIA_TYPE2;
+                int old_type = slot ? ov->cfg->drive2_type : ov->cfg->drive_type;
+                int type = old_type == 1571 ? 1581 : 1571;
+                C128DriveChangeResult result = c128_change_drive_type(ov->c128, slot, type);
+                if (result == C128_DRIVE_CHANGE_OK) {
+                    ov->power_cycled = true;
+                    display_focus_active(&ov->c128->display);
+                    notify_post("DRIVE %u: %d - C128 POWER CYCLED", slot + 1, type);
+                    save_config(ov);
+                } else if (result == C128_DRIVE_CHANGE_ROM_MISSING) {
+                    notify_post("REQUIRED DRIVE ROM MISSING - TYPE CHANGE CANCELLED");
+                } else if (result == C128_DRIVE_CHANGE_WRITE_FAILED) {
+                    notify_post("DISK WRITE COULD NOT BE SAVED - TYPE CHANGE CANCELLED");
+                } else {
+                    notify_post("DRIVE TYPE CHANGE UNAVAILABLE");
+                }
             } else if (media_item(ov, ov->row) == MEDIA_SNAPSHOT_LOAD) {
                 open_snapshot_dialog(ov, false);
             } else if (media_item(ov, ov->row) == MEDIA_SNAPSHOT_SAVE) {

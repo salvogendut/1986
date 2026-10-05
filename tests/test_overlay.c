@@ -53,6 +53,16 @@ void c128_set_4080(C128 *c, bool col80) {
 }
 static int machine_resets;
 void c128_reset(C128 *c) { (void)c; machine_resets++; }
+static int drive_power_cycles;
+static C128DriveChangeResult drive_change_result = C128_DRIVE_CHANGE_OK;
+C128DriveChangeResult c128_change_drive_type(C128 *c, unsigned slot, int type) {
+    if (drive_change_result != C128_DRIVE_CHANGE_OK) return drive_change_result;
+    if (slot) c->cfg->drive2_type = type;
+    else c->cfg->drive_type = type;
+    c->real_drive_type[slot] = type;
+    drive_power_cycles++;
+    return C128_DRIVE_CHANGE_OK;
+}
 bool c128_set_c64_test_mode(C128 *c, bool enabled) {
     if (enabled && !mem_c64_roms_loaded(&c->mem)) return false;
     mmu_set_c64_enabled(&c->mem.mmu, enabled);
@@ -670,8 +680,21 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.drive_type == 1581,
           "Media selects 1581 hardware for drive 1 independently of image");
+    CHECK(drive_power_cycles == 1 && ov.power_cycled && c->real_drive_type[0] == 1581,
+          "drive 1 selection applies hardware and signals host audio/paste cleanup");
     CHECK(config_load(&saved, config_file) && saved.drive_type == 1581,
           "drive 1 hardware selection persists");
+    ov.power_cycled = false;
+    drive_change_result = C128_DRIVE_CHANGE_ROM_MISSING;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.drive_type == 1581 && drive_power_cycles == 1 && !ov.power_cycled &&
+          config_load(&saved, config_file) && saved.drive_type == 1581,
+          "missing ROM rejects selection without reboot or saving a false type");
+    drive_change_result = C128_DRIVE_CHANGE_WRITE_FAILED;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.drive_type == 1581 && drive_power_cycles == 1 && !ov.power_cycled,
+          "failed disk flush cancels the type change and power cycle");
+    drive_change_result = C128_DRIVE_CHANGE_OK;
     ov.section = OV_ADVANCED;
     ov.row = 11;
     key(&ov, SDL_SCANCODE_RETURN);
@@ -681,6 +704,12 @@ int main(void) {
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(cfg.drive2_type == 1581 && cfg.drive_type == 1581,
           "Media exposes a separate hardware type for drive 2");
+    CHECK(drive_power_cycles == 2 && ov.power_cycled && c->real_drive_type[1] == 1581 &&
+          config_load(&saved, config_file) && saved.drive2_type == 1581,
+          "drive 2 type applies immediately and is persisted");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.drive2_type == 1571 && c->real_drive_type[1] == 1571 && drive_power_cycles == 3,
+          "reverse hardware selection also power cycles");
     ov.section = OV_ADVANCED;
     ov.row = 7;
     key(&ov, SDL_SCANCODE_RETURN);

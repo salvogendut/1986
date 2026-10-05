@@ -570,6 +570,12 @@ int main(int argc, char **argv) {
             }
 
             if (overlay_handle_event(&overlay, &ev)) {
+                if (overlay.power_cycled) {
+                    overlay.power_cycled = false;
+                    if (audio_stream) SDL_ClearAudioStream(audio_stream);
+                    paste_free(&paste);
+                    paste_init(&paste);
+                }
                 if (mouse_captured && (overlay_is_visible(&overlay) ||
                     cfg.joy_port_mode[cfg.main_input_port - 1] != JOYPORT_MOUSE))
                     release_mouse(&mouse_captured, &c.joyports);
@@ -844,7 +850,7 @@ int main(int argc, char **argv) {
 
         /* --- Frame present --- */
         /* Show the active backend, including paired fast fallback when a DOS
-         * ROM is unavailable; a pending Media type change needs a restart. */
+         * ROM is unavailable; Media type changes cold-boot into the new model. */
         leds_set_drive_type(LED_FDC_A, c.drive_raw_iec ? c.real_drive_type[0] : 0);
         leds_set_drive_type(LED_FDC_B, c.drive2_raw_iec ? c.real_drive_type[1] : 0);
         display_upload(&c.display);
