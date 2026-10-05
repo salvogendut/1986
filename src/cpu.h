@@ -108,6 +108,9 @@ typedef struct {
  * just patch the serial-ready routines (boot). */
 void cpu_install_iec_traps(u8 *kernal, const IecCallbacks *cb);
 void cpu_install_c64_iec_traps(u8 *kernal64, const IecCallbacks *cb);
+/* Restore the original IEC opcodes before switching to physical drive CPUs.
+ * Leaves tape traps and the rest of each ROM unchanged. */
+void cpu_remove_iec_traps(u8 *kernal, u8 *kernal64);
 /* T64 file-container traps only; pass NULL to restore real TAP handling. */
 void cpu_set_tape_traps(u8 *kernal, const TapeCallbacks *cb);
 void cpu_set_c64_tape_traps(u8 *kernal64, const TapeCallbacks *cb);

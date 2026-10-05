@@ -217,6 +217,12 @@ The core is a sibling of the command-level `VirtualDrive`, never behind its
 interface; the modes will share only neutral disk-image/media code. The
 Advanced real-drive gate selects this backend after restart when its DOS ROM
 is present. Media stores 1571/1581 hardware type independently for each drive.
+`c128_change_drive_type()` validates the selected ROMs, flushes both GCR
+mechanisms, detaches old controllers and reconnects the bus before a full
+power cycle. It also restores native/C64 IEC opcodes if leaving a fast-drive
+fallback; separate tape patches are preserved. Media is then rebound to the
+new models, and the frontend clears queued sound and pasted input. Failed ROM
+or write checks leave the running hardware and preferences unchanged.
 
 The 1581 backend shares the independent NMOS drive CPU engine, with its own
 2 MHz scheduler, 8 KiB RAM, DOS ROM, CIA and WD1770. CIA PB4 uses the 1581's

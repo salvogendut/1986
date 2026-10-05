@@ -261,6 +261,8 @@ cycle-level 1571 implementation without conflating their interfaces.
 - [x] 1581 WD1770 single/multiple-sector writes with atomic 512-byte persistence,
   host-file protection/conflict checks, write activity monitors, native BSAVE
   round-trips in both slots and DSAVE/DLOAD after power cycling (#152).
+- [x] Media drive-type changes immediately rewire the shared IEC bus and
+  power-cycle the machine, with ROM/write-safety checks and retained media.
 - [ ] Broaden 1581 compatibility: burst serial, 8520 TOD, raw formatting/MFM
   tracks and drive snapshot state (#152).
 - [x] Separate, live Drive 1/Drive 2 activity LEDs in both display windows

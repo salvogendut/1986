@@ -10,6 +10,7 @@
 int c128_frame_count = 0;
 
 static void c128_cpu_bus_wait(C128 *c, bool write, bool io);
+static void real_drive_media(C128 *c, unsigned slot);
 
 static bool drive_probe_active(const C128 *c) {
     return c->drive_raw_iec;
@@ -145,6 +146,37 @@ bool c128_configure_real_drives(C128 *c) {
     connect_real_drive(c, 1, (unsigned)c->cfg->drive2_unit);
     iec_bus_enable_second(&c->iec_bus, c->drive2_raw_iec);
     return c->drive_raw_iec;
+}
+
+C128DriveChangeResult c128_change_drive_type(C128 *c, unsigned slot, int type) {
+    if (slot > 1 || (type != 1571 && type != 1581) ||
+        !c->cfg->real_disk_drive || (slot && !c->cfg->second_drive))
+        return C128_DRIVE_CHANGE_INVALID;
+    int types[2] = {c->cfg->drive_type, c->cfg->drive2_type};
+    types[slot] = type;
+    for (unsigned i = 0; i < (c->cfg->second_drive ? 2u : 1u); ++i) {
+        bool loaded = types[i] == 1581 ? c->real1581[i].rom_loaded :
+            (i ? c->second_real_drive.rom_loaded : c->integrated_drive.rom_loaded);
+        if (!loaded) return C128_DRIVE_CHANGE_ROM_MISSING;
+    }
+    /* A power cycle affects both devices, even if only one model changes.
+     * Do not detach/reset either until all pending GCR data is durable. */
+    if (gcr_drive_flush(&c->integrated_drive.gcr) != DISK_SAVE_OK ||
+        gcr_drive_flush(&c->second_real_drive.gcr) != DISK_SAVE_OK)
+        return C128_DRIVE_CHANGE_WRITE_FAILED;
+    gcr_drive_attach(&c->integrated_drive.gcr, NULL);
+    gcr_drive_attach(&c->second_real_drive.gcr, NULL);
+    wd1770_attach(&c->real1581[0].fdc, NULL);
+    wd1770_attach(&c->real1581[1].fdc, NULL);
+    if (slot) c->cfg->drive2_type = type;
+    else c->cfg->drive_type = type;
+    c128_configure_real_drives(c);
+    /* A previous missing-ROM fallback may have patched both KERNALs. */
+    cpu_remove_iec_traps(c->mem.kernal, c->mem.c64_kernal);
+    c128_power_cycle(c);
+    real_drive_media(c, 0);
+    real_drive_media(c, 1);
+    return C128_DRIVE_CHANGE_OK;
 }
 
 bool c128_enable_second_real_drive(C128 *c, bool enabled) {
@@ -951,6 +983,9 @@ static void real_drive_media(C128 *c, unsigned slot) {
     } else {
         gcr_drive_attach(&gcr->gcr, image);
         gcr_drive_update_via(&gcr->gcr, &gcr->via2);
+        if (image && !gcr->gcr.image &&
+            (slot ? c->drive2_raw_iec : c->drive_raw_iec))
+            notify_post("1571 DRIVE %u NEEDS A D64 OR D71 IMAGE", slot + 1);
     }
     *generation = media->media_generation;
 }

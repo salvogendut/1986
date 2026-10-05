@@ -104,6 +104,98 @@ static bool screen_contains(const char *text) {
     return strstr(screen, text) != NULL;
 }
 
+static void type_change_tests(void) {
+    Config cfg;
+    config_set_defaults(&cfg);
+    cfg.real_disk_drive = cfg.second_drive = true;
+    cfg.drive_type = 1581; cfg.drive2_type = 1571;
+    cfg.drive_unit = 10; cfg.drive2_unit = 11;
+    c128_init(&c, &cfg);
+    c.col_mode_80 = true;
+    c.real1581[0].rom_loaded = c.real1581[1].rom_loaded = true;
+    c.integrated_drive.rom_loaded = c.second_real_drive.rom_loaded = true;
+    loop_rom(c.real1581[0].rom); loop_rom(c.real1581[1].rom);
+    loop_rom(c.integrated_drive.rom); loop_rom(c.second_real_drive.rom);
+    CHECK(c128_configure_real_drives(&c), "type-change fixture uses real drives");
+    c128_power_cycle(&c);
+    char path[] = "/tmp/1986-type-change-XXXXXX";
+    int fd = mkstemp(path);
+    CHECK(fd >= 0, "type-change temporary image");
+    if (fd < 0) { release_machine(); return; }
+    close(fd);
+    CHECK(disk_image_create_blank(path, DISK_FORMAT_D81) == DISK_SAVE_OK &&
+          drive_attach_disk(&c.drive, path) == 0, "mount D81 before hardware change");
+    wd1770_attach(&c.real1581[0].fdc, &c.drive.image);
+    u8 *mounted = c.drive.image.data;
+    c.mem.ram[0x5000] = c.mem.ram[0x15000] = c.vdc.ram[0x2000] = 0xa5;
+    c.real1581[0].ram[100] = c.second_real_drive.ram[100] = 0xa5;
+    c.frames_since_reset = 123;
+    c.integrated_drive.rom_loaded = false;
+    CHECK(c128_change_drive_type(&c, 0, 1571) == C128_DRIVE_CHANGE_ROM_MISSING &&
+          cfg.drive_type == 1581 && c.real_drive_type[0] == 1581 &&
+          c.mem.ram[0x5000] == 0xa5 && c.frames_since_reset == 123,
+          "missing target ROM leaves preference, machine and hardware unchanged");
+    c.integrated_drive.rom_loaded = true;
+    for (unsigned slot = 0; slot < 2; ++slot) {
+        GcrDrive *g = slot ? &c.second_real_drive.gcr : &c.integrated_drive.gcr;
+        g->dirty = true; /* unsavable data: no image attached to this model */
+        CHECK(c128_change_drive_type(&c, 0, 1571) == C128_DRIVE_CHANGE_WRITE_FAILED &&
+              g->dirty && c.frames_since_reset == 123 && cfg.drive_type == 1581 &&
+              c.real1581[0].fdc.image == &c.drive.image,
+              "unsaved data on either device cancels reconfiguration before detach/reset");
+        g->dirty = false; /* discard only the synthetic malformed fixture */
+    }
+    wd1770_set_motor(&c.real1581[0].fdc, true);
+    wd1770_write(&c.real1581[0].fdc, 0, 0xa8);
+    CHECK(c128_change_drive_type(&c, 0, 1571) == C128_DRIVE_CHANGE_OK,
+          "switch 1581 to 1571 immediately");
+    CHECK(cfg.drive_type == 1571 && c.real_drive_type[0] == 1571 &&
+          c.drive_raw_iec && c.drive2_raw_iec &&
+          c.iec_bus.drive_via == &c.integrated_drive.via1 && !c.iec_bus.input_hook[0] &&
+          c.iec_bus.drive_unit == 10 && c.iec_bus.drive2_unit == 11,
+          "new 1571 is wired to the shared IEC bus at the selected address");
+    CHECK(c.mem.ram[0x5000] == 0 && c.mem.ram[0x15000] == 0 &&
+          c.vdc.ram[0x2000] == 0xff && c.frames_since_reset == 0 &&
+          c.real1581[0].ram[100] == 0 && c.second_real_drive.ram[100] == 0 &&
+          c.col_mode_80 && c.display.vdc_active,
+          "full cold boot clears host/drive/VRAM and preserves the chosen display");
+    CHECK(c.drive.image.data == mounted && c.drive.disk_attached &&
+          !c.integrated_drive.gcr.image && !c.real1581[0].fdc.image &&
+          !(c.real1581[0].fdc.status & WD1770_BUSY),
+          "incompatible D81 remains selected, mechanisms empty and old transfer aborted");
+    CHECK(c128_change_drive_type(&c, 0, 1581) == C128_DRIVE_CHANGE_OK &&
+          c.real_drive_type[0] == 1581 && c.iec_bus.input_hook[0] &&
+          !c.iec_bus.drive_via && c.real1581[0].fdc.image == &c.drive.image &&
+          !c.integrated_drive.gcr.image,
+          "switching back reconnects retained compatible media to the new controller");
+    CHECK(c128_change_drive_type(&c, 1, 1581) == C128_DRIVE_CHANGE_OK &&
+          c.real_drive_type[1] == 1581 && c.iec_bus.input_hook[1] && !c.iec_bus.drive2_via &&
+          c128_change_drive_type(&c, 1, 1571) == C128_DRIVE_CHANGE_OK &&
+          c.real_drive_type[1] == 1571 && !c.iec_bus.input_hook[1] &&
+          c.iec_bus.drive2_via == &c.second_real_drive.via1,
+          "drive 2 changes both directions independently");
+    CHECK(c128_change_drive_type(&c, 2, 1581) == C128_DRIVE_CHANGE_INVALID &&
+          c128_change_drive_type(&c, 0, 1541) == C128_DRIVE_CHANGE_INVALID,
+          "invalid model/slot cannot reconfigure hardware");
+    /* A startup fast fallback must not leave serial trap opcodes behind. */
+    c.drive_raw_iec = c.drive2_raw_iec = false;
+    c.mem.kernal[0x569] = 0x78; c.mem.c64_kernal[0xea9] = 0x20;
+    cpu_install_iec_traps(c.mem.kernal, NULL);
+    cpu_install_c64_iec_traps(c.mem.c64_kernal, NULL);
+    CHECK(c128_change_drive_type(&c, 0, 1571) == C128_DRIVE_CHANGE_OK &&
+          c.drive_raw_iec && c.drive2_raw_iec &&
+          c.mem.kernal[0x569] == 0x78 && c.mem.c64_kernal[0xea9] == 0x20,
+          "leaving a fast fallback restores native and C64 physical IEC routines");
+    DiskImage persisted = {0};
+    CHECK(disk_image_open(&persisted, path) == 0 &&
+          persisted.size == c.drive.image.size &&
+          !memcmp(persisted.data, c.drive.image.data, persisted.size),
+          "switches and aborted WD transfer do not alter the host image");
+    disk_image_close(&persisted);
+    release_machine();
+    unlink(path);
+}
+
 static void dump_screen(void) {
     for (int row = 0; row < 25; ++row) {
         for (int col = 0; col < 40; ++col) {
@@ -327,6 +419,79 @@ static void host_case(const char *dir, const char *rom1581, const char *rom1571,
     for (unsigned slot = 0; slot < count; ++slot) unlink(paths[slot]);
 }
 
+static void host_type_changes(const char *dir, const char *rom1581, const char *rom1571) {
+    Config cfg;
+    config_set_defaults(&cfg);
+    cfg.real_disk_drive = cfg.second_drive = true;
+    cfg.drive_type = 1571; cfg.drive2_type = 1581;
+    cfg.drive_unit = 10; cfg.drive2_unit = 11;
+    cfg.col_mode_80 = false;
+    c128_init(&c, &cfg);
+    CHECK(mem_load_c128_roms(&c.mem, dir) >= 3 &&
+          drive1581_load_rom(&c.real1581[0], rom1581) &&
+          drive1581_load_rom(&c.real1581[1], rom1581) &&
+          drive1571cr_load_rom(&c.integrated_drive, rom1571) &&
+          drive1571cr_load_rom(&c.second_real_drive, rom1571), "load ROMs for live hardware swaps");
+    CHECK(c128_configure_real_drives(&c), "initial mixed pair is active");
+    char paths[4][64];
+    u8 prg[34] = {0, 0x60};
+    for (unsigned i = 2; i < sizeof(prg); ++i) prg[i] = (u8)(i ^ 0xa5);
+    for (unsigned i = 0; i < 4; ++i) {
+        snprintf(paths[i], sizeof(paths[i]), "/tmp/1986-switch-%u-XXXXXX", i);
+        int fd = mkstemp(paths[i]);
+        CHECK(fd >= 0, "create disposable switch-test image");
+        if (fd < 0) {
+            release_machine();
+            for (unsigned j = 0; j < i; ++j) unlink(paths[j]);
+            return;
+        }
+        close(fd);
+        CHECK(disk_image_create_blank(paths[i], i % 2 ? DISK_FORMAT_D81 : DISK_FORMAT_D64) == DISK_SAVE_OK,
+              "format swap-test media");
+        DiskImage image = {0};
+        char name[20];
+        snprintf(name, sizeof(name), "SLOT%u-%d", i / 2 + 1, i % 2 ? 1581 : 1571);
+        CHECK(disk_image_open(&image, paths[i]) == 0 &&
+              disk_image_save_prg(&image, name, prg, sizeof(prg), false) == DISK_SAVE_OK,
+              "populate distinctive hardware/slot fixture");
+        disk_image_close(&image);
+    }
+    CHECK(drive_attach_disk(&c.drive, paths[0]) == 0 &&
+          drive_attach_disk(&c.drive2, paths[3]) == 0, "attach initial mixed media");
+    for (unsigned step = 0; step < 4; ++step) {
+        unsigned slot = step % 2;
+        int old = slot ? cfg.drive2_type : cfg.drive_type;
+        int type = old == 1571 ? 1581 : 1571;
+        CHECK(drive_attach_disk(slot ? &c.drive2 : &c.drive,
+              paths[slot * 2 + (type == 1581)]) == 0, "select matching medium before swap");
+        CHECK(c128_change_drive_type(&c, slot, type) == C128_DRIVE_CHANGE_OK,
+              "real-ROM hardware switch applies without restarting process");
+        for (unsigned i = 0; i < 1000 && !screen_contains("READY."); ++i) c128_frame(&c);
+        CHECK(screen_contains("READY."), "native BASIC boots after hardware switch");
+        run_command(NULL, 20);
+        for (unsigned unit_slot = 0; unit_slot < 2; ++unit_slot) {
+            int model = unit_slot ? cfg.drive2_type : cfg.drive_type;
+            char command[80], name[20];
+            snprintf(name, sizeof(name), "SLOT%u-%d", unit_slot + 1, model);
+            run_command("PRINT CHR$(147)", 150);
+            snprintf(command, sizeof(command), "DIRECTORY U%u", unit_slot + 10);
+            run_command(command, 1000);
+            if (!screen_contains(name)) dump_screen();
+            CHECK(screen_contains(name), "both devices return their own directory after swap");
+            memset(c.mem.ram + 0x6000, 0, sizeof(prg) - 2);
+            snprintf(command, sizeof(command), "BLOAD\"%s\",U%u,B0,P24576", name, unit_slot + 10);
+            run_command(command, 1200);
+            CHECK(!memcmp(c.mem.ram + 0x6000, prg + 2, sizeof(prg) - 2),
+                  "new and unchanged models both load exact bytes on shared IEC");
+        }
+        printf("live type switch %u: %d/%d boot, DIRECTORY and BLOAD passed\n",
+               step + 1, cfg.drive_type, cfg.drive2_type);
+        fflush(stdout);
+    }
+    release_machine();
+    for (unsigned i = 0; i < 4; ++i) unlink(paths[i]);
+}
+
 static void optional_host_test(void) {
     const char *dir = getenv("C128_TEST_ROM_DIR");
     const char *rom1581 = getenv("C128_1581_ROM");
@@ -337,11 +502,13 @@ static void optional_host_test(void) {
     if (rom1571) {
         host_case(dir, rom1581, rom1571, 1571, 1581);
         host_case(dir, rom1581, rom1571, 1581, 1571);
+        host_type_changes(dir, rom1581, rom1571);
     }
 }
 
 int main(void) {
     synthetic_tests();
+    type_change_tests();
     optional_host_test();
     if (!failures) puts("real-drive integration tests passed");
     return failures ? 1 : 0;

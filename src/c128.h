@@ -89,7 +89,7 @@ typedef struct {
     Drive1571Cr integrated_drive; /* independent ROM-backed 1571CR machine */
     Drive1571Cr second_real_drive; /* optional second ROM-backed 1571CR */
     Drive1581 real1581[2];
-    int real_drive_type[2]; /* running hardware; config changes require restart */
+    int real_drive_type[2]; /* running hardware, latched at startup/type-change power cycle */
     IecBus  iec_bus;     /* physical slow IEC pins, separate from VirtualDrive */
     DriveMonitor drive_monitor; /* host-only LED and audio presentation */
     DriveMonitor drive2_monitor;
@@ -153,6 +153,17 @@ bool c128_drive_warp_active(const C128 *c);
 /* Choose loaded ROM backends at startup, before installing KERNAL traps.
  * If any enabled hardware ROM is missing, fall back to virtual as a pair. */
 bool c128_configure_real_drives(C128 *c);
+typedef enum {
+    C128_DRIVE_CHANGE_OK = 0,
+    C128_DRIVE_CHANGE_INVALID,
+    C128_DRIVE_CHANGE_ROM_MISSING,
+    C128_DRIVE_CHANGE_WRITE_FAILED,
+} C128DriveChangeResult;
+/* Apply one Media hardware selection and cold-boot the whole machine.
+ * Requires Real Disk Drive and loaded ROMs for all enabled selections.
+ * Flush both drives before changing anything; retain mounted media/ROMs.
+ * Failure leaves the preferences and running hardware unchanged. */
+C128DriveChangeResult c128_change_drive_type(C128 *c, unsigned slot, int type);
 /* Runtime second-device gate. Does not change the frozen hardware type.
  * Returns false only when disconnect would lose an unsaved write. Missing
  * ROMs leave the device absent, allowing preferences to be set for restart. */
