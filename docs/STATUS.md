@@ -33,7 +33,9 @@ handoff rather than bypassing it with host traps.
   stalls 8502 reads for matrix and sprite DMA. Sprite patterns are captured
   during DMA, and idle fetches/open vertical borders are retained.
 - VDC 80-column text and standard 640x200 bitmap output, including fitted
-  16/64 KiB RAM and register-controlled addressing behavior.
+  16/64 KiB RAM and register-controlled addressing behavior. The text cursor
+  supports programmable position/shape, steady/hidden modes and both blink
+  rates; cursor and attribute blink follow the VDC's own refresh timing.
 - Unified display or separate VIC/VDC windows. The selected display is focused,
   raised where the window manager permits, and restored at the next launch.
 - VDC 400-line interlace and some advanced timing/effects remain incomplete.

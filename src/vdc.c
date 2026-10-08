@@ -55,6 +55,22 @@ static void vdc_ram_write(Vdc *v, u16 addr, u8 value) {
     v->dirty = true;
 }
 
+/* Hardware cursor behavior follows VICE's vdc-draw.c: invert the addressed
+ * text cell, with steady, hidden, 16-frame or 32-frame blink modes. The end
+ * raster is exclusive, except equal start/end selects a single raster;
+ * start > end wraps the cursor shape around the character row. */
+static bool vdc_cursor_active(const Vdc *v, u16 address, unsigned raster) {
+    static const unsigned blink_mask[4] = { 1, 0, 8, 16 };
+    if (address != v->cursor_adr ||
+        !((v->frame_counter | 1) & blink_mask[(v->regs[10] >> 5) & 3]))
+        return false;
+    unsigned start = v->regs[10] & 0x1F;
+    unsigned end = v->regs[11] & 0x1F;
+    if (start == end) return raster == start;
+    if (start > end) return raster >= start || raster < end;
+    return raster >= start && raster < end;
+}
+
 void vdc_init(Vdc *v) {
     memset(v, 0, sizeof(*v));
     v->address_mask = 0xFFFF; /* C128DCR default: 64 KiB */
@@ -168,6 +184,8 @@ void vdc_write_data(Vdc *v, u8 val) {
         case 5:
         case 7:
         case 8:
+        case 10:  /* cursor mode and start raster */
+        case 11:  /* cursor end raster */
             v->dirty = true;
             break;
         case 6:   /* R06 vertical displayed */
@@ -186,8 +204,8 @@ void vdc_write_data(Vdc *v, u8 val) {
             break;
         case 12: v->screen_adr = (u16)((v->screen_adr & 0x00FF) | (val << 8)); v->dirty = true; break;
         case 13: v->screen_adr = (u16)((v->screen_adr & 0xFF00) | val);       v->dirty = true; break;
-        case 14: v->cursor_adr = (u16)((v->cursor_adr & 0x00FF) | (val << 8)); break;
-        case 15: v->cursor_adr = (u16)((v->cursor_adr & 0xFF00) | val);        break;
+        case 14: v->cursor_adr = (u16)((v->cursor_adr & 0x00FF) | (val << 8)); v->dirty = true; break;
+        case 15: v->cursor_adr = (u16)((v->cursor_adr & 0xFF00) | val);        v->dirty = true; break;
         case 18:
         case 19:
             v->update_adr = (u16)((v->regs[18] << 8) | v->regs[19]);
@@ -375,6 +393,7 @@ static void vdc_capture_raster(Vdc *v) {
                     bits |= (u8)(0xFF >> (visible + 1));
             }
             if (attr_mode && (attr & VDC_ATTR_REVERSE)) bits ^= 0xFF;
+            if (vdc_cursor_active(v, address, v->draw_raster)) bits ^= 0xFF;
         }
         if (reverse) bits ^= 0xFF;
 
@@ -506,6 +525,10 @@ void vdc_set_raster_line(Vdc *v, unsigned line) {
                 v->vsync_active = false;
                 v->vsync_counter = 0;
                 v->raster_output_line = 0;
+                /* Blink follows the VDC refresh, including when its output
+                 * is hidden or presented multiple times by the host. Only
+                 * the low five bits are needed for cursor/attribute blink. */
+                v->frame_counter = (int)(((unsigned)v->frame_counter + 1u) & 31u);
                 if (v->display_fb && v->raster_fb_valid) {
                     u32 *completed = v->fb;
                     v->fb = v->display_fb;
@@ -531,16 +554,11 @@ static void render_text(Vdc *v, u32 *pixels, int fbw, int fbh,
                         int x0, int y0, int x1, int y1,
                         int char_width) {
     (void)fbh;
-    static const int crsrblink[4] = { 0x01, 0x00, 0x08, 0x10 };
     int rasters_per_row = (v->regs[9] & 0x1F) + 1;
     int total_rasters = rows * rasters_per_row;
     int stride = cols + v->regs[27];
-    int blink = ((v->frame_counter | 1) &
-                 crsrblink[(v->regs[10] >> 5) & 3]) != 0;
     bool attribute_blink = (v->frame_counter &
         ((v->regs[24] & 0x20) ? 16 : 8)) != 0;
-    int cur_top = v->regs[10] & 0x1F;
-    int cur_bot = v->regs[11] & 0x1F;
     int visible_pixels = v->regs[22] & 0x0F;
 
     int draw_w = x1 - x0;
@@ -581,8 +599,7 @@ static void render_text(Vdc *v, u32 *pixels, int fbw, int fbh,
                 bits |= (u8)(0xFF >> (visible_pixels + 1));
             if (attr_mode && (attr & VDC_ATTR_REVERSE)) bits ^= 0xFF;
             if (reverse_screen) bits ^= 0xFF;
-            if (blink && address == v->cursor_adr &&
-                glyph_line >= cur_top && glyph_line < cur_bot)
+            if (vdc_cursor_active(v, address, (unsigned)glyph_line))
                 bits ^= 0xFF;
 
             pixels[y * fbw + x] = bit < 8 && (bits & (0x80 >> bit))
@@ -635,8 +652,6 @@ static void render_bitmap(const Vdc *v, u32 *pixels, int fbw, int fbh,
 
 void vdc_render(Vdc *v, u32 *pixels, int fbw, int fbh) {
     if (!pixels || !v->fb) return;
-
-    v->frame_counter++;
 
     if (fbw == VDC_SCREEN_W && fbh == VDC_SCREEN_H &&
         (v->raster_fb_valid || v->display_fb_valid)) {

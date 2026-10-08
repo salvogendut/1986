@@ -35,7 +35,7 @@ typedef struct {
     u16 chargen_adr;   /* R28 character-generator address */
     u16 cursor_adr;    /* R14/15 cursor location */
 
-    int  frame_counter;  /* incremented each frame (cursor/attribute blink) */
+    int  frame_counter;  /* VDC vsync clock modulo 32 (cursor/attribute blink) */
     unsigned raster_line; /* current PAL scan line for the status register */
     unsigned row_counter; /* VDC vertical character row, independent of PAL */
     unsigned raster_in_row; /* current raster within the VDC character row */

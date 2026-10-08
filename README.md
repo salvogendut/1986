@@ -16,7 +16,7 @@ disk access and experimental ROM-backed 1571CR and 1581 paths.
 - MOS 8502 at 1/2 MHz and Z80 at an effective 2 MHz, with MMU-controlled CPU
   arbitration and an optional effective 4 MHz Z80 modification for CP/M.
 - VIC-IIe text, bitmap, sprites and raster effects; VDC text and 640x200 bitmap
-  output with 16/64 KiB video RAM selection.
+  output with a blinking hardware cursor and 16/64 KiB video RAM selection.
 - Three-voice 8580 SID audio, CIA timers/interrupts, keyboard, joysticks, and
   1351 mouse input.
 - D64, D71 and D81 images, standalone PRG loading, two IEC units, and atomic
@@ -123,6 +123,11 @@ CI artifacts, and repository continue to exclude ROM dumps. See
 </table>
 
 ## Releases
+
+Version **0.3.0** adds real 1581 read/write support, immediate drive-type
+switching, blank floppy creation, unthrottled disk operations, and dual-display
+GIF capture. It also improves VIC/VDC demo rendering, restores the VDC blinking
+cursor, and fixes input handling, fullscreen selection, and host CPU pacing.
 
 Tagged releases build Fedora RPM, Debian DEB, Windows portable ZIP, macOS app
 bundles for Apple Silicon and Intel, and a Linux Flatpak bundle. ROM images are
