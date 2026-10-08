@@ -31,6 +31,64 @@ static void setup(C128 *c) {
     cia_write(&c->cia1, 14, 0x11);
 }
 
+/* Optional private-ROM smoke test: exercise the same native BASIC boot and
+ * presented VDC framebuffer as the application, without opening a window. */
+static void test_basic_cursor(C128 *c) {
+    const char *rom_dir = getenv("C128_TEST_ROM_DIR");
+    if (!rom_dir || !*rom_dir) return;
+    Config cfg;
+    config_set_defaults(&cfg);
+    c128_init(c, &cfg);
+    int loaded = mem_load_c128_roms(&c->mem, rom_dir);
+    CHECK(loaded >= 3, "load private ROMs for native BASIC cursor test");
+    if (loaded >= 3) {
+        c->col_mode_80 = true;
+        c128_power_cycle(c);
+        cpu_install_iec_traps(c->mem.kernal, NULL);
+        for (int frame = 0; frame < 300; ++frame) c128_frame(c);
+        CHECK(c->display.vdc_active && c->vdc.display_fb_valid &&
+              c->vdc.regs[1] == 80 && (c->vdc.regs[10] & 0x40),
+              "native 80-column BASIC enables the blinking hardware cursor");
+        size_t bytes = sizeof(u32) * VDC_SCREEN_W * VDC_SCREEN_H;
+        u32 *reference = malloc(bytes);
+        CHECK(reference != NULL, "allocate BASIC cursor reference frame");
+        if (reference) {
+            memcpy(reference, c->display.vdc_pixels, bytes);
+            u16 cursor = c->vdc.cursor_adr;
+            int changed_frames = 0, unchanged_frames = 0;
+            bool stable = true, cursor_only = true;
+            for (int frame = 0; frame < 80; ++frame) {
+                c128_frame(c);
+                stable &= c->vdc.cursor_adr == cursor && !c->paused;
+                int min_x = VDC_SCREEN_W, min_y = VDC_SCREEN_H;
+                int max_x = -1, max_y = -1;
+                for (int y = 0; y < VDC_SCREEN_H; ++y)
+                    for (int x = 0; x < VDC_SCREEN_W; ++x) {
+                        int i = y * VDC_SCREEN_W + x;
+                        if (reference[i] == c->display.vdc_pixels[i]) continue;
+                        if (x < min_x) min_x = x;
+                        if (y < min_y) min_y = y;
+                        if (x > max_x) max_x = x;
+                        if (y > max_y) max_y = y;
+                    }
+                if (max_x < 0) ++unchanged_frames;
+                else {
+                    ++changed_frames;
+                    int cell_height = ((c->vdc.regs[9] & 31) + 1) *
+                        VDC_SCREEN_H / c->vdc.fb_h + 1;
+                    cursor_only &= max_x - min_x + 1 <= 8 &&
+                        max_y - min_y + 1 <= cell_height;
+                }
+            }
+            CHECK(stable && cursor_only && changed_frames > 0 && unchanged_frames > 0,
+                  "idle BASIC alternates cursor pixels while the rest of the screen stays stable");
+            free(reference);
+        }
+    }
+    free(c->vdc.fb);
+    free(c->vdc.display_fb);
+}
+
 int main(void) {
     static C128 c;
     Config cfg;
@@ -110,6 +168,7 @@ int main(void) {
           c.vic.beam_half_clock < 2 * CPU_PAL_FRAME_CYCLES + 20,
           "CPU handoff retains one shared video timeline");
     free(c.vdc.fb); free(c.vdc.display_fb);
+    test_basic_cursor(&c);
     if (!failures) puts("test-machine-clock: OK");
     return failures != 0;
 }

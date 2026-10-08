@@ -1,5 +1,5 @@
 Name:           1986
-Version:        0.2.0
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        Commodore C128DCR emulator
 
@@ -50,6 +50,12 @@ appstream-util validate-relax --nonet %{buildroot}%{_datadir}/metainfo/io.github
 %{_datadir}/%{name}/roms/README
 
 %changelog
+* Thu Oct 08 2026 Salvatore Bognanni <salvogendut@gmail.com> - 0.3.0-1
+- Add real 1581 reads/writes, immediate drive model switching, blank floppy
+  creation, unthrottled drive operation and dual-display GIF capture.
+- Improve VIC/VDC raster compatibility, restore the VDC blinking cursor,
+  and fix input, selected-display fullscreen and host CPU pacing.
+
 * Wed Sep 23 2026 Salvatore Bognanni <salvogendut@gmail.com> - 0.2.0-1
 - Add browser support, snapshots, multiprocessor monitor, improved tape controls,
   and full machine power cycling.

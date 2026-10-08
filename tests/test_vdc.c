@@ -30,6 +30,133 @@ static u8 ram_read(Vdc *v, u16 address) {
     return reg_read(v, 31);
 }
 
+/* Seed one visible text raster, so cursor tests exercise the live scanline
+ * path independently of vertical border/scroll timing. */
+static const u32 *cursor_scanline(Vdc *v, unsigned raster) {
+    v->row_counter = 1;
+    v->raster_in_row = 0;
+    v->row_advance_latched = false;
+    v->draw_active = true;
+    v->draw_prime = false;
+    v->draw_raster = raster;
+    v->draw_screen_pending = v->draw_attribute_pending = false;
+    v->raster_screen_adr = v->screen_adr;
+    v->raster_attribute_adr = v->attribute_adr;
+    v->raster_output_line = 10;
+    v->raster_line = 0;
+    v->vsync_active = false;
+    vdc_set_raster_line(v, 1);
+    return v->fb + 10 * v->fb_w + 8; /* R2=115: eight-pixel left border */
+}
+
+static bool pixels_match_byte(const u32 *pixels, u8 bits) {
+    for (unsigned bit = 0; bit < 8; ++bit)
+        if (pixels[bit] != ((bits & (0x80u >> bit)) ? 0xFFFFFFu : 0u))
+            return false;
+    return true;
+}
+
+static void test_cursor(Vdc *v, u32 *pixels) {
+    vdc_reset(v);
+    memset(v->ram, 0, sizeof(v->ram));
+    reg_write(v, 1, 6);
+    reg_write(v, 2, 115);
+    reg_write(v, 6, 1);
+    reg_write(v, 9, 7);
+    reg_write(v, 12, 2); /* nonzero screen base $0200 */
+    reg_write(v, 14, 2);
+    reg_write(v, 15, 1); /* cursor at column 1, not column 0 */
+    reg_write(v, 20, 0x40);
+    reg_write(v, 23, 7);
+    reg_write(v, 25, 7);
+    reg_write(v, 26, 0xF0);
+    reg_write(v, 28, 0x30);
+    reg_write(v, 34, 1);
+    reg_write(v, 35, 2);
+    memset(v->ram + 0x0200, 1, 6);
+    memset(v->ram + 0x2010, 0x81, 8);
+    /* VICE-compatible end-exclusive, single-raster, and wrapped shapes. */
+    const struct { u8 start, end, lines; } shapes[] = {
+        {2, 5, 0x1C}, {3, 3, 0x08}, {6, 2, 0xC3}
+    };
+    bool live_ok = true, fallback_ok = true, neighbour_ok = true;
+    for (unsigned shape = 0; shape < sizeof(shapes) / sizeof(shapes[0]); ++shape) {
+        reg_write(v, 11, shapes[shape].end);
+        for (unsigned mode = 0; mode < 4; ++mode) {
+            reg_write(v, 10, (mode << 5) | shapes[shape].start);
+            for (unsigned phase = 0; phase < 32; ++phase) {
+                bool visible = mode == 0 ||
+                    (mode == 2 && (phase % 16 >= 8)) ||
+                    (mode == 3 && phase >= 16);
+                v->frame_counter = (int)phase;
+                vdc_render(v, pixels, 48, 8);
+                for (unsigned raster = 0; raster < 8; ++raster) {
+                    u8 expected = visible && (shapes[shape].lines & (1u << raster))
+                        ? 0x7E : 0x81;
+                    const u32 *scanline = cursor_scanline(v, raster);
+                    live_ok &= pixels_match_byte(scanline + 8, expected);
+                    fallback_ok &= pixels_match_byte(pixels + raster * 48 + 8, expected);
+                    neighbour_ok &= pixels_match_byte(scanline, 0x81) &&
+                        pixels_match_byte(pixels + raster * 48, 0x81);
+                }
+            }
+        }
+    }
+    CHECK(live_ok, "live raster renders all cursor shapes and steady/off/16/32-frame modes");
+    CHECK(fallback_ok, "fallback renderer uses the same cursor shapes and blink phases");
+    CHECK(neighbour_ok, "cursor address affects only the selected screen cell");
+
+    reg_write(v, 10, 2);
+    reg_write(v, 11, 5);
+    reg_write(v, 15, 0);
+    const u32 *scanline = cursor_scanline(v, 3);
+    CHECK(pixels_match_byte(scanline, 0x7E) &&
+          pixels_match_byte(scanline + 8, 0x81),
+          "R14/R15 move the hardware cursor without changing screen RAM");
+    reg_write(v, 15, 1);
+    reg_write(v, 25, 0x47);
+    reg_write(v, 24, 0x40);
+    v->ram[0x4001] = VDC_ATTR_REVERSE | VDC_ATTR_FLASH | 0x0F;
+    v->frame_counter = 0;
+    scanline = cursor_scanline(v, 3);
+    CHECK(pixels_match_byte(scanline + 8, 0x7E),
+          "cursor inverts text after character and screen reverse");
+    v->frame_counter = 8;
+    scanline = cursor_scanline(v, 3);
+    CHECK(pixels_match_byte(scanline + 8, 0xFF),
+          "steady cursor remains visible on a flashing blanked glyph");
+    reg_write(v, 24, 0);
+    reg_write(v, 25, 0x87);
+    v->ram[0x0201] = 0x81;
+    scanline = cursor_scanline(v, 3);
+    CHECK(pixels_match_byte(scanline + 8, 0x81),
+          "hardware cursor does not invert bitmap data");
+
+    /* Redrawing or skipping presentation must not change the blink clock.
+     * It advances once at the VDC's own vsync, not at the VIC/host frame. */
+    vdc_reset(v);
+    reg_write(v, 4, 15); /* 128-line VDC frame, deliberately unlike PAL VIC */
+    reg_write(v, 6, 1);
+    reg_write(v, 7, 12);
+    unsigned completed_frames = 0;
+    bool clock_ok = true, presentation_ok = true;
+    for (unsigned i = 1; i <= 128 * 35; ++i) {
+        bool finishing_sync = v->vsync_active && v->vsync_counter == 25;
+        vdc_set_raster_line(v, i % 312u);
+        if (finishing_sync) ++completed_frames;
+        clock_ok &= v->frame_counter == (int)(completed_frames % 32);
+        if (i % 53 == 0) {
+            int phase = v->frame_counter;
+            vdc_render(v, pixels, VDC_SCREEN_W, VDC_SCREEN_H);
+            vdc_render(v, pixels, VDC_SCREEN_W, VDC_SCREEN_H);
+            presentation_ok &= v->frame_counter == phase;
+        }
+    }
+    CHECK(completed_frames >= 32 && clock_ok,
+          "blink clock advances at VDC vsync and wraps without overflow");
+    CHECK(presentation_ok, "presenting a frame does not advance cursor/attribute blink");
+}
+
 int main(void) {
     Vdc *v = calloc(1, sizeof(*v));
     u32 *pixels = calloc(VDC_SCREEN_W * VDC_SCREEN_H, sizeof(*pixels));
@@ -43,6 +170,7 @@ int main(void) {
     reg_write(v, 1, 80);
     reg_write(v, 6, 25);
     reg_write(v, 9, 7);
+    reg_write(v, 10, 0x20); /* disable cursor in non-cursor fixtures */
     reg_write(v, 23, 7);
     vdc_write_index(v, 28);
     CHECK((vdc_read_data(v) & 0x1F) == 0x0F,
@@ -157,7 +285,7 @@ int main(void) {
     reg_write(v, 21, 0);
     reg_write(v, 25, 0x40);
     v->ram[0x1000] = VDC_ATTR_FLASH | 0x0F;
-    v->frame_counter = 7;
+    v->frame_counter = 8;
     vdc_render(v, pixels, 640, 200);
     CHECK(pixels[0] == 0x000000, "flash attribute blanks its glyph in blink phase");
     v->ram[0x1000] = VDC_ATTR_UNDERLINE | 0x0F;
@@ -455,6 +583,7 @@ int main(void) {
             reg_write(timing, 6, 20);
             reg_write(timing, 7, 23);
             reg_write(timing, 9, 11);
+            reg_write(timing, 10, 0x20);
             reg_write(timing, 20, 0x40);
             reg_write(timing, 23, 11);
             reg_write(timing, 24, scroll);
@@ -560,6 +689,9 @@ int main(void) {
           "VDC power cycle restores the alternating VRAM startup pattern");
     CHECK(v->address_mask == 0x3fff && v->regs[1] == 102,
           "VDC power cycle preserves fitted RAM size and resets registers");
+
+    vdc_set_ram_size_kb(v, 64);
+    test_cursor(v, pixels);
 
     free(v->display_fb);
     free(v->fb);

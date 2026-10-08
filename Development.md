@@ -283,6 +283,17 @@ make -j"$(nproc)"
 make -C tests check
 ```
 
+`test-vdc` covers the live raster and fallback cursor renderers, register
+modes/shapes, text attributes, bitmap exclusion, and VDC-clocked blinking.
+To additionally boot native 80-column BASIC and verify that only the cursor
+pixels alternate in the presented framebuffer, use your local ROM set:
+
+```bash
+C128_TEST_ROM_DIR="$PWD/roms" ./tests/test-machine-clock
+```
+
+This optional test opens no window and does not require ROMs in CI.
+
 The headless smoke test runs with `SDL_VIDEODRIVER=dummy`:
 
 ```bash
