@@ -21,6 +21,7 @@ src/
   cpu.*       - MOS 8502 (6502-like) interpreter
   mem.*       - C128 memory map (RAM banks + ROM + I/O window)
   mmu.*       - C128 MMU registers ($D500 block, $00/$01 port)
+  reu.*       - 1700/1764/1750 RAM expansion controller and cycle-stepped DMA
   vic.*       - MOS 8564 VIC-IIe (40-column text, bitmap, and sprites)
   vdc.*       - MOS 8563 VDC (80-column) register file
   cia.*       - MOS 6526 CIA1/CIA2 register file
@@ -39,6 +40,7 @@ src/
 tests/
   test_cpu.c  - 8502 sanity (adds, branches, stores)
   test_mmu.c  - MMU register behaviour
+  test_reu.c  - REU registers, four DMA modes, autoload, wrapping and IRQs
   test_sid.c  - SID oscillator, envelope, routing, and audio samples
   test_config.c - config roundtrip
   test_gifcap.c - GIF encoder output
@@ -100,6 +102,36 @@ ported behind the project's `CpuBus` seam:
   `maincpu_mainloop` is bounded by a cycle budget so a frame can be stepped.
 - Memory mapping follows VICE's C128 config-register semantics (raw `$D500`
   -> config index -> RAM/ROM per region) in `mem.c`.
+
+## RAM Expansion Controller
+
+`reu.c` follows the register behavior in VICE 3.10's `c64/cart/reu.c`:
+IO2 mirrors every 32 bytes; status reads acknowledge latched IRQs; zero length
+means 64 KiB; autoload and half-autoload retain programmed addresses; and
+compare failures implement the final/penultimate-byte status quirks. The
+128 KiB model mirrors its DRAM, while the 256 KiB model has floating,
+unpopulated banks within the controller's 512 KiB address space.
+
+The machine schedules one REU tick per granted 1 MHz bus cycle, independently
+of CPU speed. Swap takes two cycles per byte. DMA blocks instruction execution
+on either processor, respects VIC BA, and keeps all peripherals clocked; a
+long transfer yields at frame boundaries. Takeover currently begins at an
+instruction boundary, not VICE's exact CPU microcycle. The machine's normal
+IRQ combiner includes the REC and routes it to the active processor.
+
+As in VICE's `c128mem.c` and `c128mmu.c`, DMA RAM accesses use `$D506` bit 6,
+not the CPU bank, shared RAM, relocated zero/stack pages or the 8502's on-chip
+port. ROM/I/O decoding still applies, including native `$FF00` MMU writes.
+An armed transfer starts after the CPU's `$FF00` write has selected its map.
+The Z80 can program the REC through its IO2 ports; transfers still use the
+native memory decoder. The same device is available in C64 test mode.
+
+Tests cover the standalone REC, mapped DMA and peripheral scheduling in
+`test_machine_clock.c`, configuration/General-menu controls, and snapshots
+(including mid-swap resume). The optional private-ROM machine test executes
+BASIC 7.0 `STASH`/`FETCH` through REU bank 7. Power-on RAM is deterministically
+zeroed, matching the project's other volatile memories rather than VICE's
+configurable power-on pattern.
 
 ## Status: BASIC and CP/M boot
 

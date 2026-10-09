@@ -16,6 +16,7 @@
 #include "iec_bus.h"
 #include "drive_monitor.h"
 #include "tape.h"
+#include "reu.h"
 #include "config.h"
 #include <stdbool.h>
 
@@ -84,6 +85,7 @@ typedef struct {
     Kbd     kbd;
     JoyPorts joyports;
     Tape    tape;
+    Reu     reu;
     Drive   drive;
     Drive   drive2;
     Drive1571Cr integrated_drive; /* independent ROM-backed 1571CR machine */
@@ -120,6 +122,7 @@ typedef struct {
 void c128_init(C128 *c, Config *cfg);
 void c128_reset(C128 *c);
 void c128_power_cycle(C128 *c);
+bool c128_set_reu(C128 *c, bool enabled, unsigned size_kb);
 int  c128_frame(C128 *c);      /* run one frame; returns CPU cycles consumed */
 u64  c128_cycles_to_ns(const C128 *c, int cycles);
 u8   c128_keyboard_port_b(const C128 *c, u8 base_row_select);

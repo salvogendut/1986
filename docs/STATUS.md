@@ -16,6 +16,11 @@ below describe working paths, not a claim of cycle-exact compatibility.
 - CP/M Plus boot from a C128 CP/M system disk.
 - Two 64 KiB system RAM banks and selectable 16/64 KiB VDC RAM. The C128DCR
   default is 64 KiB.
+- Optional 128/256/512 KiB REU, gated by **General > REU** (Off by default,
+  512 KiB selected). Supports host-to-REU, REU-to-host, swap and compare DMA,
+  autoload, fixed addresses, `$FF00` triggering, completion/error IRQs and
+  BASIC 7.0 `STASH`/`FETCH`/`SWAP`. Transfers use the MMU's DMA bank while
+  the CPU is stalled and video, audio, timers and drives keep advancing.
 - White 8502 and blue Z80 footer indicators. Their labels follow the active
   1/2 MHz 8502 and configured 2/4 MHz Z80 rates; each lamp brightens only while
   that processor is clocked.
@@ -107,12 +112,16 @@ present, but the `GO64` test toggle does not need to be enabled.
   sprite changes, and unusual CPU bus sequences still need further validation.
 - VDC interlace and advanced modes remain incomplete.
 - The SID filter and combined waveforms are approximate.
+- REU bus takeover starts at an instruction boundary, with VIC BA stalls;
+  exact sub-instruction arbitration is not yet modeled. Expansion RAM is
+  volatile (saved in snapshots, not standalone REU image files).
 - The real 1571 path lacks burst serial, WD1770/FDC2 MFM, exact mechanism
   timing, and nonstandard raw/protection-track persistence.
 - The real 1581 reads/writes D81 through its DOS ROM; burst serial, 8520 TOD,
   raw formatting and raw/protected/deleted-mark MFM tracks are not implemented.
 - The virtual drive does not execute uploaded drive code through `M-E`.
-- Snapshots, tape recording, and some keyboard/layout polish remain future work.
+- Snapshot drive-transaction state, tape recording, and some keyboard/layout
+  polish remain future work; see [snapshot limits](SNAPSHOTS.md).
 
 See the [roadmap](../ROADMAP.md) for milestone detail and
 [usage guide](../USAGE.md) for operating instructions.

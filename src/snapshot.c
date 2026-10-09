@@ -211,7 +211,9 @@ static void read_tape_state(Reader *r, Tape *t) {
 
 static bool write_private(FILE *file, C128 *c) {
     ModuleWriter w;
-    if (!module_begin(&w, file, "1986STATE", 1, 0)) return false;
+    /* Major 2 requires the companion REU module, so older emulators reject
+     * these files instead of silently dropping a program's expansion RAM. */
+    if (!module_begin(&w, file, "1986STATE", 2, 0)) return false;
     write_u32(&w, PRIVATE_MAGIC);
     write_u16(&w, PRIVATE_SCHEMA);
     write_u8(&w, host_little_endian() ? 1 : 0);
@@ -256,7 +258,8 @@ static bool write_private(FILE *file, C128 *c) {
 }
 
 static SnapshotResult load_private(C128 *c, const ModuleView *module) {
-    if (module->major != 1) return SNAPSHOT_ERR_VERSION;
+    if ((module->major != 1 && module->major != 2) || module->minor != 0)
+        return SNAPSHOT_ERR_VERSION;
     const size_t expected =
         4 + 2 + 1 + 1 + 7 * 4 + /* private header and ABI sizes */
         32 +                       /* portable 8502 state */
@@ -339,6 +342,48 @@ static SnapshotResult load_private(C128 *c, const ModuleView *module) {
     return SNAPSHOT_OK;
 }
 
+static bool write_reu(FILE *file, const Reu *r) {
+    ModuleWriter w;
+    if (!module_begin(&w, file, "1986REU", 1, 0)) return false;
+    write_u32(&w, r->size_kb);
+    write_blob(&w, r->regs, sizeof(r->regs));
+    write_blob(&w, r->shadow, sizeof(r->shadow));
+    write_u8(&w, r->armed); write_u8(&w, r->active);
+    write_u16(&w, r->host_address);
+    write_u32(&w, r->reu_address); write_u32(&w, r->remaining);
+    write_u8(&w, r->phase); write_u8(&w, r->host_latch);
+    write_u8(&w, r->reu_latch); write_u8(&w, r->floating_bus);
+    write_blob(&w, r->ram, r->size_kb * 1024u);
+    return module_end(&w);
+}
+
+static SnapshotResult load_reu(Reu *reu, const ModuleView *module) {
+    if (module->major != 1 || module->minor != 0) return SNAPSHOT_ERR_VERSION;
+    Reader r = {module->payload, module->size, 0, false};
+    unsigned kb = read_u32(&r);
+    if (!reu_valid_size(kb) || module->size != 38u + kb * 1024u)
+        return SNAPSHOT_ERR_STATE;
+    reu->size_kb = kb;
+    read_blob(&r, reu->regs, sizeof(reu->regs));
+    read_blob(&r, reu->shadow, sizeof(reu->shadow));
+    u8 armed = read_u8(&r), active = read_u8(&r);
+    reu->armed = armed != 0; reu->active = active != 0;
+    reu->host_address = read_u16(&r);
+    reu->reu_address = read_u32(&r); reu->remaining = read_u32(&r);
+    reu->phase = read_u8(&r); reu->host_latch = read_u8(&r);
+    reu->reu_latch = read_u8(&r); reu->floating_bus = read_u8(&r);
+    if (armed > 1 || active > 1 || (armed && active) ||
+        (!kb && (armed || active)) || reu->reu_address > 0x7ffff ||
+        reu->remaining > 65536 || reu->phase > 3 ||
+        (reu->regs[6] & 0xf8) || (reu->shadow[4] & 0xf8) ||
+        (active && (!reu->remaining || !(reu->regs[1] & 0x80))) ||
+        (reu->phase == 2 && (reu->regs[1] & 3) != 2) ||
+        (reu->phase == 3 && (reu->regs[1] & 3) != 3))
+        return SNAPSHOT_ERR_STATE;
+    read_blob(&r, reu->ram, kb * 1024u);
+    return r.failed ? SNAPSHOT_ERR_STATE : SNAPSHOT_OK;
+}
+
 SnapshotResult snapshot_save(C128 *c, const char *path) {
     if (!c || !path || !path[0]) return SNAPSHOT_ERR_ARGUMENT;
     size_t length = strlen(path);
@@ -351,7 +396,7 @@ SnapshotResult snapshot_save(C128 *c, const char *path) {
      * partially applies MAINCPU/C128MEM before discovering a missing CIA or
      * VIC-II module, which can leave x128 unstable.  The file remains a real
      * VSF container, but VICE rejects it before changing machine state. */
-    bool ok = write_header(file) && write_private(file, c);
+    bool ok = write_header(file) && write_private(file, c) && write_reu(file, &c->reu);
     if (fclose(file) != 0) ok = false;
     if (ok) {
 #ifdef _WIN32
@@ -389,7 +434,24 @@ SnapshotResult snapshot_load(C128 *c, const char *path) {
     ModuleView private_state, maincpu, memory;
     SnapshotResult result;
     if (find_module(data, (size_t)end, "1986STATE", &private_state)) {
-        result = load_private(c, &private_state);
+        Reu *reu = calloc(1, sizeof(*reu));
+        if (!reu) { free(data); return SNAPSHOT_ERR_IO; }
+        reu_reset(reu);
+        ModuleView reu_state;
+        if (private_state.major == 2) {
+            result = find_module(data, (size_t)end, "1986REU", &reu_state)
+                ? load_reu(reu, &reu_state) : SNAPSHOT_ERR_STATE;
+        } else result = SNAPSHOT_OK;
+        /* Validate expansion state before changing any live machine state. */
+        if (result == SNAPSHOT_OK) result = load_private(c, &private_state);
+        if (result == SNAPSHOT_OK) {
+            c->reu = *reu;
+            if (c->cfg) {
+                c->cfg->reu_enabled = reu->size_kb != 0;
+                if (reu->size_kb) c->cfg->reu_size_kb = (int)reu->size_kb;
+            }
+        }
+        free(reu);
     } else if (find_module(data, (size_t)end, "MAINCPU", &maincpu) &&
                find_module(data, (size_t)end, "C128MEM", &memory)) {
         /* CPU+RAM alone cannot resume a running C128. VICE's accompanying

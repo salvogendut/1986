@@ -16,16 +16,17 @@ TESTS = test-cpu test-mmu test-mem test-cartridge test-cia test-sid test-config 
 TESTS += test-drive-warp
 TESTS += test-machine-clock test-drive1581 test-wd1770
 TESTS += test-real-drives test-wd1770-write
+TESTS += test-reu
 
-MACHINE_SOURCES = $(addprefix ../src/,c128.c cpu.c mem.c mmu.c vic.c vdc.c \
+MACHINE_SOURCES = $(addprefix ../src/,c128.c cpu.c mem.c reu.c mmu.c vic.c vdc.c \
     cia.c sid.c z80.c kbd.c joyport.c tape.c drive.c drive1571cr.c drive_cpu6502.c \
     drive1581.c wd1770.c \
     disk_image.c virtual_drive.c gcr_drive.c via6522.c iec_bus.c \
     drive_monitor.c config.c vice/maincpu.c vice/interrupt.c)
-test-machine-clock: test_machine_clock.c $(MACHINE_SOURCES) $(wildcard ../src/*.h) ../src/vice/6510core.c
+test-machine-clock: test_machine_clock.c $(MACHINE_SOURCES) $(wildcard ../src/*.h) ../src/vice/6510core.c ../src/paste.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra \
 		-ffunction-sections -fdata-sections $(GC_SECTIONS_LDFLAGS) -I../src \
-		test_machine_clock.c $(MACHINE_SOURCES) $(SDL3_LIBS) -lm -o $@
+		test_machine_clock.c $(MACHINE_SOURCES) ../src/paste.c $(SDL3_LIBS) -lm -o $@
 
 .PHONY: all check clean
 
@@ -33,6 +34,8 @@ all: $(TESTS)
 
 # These tests embed Display/C128 or consume the VDC framebuffer dimensions.
 test-c128-keyboard test-overlay test-vdc test-snapshot: ../src/display.h
+test-c128-keyboard test-overlay test-drive-warp test-snapshot: ../src/reu.h
+test-overlay: ../src/reu.c
 test-c128-keyboard test-overlay test-drive test-prg-drive test-drive-warp test-snapshot: ../src/config.h
 test-c128-keyboard test-overlay test-drive-warp test-snapshot: ../src/c128.h ../src/drive1571cr.h ../src/drive_cpu6502.h ../src/drive1581.h ../src/wd1770.h ../src/iec_bus.h
 
@@ -77,10 +80,10 @@ test-joyport: test_joyport.c ../src/joyport.c ../src/joyport.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_joyport.c ../src/joyport.c -o $@
 
-test-c128-keyboard: test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c ../src/mmu.c ../src/mem.c ../src/vic.c ../src/c128.h ../src/kbd.h ../src/vdc.h ../src/mmu.h
+test-c128-keyboard: test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c ../src/mmu.c ../src/mem.c ../src/reu.c ../src/vic.c ../src/c128.h ../src/kbd.h ../src/vdc.h ../src/mmu.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra \
 		-ffunction-sections -fdata-sections $(GC_SECTIONS_LDFLAGS) -I../src \
-		test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c ../src/mmu.c ../src/mem.c ../src/vic.c $(SDL3_LIBS) -o $@
+		test_c128_keyboard.c ../src/c128.c ../src/kbd.c ../src/vdc.c ../src/mmu.c ../src/mem.c ../src/reu.c ../src/vic.c $(SDL3_LIBS) -o $@
 
 test-mos6502dis: test_mos6502dis.c ../src/mos6502dis.c ../src/mos6502dis.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
@@ -149,7 +152,7 @@ test-vdrive-blocks: test_vdrive_blocks.c ../src/virtual_drive.c ../src/virtual_d
 test-overlay: test_overlay.c ../src/overlay.c ../src/overlay.h ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c ../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c ../src/drive_monitor.c ../src/drive_sound_samples.h ../src/tape.c ../src/tape.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
 		test_overlay.c ../src/overlay.c ../src/config.c ../src/cartridge.c ../src/mem.c ../src/mmu.c ../src/drive.c \
-		../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c ../src/drive_monitor.c ../src/tape.c $(SDL3_LIBS) -lm -o $@
+		../src/disk_image.c ../src/virtual_drive.c ../src/joyport.c ../src/drive_monitor.c ../src/tape.c ../src/reu.c $(SDL3_LIBS) -lm -o $@
 
 test-display-footer: test_display_footer.c ../src/display.c ../src/display.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
@@ -167,11 +170,16 @@ test-vdc: test_vdc.c ../src/vdc.c ../src/vdc.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=c11 -Wall -Wextra -I../src \
 		test_vdc.c ../src/vdc.c -o $@
 
-test-snapshot: test_snapshot.c ../src/snapshot.c ../src/snapshot.h ../src/tape.c ../src/tape.h ../src/c128.h ../src/vdc.h
+test-snapshot: test_snapshot.c ../src/snapshot.c ../src/snapshot.h ../src/tape.c ../src/tape.h ../src/c128.h ../src/vdc.h ../src/reu.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SDL3_CFLAGS) -std=gnu11 -Wall -Wextra -I../src \
-		test_snapshot.c ../src/snapshot.c ../src/tape.c -lm -o $@
+		test_snapshot.c ../src/snapshot.c ../src/tape.c ../src/reu.c -lm -o $@
+
+test-reu: test_reu.c ../src/reu.c ../src/reu.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -I../src \
+		test_reu.c ../src/reu.c -o $@
 
 check: $(TESTS)
+	./test-reu
 	./test-cpu
 	./test-machine-clock
 	./test-real-drives

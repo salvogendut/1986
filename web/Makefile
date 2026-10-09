@@ -6,7 +6,7 @@ CFLAGS := -O2 -std=c11 -D_GNU_SOURCE -Wall -Wextra -Icompat -I../src -I../src/vi
 
 SRCS := \
 	../src/config.c ../src/kbd.c ../src/joyport.c ../src/c128.c \
-	../src/cpu.c ../src/mem.c ../src/cartridge.c ../src/mmu.c \
+	../src/cpu.c ../src/mem.c ../src/reu.c ../src/cartridge.c ../src/mmu.c \
 	../src/vic.c ../src/vdc.c ../src/cia.c ../src/sid.c ../src/z80.c \
 	../src/vice/maincpu.c ../src/vice/interrupt.c \
 	../src/disk_image.c ../src/drive.c ../src/drive1571cr.c ../src/drive_cpu6502.c \
@@ -25,7 +25,7 @@ all: $(DIST_DIR)/1986.js $(addprefix $(DIST_DIR)/,$(WEB_ASSETS)) $(DIST_DIR)/bra
 # Display/C128 dimensions and Config fields are shared by their consumers.
 # Rebuild every core object when those layouts change, including old builds
 # which predate this dependency.
-$(OBJS): ../src/display.h ../src/config.h ../src/c128.h \
+$(OBJS): ../src/display.h ../src/config.h ../src/c128.h ../src/reu.h \
 	../src/drive1571cr.h ../src/drive_cpu6502.h ../src/drive1581.h ../src/wd1770.h ../src/iec_bus.h
 
 $(DIST_DIR)/1986.js: $(OBJS) $(ROM_FILES) | $(DIST_DIR)

@@ -23,6 +23,8 @@ void config_set_defaults(Config *cfg) {
     cfg->fast = false;
     cfg->col_mode_80 = true;
     cfg->vdc_ram_kb = 64;
+    cfg->reu_enabled = false;
+    cfg->reu_size_kb = 512;
     cfg->double_z80_frequency = false;
     cfg->gif_width = 320;
     cfg->gif_fps = 25;
@@ -117,6 +119,8 @@ static void parse_line(Config *cfg, const char *line) {
     else if (!strcasecmp(key, "fast"))          cfg->fast = atoi(value) != 0;
     else if (!strcasecmp(key, "display_columns")) cfg->col_mode_80 = atoi(value) != 40;
     else if (!strcasecmp(key, "vdc_ram_kb")) cfg->vdc_ram_kb = atoi(value);
+    else if (!strcasecmp(key, "reu_enabled")) cfg->reu_enabled = atoi(value) != 0;
+    else if (!strcasecmp(key, "reu_size_kb")) cfg->reu_size_kb = atoi(value);
     else if (!strcasecmp(key, "double_z80_frequency")) cfg->double_z80_frequency = atoi(value) != 0;
     else if (!strcasecmp(key, "gif_width"))     cfg->gif_width = atoi(value);
     else if (!strcasecmp(key, "gif_fps"))       cfg->gif_fps = atoi(value);
@@ -193,6 +197,8 @@ bool config_load(Config *cfg, const char *path) {
     if (cfg->drive_type != 1571 && cfg->drive_type != 1581) cfg->drive_type = 1571;
     if (cfg->drive2_type != 1571 && cfg->drive2_type != 1581) cfg->drive2_type = 1571;
     if (cfg->vdc_ram_kb != 16 && cfg->vdc_ram_kb != 64) cfg->vdc_ram_kb = 64;
+    if (cfg->reu_size_kb != 128 && cfg->reu_size_kb != 256 && cfg->reu_size_kb != 512)
+        cfg->reu_size_kb = 512;
     if (cfg->main_input_port != 1 && cfg->main_input_port != 2) cfg->main_input_port = 2;
     for (int i = 0; i < 2; ++i)
         if (cfg->joy_port_mode[i] != JOYPORT_JOYSTICK &&
@@ -221,6 +227,8 @@ bool config_save(const Config *cfg, const char *path) {
     fprintf(f, "fast = %d\n", cfg->fast ? 1 : 0);
     fprintf(f, "display_columns = %d\n", cfg->col_mode_80 ? 80 : 40);
     fprintf(f, "vdc_ram_kb = %d\n", cfg->vdc_ram_kb);
+    fprintf(f, "reu_enabled = %d\n", cfg->reu_enabled ? 1 : 0);
+    fprintf(f, "reu_size_kb = %d\n", cfg->reu_size_kb);
     fprintf(f, "double_z80_frequency = %d\n", cfg->double_z80_frequency ? 1 : 0);
     fprintf(f, "gif_width = %d\n", cfg->gif_width);
     fprintf(f, "gif_fps = %d\n", cfg->gif_fps);

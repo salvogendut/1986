@@ -1,5 +1,6 @@
 #include "c128.h"
 #include "leds.h"
+#include "paste.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,154 @@ static void setup(C128 *c) {
     cia_write(&c->cia1, 14, 0x11);
 }
 
+static void reu_command(C128 *c, u16 host, u32 expansion, u16 length, u8 command) {
+    c128_mem_write(c, 0xdf02, host); c128_mem_write(c, 0xdf03, host >> 8);
+    c128_mem_write(c, 0xdf04, expansion); c128_mem_write(c, 0xdf05, expansion >> 8);
+    c128_mem_write(c, 0xdf06, expansion >> 16);
+    c128_mem_write(c, 0xdf07, length); c128_mem_write(c, 0xdf08, length >> 8);
+    c128_mem_write(c, 0xdf01, command);
+}
+
+static void test_reu_machine(C128 *c) {
+    setup(c);
+    CHECK(c128_mem_read(c, 0xdf00) == 0xff, "REU is absent by default");
+    CHECK(c128_set_reu(c, true, 512) && c->cfg->reu_enabled,
+          "enable live 512K REU");
+    CHECK(!c128_set_reu(c, true, 64) && c->reu.size_kb == 512,
+          "reject invalid expansion size without changing hardware");
+    /* DMA RAM bank comes from RCR, not the CPU CR; shared/relocated pages
+     * and the 8502 on-chip $00/$01 ports must not leak into REU transfers. */
+    c->mem.mmu.rcr = 0x4c;
+    c->mem.mmu.page0 = 0x30; c->mem.mmu.page1 = 0x31;
+    c->cpu.io_ddr = 0x2f; c->cpu.io_port = 0x37;
+    c->mem.ram[0x10000] = 0xa5; c->mem.ram[0x10001] = 0x5a;
+    c->mem.ram[0x10002] = 0x91; c->mem.ram[0x10100] = 0x62;
+    c->mem.ram[0x3000] = 0x33; c->mem.ram[0x3100] = 0x44;
+    reu_command(c, 0, 0x10000, 0x101, 0x90);
+    c128_frame(c);
+    CHECK(c->reu.ram[0x10000] == 0xa5 && c->reu.ram[0x10001] == 0x5a &&
+          c->reu.ram[0x10002] == 0x91 && c->reu.ram[0x10100] == 0x62,
+          "DMA bypasses the CPU port, page relocation and common RAM");
+    c->reu.ram[0] = 0x77;
+    reu_command(c, 0, 0, 1, 0x91); c128_frame(c);
+    CHECK(c->mem.ram[0x10000] == 0x77 && c->cpu.io_ddr == 0x2f && c->mem.ram[0x3000] == 0x33,
+          "DMA write to $00 changes physical RAM, not DDR or relocated zero page");
+
+    setup(c);
+    c->mem.basic[0] = 0xab; c->mem.ram[0x4000] = 0xcd;
+    c->mem.mmu.mcr = 0x3c; /* BASIC low visible, otherwise RAM and I/O */
+    reu_command(c, 0x4000, 0, 1, 0x90); c128_frame(c);
+    CHECK(c->reu.ram[0] == 0xab, "DMA reads visible ROM through native decoder");
+    c->reu.ram[0] = 0xef;
+    reu_command(c, 0x4000, 0, 1, 0x91); c128_frame(c);
+    CHECK(c->mem.ram[0x4000] == 0xef && c->mem.basic[0] == 0xab,
+          "DMA writes RAM beneath ROM without modifying ROM");
+    c->mem.mmu.mcr = 0x3f;
+    c128_mem_write(c, 0xdf02, 0x88);
+    CHECK(c128_mem_read(c, 0xdf02) == 0x88 && reu_peek(&c->reu, 2) != 0x88,
+          "hidden IO2 is ordinary RAM");
+
+    setup(c);
+    c->reu.ram[0] = 0x35;
+    reu_command(c, 0x2000, 0, 1, 0x81);
+    CHECK(c->reu.armed && !c->reu.active, "native command arms FF00 trigger");
+    c128_mem_write(c, 0xff00, 0x3f);
+    CHECK(c->mem.mmu.mcr == 0x3f && c->reu.active,
+          "FF00 changes MMU mapping before starting DMA");
+    c128_frame(c);
+    CHECK(c->mem.ram[0x2000] == 0x35, "delayed native fetch completes with IO2 hidden");
+
+    setup(c);
+    c->reu.ram[0] = 0x06;
+    reu_command(c, 0xd020, 0, 1, 0x91); c128_frame(c);
+    CHECK((c128_mem_read(c, 0xd020) & 15) == 6, "DMA reaches mapped VIC registers");
+    reu_command(c, 0xdf00, 0x100, 11, 0x90); c128_frame(c);
+    bool floated = true;
+    for (unsigned i = 0; i < 11; ++i) floated &= c->reu.ram[0x100 + i] == 0xff;
+    CHECK(floated, "DMA cannot read back its own IO2 registers");
+    memset(c->reu.ram + 0x100, 0x90, 11);
+    reu_command(c, 0xdf00, 0x100, 11, 0x91); c128_frame(c);
+    CHECK(!c->reu.active && !c->reu.armed && reu_peek(&c->reu, 1) == 0x11,
+          "DMA cannot recursively reprogram its own command register");
+
+    unsigned remaining[2];
+    for (unsigned display = 0; display < 2; ++display) {
+        setup(c);
+        if (display) vic_write(&c->vic, 0xd011, 0x1b);
+        c128_mem_write(c, 0xdf0a, 0x80);
+        reu_command(c, 0x2345, 0, 0, 0x90);
+        c128_frame(c);
+        remaining[display] = c->reu.remaining;
+    }
+    CHECK(remaining[1] > remaining[0], "VIC badline DMA stalls the REU bus");
+
+    /* A 64K transfer spans several frames without executing CPU code, yet
+     * video, audio and CIA clocks keep advancing at both CPU speeds. */
+    for (unsigned fast = 0; fast < 2; ++fast) {
+        setup(c);
+        vic_write(&c->vic, 0xd030, fast);
+        c->mem.ram[0x2345] = 0x6d;
+        c128_mem_write(c, 0xdf0a, 0x80);
+        reu_command(c, 0x2345, 0, 0, 0x90);
+        u16 pc = c->cpu.pc;
+        for (int frame = 0; frame < 3; ++frame) {
+            u64 before = c->bus_cycles;
+            c128_frame(c);
+            CHECK(c->reu.active && c->cpu.pc == pc &&
+                  c->bus_cycles - before == CPU_PAL_FRAME_CYCLES &&
+                  c->audio_count > 850,
+                  "REU holds CPU while each frame and its peripherals remain bounded");
+        }
+        c128_frame(c);
+        CHECK(!c->reu.active && c->reu.ram[0xffff] == 0x6d,
+              "full-bank DMA finishes at the same bus speed in 1/2 MHz modes");
+    }
+    setup(c);
+    c->reu.ram[0] = 0x99;
+    c128_mem_write(c, 0xdf09, 0xc0);
+    reu_command(c, 0x2000, 0, 1, 0x91); c128_frame(c);
+    CHECK(reu_irq(&c->reu) && c->cpu.irq_level, "REU IRQ reaches the 8502");
+    CHECK(c128_debug_mem_read(c, C128_DEBUG_CPU_8502, 0xdf00) == 0xd0 &&
+          reu_irq(&c->reu) && c->cpu.irq_level,
+          "monitor can inspect REC status without acknowledging its IRQ");
+    c128_mem_read(c, 0xdf00);
+    CHECK(!c->cpu.irq_level, "status acknowledgement immediately releases IRQ");
+
+    setup(c);
+    mmu_write(&c->mem.mmu, 0xd505, 0);
+    c->mem.mmu.mcr = 0x7e;
+    c->z80.pc = 0x2000; c->z80.halted = true;
+    c->z80_bus.io_write(c, 0xdf02, 0);
+    c->z80_bus.io_write(c, 0xdf03, 0x40);
+    c->z80_bus.io_write(c, 0xdf07, 1);
+    c->z80_bus.io_write(c, 0xdf08, 0);
+    c->z80_bus.io_write(c, 0xdf09, 0xc0);
+    c->reu.ram[0] = 0xb6;
+    c->z80_bus.io_write(c, 0xdf01, 0x91);
+    c128_frame(c);
+    CHECK(c->mem.ram[0x4000] == 0xb6 && c->mem.ram[0x14000] != 0xb6,
+          "Z80 I/O can program REU; DMA still uses the RCR bank");
+    CHECK(c->z80.pending_irq && reu_irq(&c->reu), "REU IRQ reaches the Z80");
+    c->z80_bus.io_read(c, 0xdf00);
+    CHECK(!c->z80.pending_irq, "Z80 status read acknowledges the REU IRQ");
+
+    setup(c);
+    mmu_write(&c->mem.mmu, 0xd505, 0x41);
+    mem_set_processor_port(&c->mem, 0x2f, 0x37);
+    c->reu.ram[0] = 0xd2;
+    reu_command(c, 0x2000, 0, 1, 0x81);
+    c128_mem_write(c, 0xff00, 0x5a); c128_frame(c);
+    CHECK(c->mem.ram[0x2000] == 0xd2 && c->mem.ram[0xff00] == 0x5a,
+          "C64 personality retains IO2 and the FF00 trigger");
+    c128_reset(c);
+    CHECK(c->reu.ram[0] == 0xd2 && !c->reu.active, "machine RESET retains REU RAM");
+    c128_power_cycle(c);
+    CHECK(c->reu.size_kb == 512 && c->reu.ram[0] == 0, "machine power cycle clears REU RAM");
+    c->mem.mmu.mcr = 0x3e; /* expose IO2 again after the power-on CR */
+    CHECK(c128_set_reu(c, false, 512) && c128_mem_read(c, 0xdf00) == 0xff,
+          "disable detaches IO2 and clears pending expansion state");
+}
+
 /* Optional private-ROM smoke test: exercise the same native BASIC boot and
  * presented VDC framebuffer as the application, without opening a window. */
 static void test_basic_cursor(C128 *c) {
@@ -38,6 +187,7 @@ static void test_basic_cursor(C128 *c) {
     if (!rom_dir || !*rom_dir) return;
     Config cfg;
     config_set_defaults(&cfg);
+    cfg.reu_enabled = true;
     c128_init(c, &cfg);
     int loaded = mem_load_c128_roms(&c->mem, rom_dir);
     CHECK(loaded >= 3, "load private ROMs for native BASIC cursor test");
@@ -84,6 +234,25 @@ static void test_basic_cursor(C128 *c) {
                   "idle BASIC alternates cursor pixels while the rest of the screen stays stable");
             free(reference);
         }
+        Paste paste;
+        paste_init(&paste);
+        paste_text(&paste, "BANK 0:POKE 8192,123:STASH 1,8192,0,7:POKE 8192,0:FETCH 1,8192,0,7\r");
+        for (int frame = 0; frame < 500; ++frame) {
+            paste_tick(&paste, &c->kbd);
+            c128_frame(c);
+        }
+        CHECK(paste.pos == paste.len && !paste.held &&
+              c->reu.ram[0x70000] == 123 && c->mem.ram[8192] == 123 && !c->paused,
+              "native BASIC 7 STASH/FETCH round-trips data through the eighth REU bank");
+        paste_text(&paste, "BANK 1:POKE 8192,77:SWAP 1,8192,0,7\r");
+        for (int frame = 0; frame < 300; ++frame) {
+            paste_tick(&paste, &c->kbd);
+            c128_frame(c);
+        }
+        CHECK(paste.pos == paste.len && !paste.held &&
+              c->reu.ram[0x70000] == 77 && c->mem.ram[0x12000] == 123 && !c->paused,
+              "native BASIC 7 SWAP uses the selected C128 RAM bank");
+        paste_free(&paste);
     }
     free(c->vdc.fb);
     free(c->vdc.display_fb);
@@ -167,6 +336,7 @@ int main(void) {
     CHECK(c.vic.beam_half_clock >= 2 * CPU_PAL_FRAME_CYCLES &&
           c.vic.beam_half_clock < 2 * CPU_PAL_FRAME_CYCLES + 20,
           "CPU handoff retains one shared video timeline");
+    test_reu_machine(&c);
     free(c.vdc.fb); free(c.vdc.display_fb);
     test_basic_cursor(&c);
     if (!failures) puts("test-machine-clock: OK");

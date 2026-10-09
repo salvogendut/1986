@@ -31,6 +31,8 @@ READY.
 ```
 
 - [x] VICE 8502/6510 CPU core, C128 MMU banking, and native-C128 memory map.
+- [x] Optional 128/256/512 KiB REU: General toggle/size, four DMA modes,
+  native MMU DMA banking, IRQs, BASIC 7 transfers and snapshot state.
 - [x] Stable CIA timer-A/VIC raster IRQ path driving the KERNAL main loop.
 - [x] Host keyboard, cursor, clipboard/CLI paste, and BASIC command entry.
 - [x] VIC-IIe text, hires/multicolor bitmap, BASIC `CHAR`, and eight sprites.

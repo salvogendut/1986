@@ -273,7 +273,7 @@ void c128_vdc_port_write(C128 *c, u16 addr, u8 val) {
  * line to the active CPU immediately instead of leaving it asserted until
  * the next raster-line boundary. */
 static void c128_refresh_interrupt_lines(C128 *c) {
-    bool irq = cia_irq_line(&c->cia1) || (c->vic.irq_status & 0x80);
+    bool irq = cia_irq_line(&c->cia1) || (c->vic.irq_status & 0x80) || reu_irq(&c->reu);
     if (mmu_cpu_is_8502(&c->mem.mmu)) {
         bool bank_access = kernal_bank_access_active(c);
         if (irq && bank_access)
@@ -365,14 +365,20 @@ static u8 io_read(C128 *c, u16 addr) {
          * the $D600-$D6FF device independently of the active personality. */
         v = c128_vdc_port_read(c, addr);
     }
+    else if (addr >= 0xDF00) v = reu_read(&c->reu, addr);
     else v = 0xFF;
     if ((addr >= 0xD000 && addr < 0xD400) ||
-        (addr >= 0xDC00 && addr < 0xDE00))
+        (addr >= 0xDC00 && addr < 0xDE00) || addr >= 0xDF00)
         c128_refresh_interrupt_lines(c);
     return v;
 }
 
 static void io_write(C128 *c, u16 addr, u8 val) {
+    if (addr >= 0xDF00) {
+        reu_write(&c->reu, addr, val);
+        c128_refresh_interrupt_lines(c);
+        return;
+    }
     if (addr >= 0xD000 && addr < 0xD400) {
         if ((addr & 0x3F) == 0x19 && cpu_rmw_active())
             vic_write_rmw(&c->vic, addr, val);
@@ -485,6 +491,7 @@ void c128_mem_write(void *ctx, u16 addr, u8 val) {
         mmu_ffxx_write(&c->mem.mmu, addr, val);
         c128_refresh_vic_bank(c);
         c128_refresh_interrupt_lines(c);
+        if (addr == 0xFF00) reu_ff00_trigger(&c->reu);
         return;
     }
     if (addr >= 0xD000 && addr < 0xE000 && mem_io_visible(&c->mem)) {
@@ -492,6 +499,31 @@ void c128_mem_write(void *ctx, u16 addr, u8 val) {
         return;
     }
     mem_write(&c->mem, addr, val);
+    if (addr == 0xFF00) reu_ff00_trigger(&c->reu);
+}
+
+/* REU uses the native memory decoder (even while the Z80 owns the bus),
+ * but bypasses the 8502 port and page/shared-RAM translations. See VICE's
+ * c128mem.c mem_dma_read/store and c128mmu.c mmu_set_dma_bank. */
+static u8 reu_host_read(void *ctx, u16 addr) {
+    C128 *c = ctx;
+    if (!mem_c64_mode(&c->mem) && addr >= 0xFF00 && addr <= 0xFF04)
+        return mmu_ffxx_read(&c->mem.mmu, addr);
+    if (addr >= 0xD000 && addr < 0xE000 && mem_io_visible(&c->mem))
+        return io_read(c, addr);
+    return mem_dma_read(&c->mem, addr);
+}
+
+static void reu_host_write(void *ctx, u16 addr, u8 value) {
+    C128 *c = ctx;
+    if (!mem_c64_mode(&c->mem) && addr >= 0xFF00 && addr <= 0xFF04) {
+        mmu_ffxx_write(&c->mem.mmu, addr, value);
+        c128_refresh_vic_bank(c);
+    } else if (addr >= 0xD000 && addr < 0xE000 && mem_io_visible(&c->mem)) {
+        io_write(c, addr, value);
+    } else {
+        mem_dma_write(&c->mem, addr, value);
+    }
 }
 
 /* --- Z80 bus (native C128 / CP/M mode). -------------------------------
@@ -531,6 +563,7 @@ static void z80_mem_write(void *ctx, u16 addr, u8 val) {
     if (addr >= 0xff00 && addr <= 0xff04) {
         mmu_ffxx_write(mmu, addr, val);
         c128_refresh_vic_bank(c);
+        if (addr == 0xff00) reu_ff00_trigger(&c->reu);
         return;
     }
     if (addr >= 0x1000 && addr < 0x1400 && !(mmu->mcr & 0x01)) {
@@ -632,6 +665,7 @@ static u8 debug_io_peek(C128 *c, u16 address) {
         Cia copy = c->cia2;
         return cia_read(&copy, address);
     }
+    if (address >= 0xdf00) return reu_peek(&c->reu, address);
     return 0xff;
 }
 
@@ -798,6 +832,8 @@ void c128_init(C128 *c, Config *cfg) {
     kbd_init(&c->kbd);
     joyports_reset(&c->joyports);
     tape_init(&c->tape);
+    reu_configure(&c->reu, cfg->reu_enabled ? (unsigned)cfg->reu_size_kb : 0);
+    reu_reset(&c->reu);
     config_normalize_drive_units(cfg);
     drive_init(&c->drive, cfg);
     drive_set_media_change_hook(&c->drive, flush_integrated_drive, c);
@@ -840,6 +876,7 @@ static void c128_reset_internal(C128 *c, bool power_cycle) {
     c->peripheral_fast_remainder = 0;
     c->z80_peripheral_remainder = 0;
     kbd_reset(&c->kbd);
+    reu_reset(&c->reu);
     c->kbd.caps_lock = caps_lock; /* physical locking switch survives RESET */
     c->restore_down = false;
     joyports_reset(&c->joyports);
@@ -896,10 +933,20 @@ void c128_power_cycle(C128 *c) {
      * key remain in place. */
     mem_power_cycle(&c->mem);
     vdc_powerup(&c->vdc);
+    reu_power_cycle(&c->reu);
     c->cpu.io_ddr = 0;
     c->cpu.io_port = 0;
     c->total_cycles = 0;
     c128_reset_internal(c, true);
+}
+
+bool c128_set_reu(C128 *c, bool enabled, unsigned size_kb) {
+    if (!size_kb || !reu_valid_size(size_kb)) return false;
+    reu_configure(&c->reu, enabled ? size_kb : 0);
+    c->cfg->reu_enabled = enabled;
+    c->cfg->reu_size_kb = (int)size_kb;
+    c128_refresh_interrupt_lines(c);
+    return true;
 }
 
 /* Advance the shared clock independently of the 8502 clock. CPU reads,
@@ -1021,6 +1068,23 @@ int c128_frame(C128 *c) {
     u64 frame_end = (c->vic.beam_half_clock / (126 * VIC_RASTER_LINES) + 1) *
                     (126 * VIC_RASTER_LINES);
     while (c->vic.beam_half_clock < frame_end) {
+        if (c->reu.active) {
+            /* DMA owns the shared 1 MHz bus, independently of CPU speed.
+             * Do not retire CPU instructions; keep VIC/VDC, CIAs, audio and
+             * drives running, yielding to the frontend at each frame. */
+            if (c->vic.beam_half_clock & 1) c128_clock_halves(c, 1);
+            ReuBus bus = {c, reu_host_read, reu_host_write};
+            if (!vic_cpu_ba_low(&c->vic)) reu_tick(&c->reu, &bus);
+            if (mmu_cpu_is_8502(&c->mem.mmu)) {
+                unsigned clocks = c->fast || c->vic.fast_mode ? 2 : 1;
+                cpu_stall(clocks);
+                c->cpu.cycles += clocks;
+            }
+            c->cpu_clock_synced = cpu_cycles();
+            c128_clock_halves(c, 2);
+            ++total;
+            continue;
+        }
         bool z80 = !mmu_cpu_is_8502(&c->mem.mmu);
         C128DebugCpu owner = z80 ? C128_DEBUG_CPU_Z80 : C128_DEBUG_CPU_8502;
         u16 pc = z80 ? c->z80.pc : c->cpu.pc;

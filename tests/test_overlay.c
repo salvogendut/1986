@@ -53,6 +53,12 @@ void c128_set_4080(C128 *c, bool col80) {
 }
 static int machine_resets;
 void c128_reset(C128 *c) { (void)c; machine_resets++; }
+bool c128_set_reu(C128 *c, bool enabled, unsigned size_kb) {
+    reu_configure(&c->reu, enabled ? size_kb : 0);
+    c->cfg->reu_enabled = enabled;
+    c->cfg->reu_size_kb = (int)size_kb;
+    return true;
+}
 static int drive_power_cycles;
 static C128DriveChangeResult drive_change_result = C128_DRIVE_CHANGE_OK;
 C128DriveChangeResult c128_change_drive_type(C128 *c, unsigned slot, int type) {
@@ -345,6 +351,28 @@ int main(void) {
     CHECK(ov.section == OV_GENERAL && ov.row == 0,
           "General opens with first selectable row");
     for (int i = 0; i < 6; ++i) key(&ov, SDL_SCANCODE_DOWN);
+    cfg.tinker = false;
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.reu_enabled && c->reu.size_kb == 512 && !ov.about_visible,
+          "General REU toggle works without Tinker and attaches 512K immediately");
+    CHECK(config_load(&saved, config_file) && saved.reu_enabled && saved.reu_size_kb == 512,
+          "REU toggle is persisted");
+    c->reu.ram[0] = 0x55;
+    key(&ov, SDL_SCANCODE_DOWN);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.reu_size_kb == 128 && c->reu.size_kb == 128 && !c->reu.ram[0],
+          "General REU size cycles 512 to 128 and clears expansion RAM");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.reu_size_kb == 256 && c->reu.size_kb == 256, "REU size cycles to 256");
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(cfg.reu_size_kb == 512 && c->reu.size_kb == 512, "REU size cycles to 512");
+    key(&ov, SDL_SCANCODE_UP);
+    key(&ov, SDL_SCANCODE_RETURN);
+    CHECK(!cfg.reu_enabled && !c->reu.size_kb && cfg.reu_size_kb == 512,
+          "General REU Off detaches hardware but remembers selected size");
+    cfg.tinker = true;
+    key(&ov, SDL_SCANCODE_DOWN);
+    key(&ov, SDL_SCANCODE_DOWN);
     key(&ov, SDL_SCANCODE_RETURN);
     CHECK(ov.about_visible, "General About opens program details");
     key(&ov, SDL_SCANCODE_RIGHT);
@@ -754,6 +782,10 @@ int main(void) {
                 ov.section = OV_GENERAL;
                 ov.row = 3;
                 ov.about_visible = true;
+            } else if (getenv("C128_OVERLAY_PREVIEW_GENERAL")) {
+                ov.section = OV_GENERAL;
+                ov.row = 6;
+                c128_set_reu(c, true, 512);
             } else {
                 ov.section = OV_ADVANCED;
                 ov.row = 11;
