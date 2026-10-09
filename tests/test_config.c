@@ -14,6 +14,7 @@ int main(void) {
     CHECK(cfg.model == C128_MODEL_DCR, "default model DCR");
     CHECK(cfg.col_mode_80, "default display is 80 columns");
     CHECK(cfg.vdc_ram_kb == 64, "C128DCR defaults to 64K VDC RAM");
+    CHECK(!cfg.reu_enabled && cfg.reu_size_kb == 512, "REU defaults off with 512K selected");
     CHECK(!cfg.double_z80_frequency, "doubled Z80 frequency defaults off");
     CHECK(!cfg.unified_capture, "unified GIF capture defaults off");
     CHECK(!cfg.real_disk_drive, "real drive defaults off");
@@ -46,6 +47,8 @@ int main(void) {
           "legacy config defaults automatic drive warp off");
     CHECK(!legacy_cfg.double_z80_frequency,
           "legacy config keeps stock Z80 frequency");
+    CHECK(!legacy_cfg.reu_enabled && legacy_cfg.reu_size_kb == 512,
+          "legacy config does not silently attach an expansion");
     CHECK(!legacy_cfg.second_drive && legacy_cfg.drive2_unit == 9,
           "legacy config defaults the second drive off at unit 9");
 
@@ -54,6 +57,8 @@ int main(void) {
     cfg.crt_enabled = true;
     cfg.col_mode_80 = false;
     cfg.vdc_ram_kb = 16;
+    cfg.reu_enabled = true;
+    cfg.reu_size_kb = 256;
     cfg.double_z80_frequency = true;
     cfg.unified_capture = true;
     cfg.real_disk_drive = true;
@@ -86,6 +91,7 @@ int main(void) {
     CHECK(back.crt_enabled, "crt roundtrip");
     CHECK(!back.col_mode_80, "40-column mode roundtrip");
     CHECK(back.vdc_ram_kb == 16, "16K VDC RAM setting roundtrip");
+    CHECK(back.reu_enabled && back.reu_size_kb == 256, "REU settings roundtrip");
     CHECK(back.double_z80_frequency, "doubled Z80 frequency roundtrip");
     CHECK(back.unified_capture, "unified GIF capture roundtrip");
     CHECK(back.real_disk_drive, "real-drive preference roundtrip");
@@ -148,18 +154,21 @@ int main(void) {
     CHECK(config_save_column_mode(path, false), "save 40-column mode only");
     CHECK(config_load(&back, path), "reload 40-column mode");
     CHECK(!back.col_mode_80, "40-column mode persisted");
+    CHECK(back.reu_enabled && back.reu_size_kb == 256,
+          "display-only config save preserves REU preferences");
 
     FILE *collision = fopen(path, "w");
     CHECK(collision != NULL, "create unit-collision config");
     if (collision) {
         fputs("drive_unit = 10\ndrive2_unit = 10\nsecond_drive = 1\n"
-              "vdc_ram_kb = 32\ndrive_type = 999\ndrive2_type = 0\n", collision);
+              "vdc_ram_kb = 32\ndrive_type = 999\ndrive2_type = 0\nreu_size_kb = -1\n", collision);
         fclose(collision);
     }
     CHECK(config_load(&back, path) && back.drive_unit == 10 &&
           back.drive2_unit == 8,
           "loading a colliding unit assignment chooses a distinct unit");
     CHECK(back.vdc_ram_kb == 64, "invalid VDC RAM size falls back to DCR default");
+    CHECK(back.reu_size_kb == 512, "invalid REU size defaults to 512K");
     CHECK(back.drive_type == 1571 && back.drive2_type == 1571,
           "invalid hardware drive types fall back to 1571");
 

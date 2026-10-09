@@ -25,6 +25,14 @@ serialized. Mounted media remain external files and are not copied into the
 snapshot. Save and restore at an idle BASIC/CP/M prompt: in-progress virtual
 or ROM-drive IEC/GCR transactions are not yet serialized.
 
+The companion `1986REU` module records the fitted expansion size (including
+Off), all installed REU RAM, REC registers, IRQ/autoload state, and in-flight
+DMA addresses, phase and byte latches. Loading restores the REU selection in
+General as well as its contents. The new writer uses `1986STATE` version 2.0
+and requires this companion module. Older 1986 builds reject these files
+rather than silently losing expansion RAM. Pre-REU version-1 snapshots remain
+readable and restore with the REU detached.
+
 ## Interoperability
 
 - 1986 recognizes a plain VICE C128 snapshot but rejects it before changing

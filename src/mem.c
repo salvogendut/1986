@@ -109,7 +109,12 @@ bool mem_c64_roms_loaded(const Mem *m) {
     return m->c64_roms_loaded;
 }
 
-static u8 c64_read(Mem *m, u16 addr) {
+static u8 ram_read(const Mem *m, u16 addr, bool dma) {
+    u32 offset = dma ? ((u32)(m->mmu.rcr & 0x40) << 10) | addr : bank_off(m, addr);
+    return m->ram[offset];
+}
+
+static u8 c64_read(Mem *m, u16 addr, bool dma) {
     u8 port = m->pla_data;
     bool loram = (port & 0x01) != 0;
     bool hiram = (port & 0x02) != 0;
@@ -121,18 +126,18 @@ static u8 c64_read(Mem *m, u16 addr) {
         return m->chargen[addr & 0x0FFF];
     if (addr >= 0xE000 && hiram)
         return m->c64_kernal[addr - 0xE000];
-    return m->ram[bank_off(m, addr)];
+    return ram_read(m, addr, dma);
 }
 
-u8 mem_read(Mem *m, u16 addr) {
-    if (mmu_is_c64_mode(&m->mmu)) return c64_read(m, addr);
+static u8 read_memory(Mem *m, u16 addr, bool dma) {
+    if (mmu_is_c64_mode(&m->mmu)) return c64_read(m, addr, dma);
     unsigned cfg = c128_config(m);
 
-    if (addr < 0x4000) return m->ram[bank_off(m, addr)];
+    if (addr < 0x4000) return ram_read(m, addr, dma);
 
     if (addr < 0x8000) {                     /* $4000-$7FFF */
         return cfg_4000_is_rom(cfg) ? m->basic[addr - 0x4000]
-                                    : m->ram[bank_off(m, addr)];
+                                    : ram_read(m, addr, dma);
     }
     if (addr < 0xC000) {                     /* $8000-$BFFF */
         if (lower_rom_select(m) == 0)
@@ -141,7 +146,7 @@ u8 mem_read(Mem *m, u16 addr) {
             return m->u36_rom[addr - 0x8000];
         if (lower_rom_select(m) == 2 && m->cart.attached)
             return m->cart.rom[addr - 0x8000];
-        return m->ram[bank_off(m, addr)];
+        return ram_read(m, addr, dma);
     }
     if (addr < 0xD000) {                     /* $C000-$CFFF */
         if (upper_rom_select(m) == 0) return m->editor[addr - 0xC000];
@@ -149,7 +154,7 @@ u8 mem_read(Mem *m, u16 addr) {
             return m->u36_rom[addr - 0x8000];
         if (upper_rom_select(m) == 2 && m->cart.attached)
             return m->cart.rom[addr - 0x8000];
-        return m->ram[bank_off(m, addr)];
+        return ram_read(m, addr, dma);
     }
     if (addr < 0xE000) {                     /* $D000-$DFFF */
         /* The CPU bus dispatches visible I/O before reaching this layer. */
@@ -159,7 +164,7 @@ u8 mem_read(Mem *m, u16 addr) {
             return m->cart.rom[addr - 0x8000];
         if (cfg < 8)
             return m->chargen[0x1000 + (addr & 0x0FFF)];
-        return m->ram[bank_off(m, addr)];
+        return ram_read(m, addr, dma);
     }
     /* $E000-$FFFF */
     if (upper_rom_select(m) == 0) return m->kernal[addr - 0xE000];
@@ -167,7 +172,19 @@ u8 mem_read(Mem *m, u16 addr) {
         return m->u36_rom[addr - 0x8000];
     if (upper_rom_select(m) == 2 && m->cart.attached)
         return m->cart.rom[addr - 0x8000];
-    return m->ram[bank_off(m, addr)];
+    return ram_read(m, addr, dma);
+}
+
+u8 mem_read(Mem *m, u16 addr) {
+    return read_memory(m, addr, false);
+}
+
+u8 mem_dma_read(Mem *m, u16 addr) {
+    return read_memory(m, addr, true);
+}
+
+void mem_dma_write(Mem *m, u16 addr, u8 val) {
+    m->ram[((u32)(m->mmu.rcr & 0x40) << 10) | addr] = val;
 }
 
 void mem_write(Mem *m, u16 addr, u8 val) {

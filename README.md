@@ -19,6 +19,8 @@ disk access and experimental ROM-backed 1571CR and 1581 paths.
   output with a blinking hardware cursor and 16/64 KiB video RAM selection.
 - Three-voice 8580 SID audio, CIA timers/interrupts, keyboard, joysticks, and
   1351 mouse input.
+- Optional 128/256/512 KiB RAM Expansion Unit (REU), enabled under General,
+  with BASIC 7.0 `STASH`/`FETCH`/`SWAP` support and snapshot preservation.
 - D64, D71 and D81 images, standalone PRG loading, two IEC units, and atomic
   image write-back through the fast virtual drive.
 - Experimental ROM-backed 1571CR emulation with line-level IEC, D64/D71 GCR

@@ -67,7 +67,7 @@ the Save dialog's `.d64`, `.d71`, or `.d81` extension selects its format, and
 an omitted extension defaults to `.d64`. Del ejects the selected medium.
 Sections:
 
-- **General** — display, scaling, CRT, input, 40/80 key, Tinker, and About.
+- **General** — 40/80 key, input, Tinker, ROM path, REU On/Off and size, and About.
 - **Media** — drive images/units/types, tape, cartridge, and optional U36 ROM.
 - **Advanced** — second/real drives, VDC RAM, monitors, diagnostics, C64 test
   gate, keyboard map, and capture settings.

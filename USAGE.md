@@ -24,6 +24,36 @@ to the 8502 KERNAL; the boot sector then returns ownership to the Z80 and CP/M
 Plus reaches its `A>` prompt. See [`docs/Z80-CPM.md`](docs/Z80-CPM.md) for the
 technical handoff sequence.
 
+## RAM Expansion Unit (REU)
+
+Enable **General > REU** in the F9 overlay. **General > REU size** selects
+128, 256 or 512 KiB (Commodore 1700, 1764 or 1750). The default is **Off**,
+with **512 KiB** selected. Both settings persist as `reu_enabled` and
+`reu_size_kb`; no additional ROM is needed and Tinker is not required.
+
+REU RAM is separate from the C128's 128 KiB system RAM and VDC RAM. It does
+not increase BASIC's startup free-memory count. Software accesses it through
+the RAM Expansion Controller at `$DF00`, or BASIC 7.0's `STASH`, `FETCH` and
+`SWAP` commands. For example, with a 512 KiB REU enabled:
+
+```basic
+BANK 0:POKE 8192,123
+STASH 1,8192,0,7
+POKE 8192,0
+FETCH 1,8192,0,7
+PRINT PEEK(8192)
+```
+
+This should print `123`: one byte was stored in REU bank 7, then retrieved.
+REU bank numbers are zero-based; 512 KiB provides eight 64 KiB banks.
+
+Changes take effect immediately. Reset with F5 to let software that probes
+hardware only at startup redetect the REU. F5 retains its RAM, whereas a
+power cycle (Ctrl+F5), disabling the REU, or changing its fitted size clears
+that volatile memory. Selecting a size while Off does not attach the device.
+Snapshots preserve the fitted REU, its contents and pending DMA state;
+standalone battery-backed REU image files are not implemented.
+
 ## Command line
 
 ```

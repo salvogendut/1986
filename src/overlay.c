@@ -571,7 +571,7 @@ static bool section_available(const Overlay *ov, OvSection s) {
 /* Number of selectable rows in each section. */
 static int section_rows(const Overlay *ov, OvSection s) {
     switch (s) {
-        case OV_GENERAL:  return 7;   /* display, input ports, Tinker, ROMs, About */
+        case OV_GENERAL:  return 9;   /* display, inputs, Tinker, ROMs, REU, About */
         case OV_MEDIA:    return 4 + (ov->cfg->second_drive ? 2 : 0) +
                                  (ov->cfg->real_disk_drive ? 1 + (ov->cfg->second_drive ? 1 : 0) : 0) +
                                  (ov->cfg->tinker ? 1 : 0) + 2; /* load/save snapshot */
@@ -624,6 +624,20 @@ static void overlay_activate(Overlay *ov) {
                     ov->section = OV_GENERAL;
             } else if (ov->row == 5) {
                 open_rom_dialog(ov);
+            } else if (ov->row == 6 || ov->row == 7) {
+                bool enabled = ov->cfg->reu_enabled;
+                unsigned size = (unsigned)ov->cfg->reu_size_kb;
+                if (ov->row == 6) enabled = !enabled;
+                else size = size == 128 ? 256 : size == 256 ? 512 : 128;
+                if (c128_set_reu(ov->c128, enabled, size)) {
+                    if (enabled)
+                        notify_post("REU: %uK - RESET TO REDETECT; RESIZING CLEARS REU RAM", size);
+                    else if (ov->row == 7)
+                        notify_post("REU SIZE: %uK - EXPANSION STILL OFF", size);
+                    else
+                        notify_post("REU OFF - EXPANSION RAM CLEARED");
+                    save_config(ov);
+                }
             } else {
                 ov->about_visible = true;
             }
@@ -805,6 +819,7 @@ static void overlay_activate(Overlay *ov) {
                     ov->c128->drive2_raw_iec = false;
                     iec_bus_enable_second(&ov->c128->iec_bus, false);
                     config_set_defaults(ov->cfg);
+                    c128_set_reu(ov->c128, false, (unsigned)ov->cfg->reu_size_kb);
                     c128_set_c64_test_mode(ov->c128, false);
                     vdc_set_ram_size_kb(&ov->c128->vdc, ov->cfg->vdc_ram_kb);
                     drive_set_unit(&ov->c128->drive, ov->cfg->drive_unit);
@@ -1287,7 +1302,13 @@ void overlay_render(const Overlay *ov, SDL_Renderer *r) {
         rom_path_display(ov, rd, sizeof(rd));
         draw_row(r, panel_w, y, "ROMS PATH", rd, ov->row == 5);
         y += OV_LINE_H;
-        draw_row(r, panel_w, y, "About", "Program details", ov->row == 6);
+        draw_row(r, panel_w, y, "REU", ov->cfg->reu_enabled ? "On" : "Off",
+                 ov->row == 6); y += OV_LINE_H;
+        char reu_size[32];
+        snprintf(reu_size, sizeof(reu_size), "%d KiB%s", ov->cfg->reu_size_kb,
+                 ov->cfg->reu_enabled ? "" : " (inactive)");
+        draw_row(r, panel_w, y, "REU size", reu_size, ov->row == 7); y += OV_LINE_H;
+        draw_row(r, panel_w, y, "About", "Program details", ov->row == 8);
     } else if (ov->section == OV_MEDIA) {
         for (int i = 0; i < section_rows(ov, OV_MEDIA); i++) {
             int item = media_item(ov, i);

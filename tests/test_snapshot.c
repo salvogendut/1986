@@ -106,6 +106,142 @@ static void make_vice_projection(const char *path) {
     fclose(f);
 }
 
+/* Rewrite only the expansion module, or reproduce a pre-REU major-1 file. */
+static void make_reu_variant(const char *path, const char *variant, int mode) {
+    FILE *f = fopen(path, "rb");
+    CHECK(f != NULL, "open REU fixture");
+    if (!f) return;
+    fseek(f, 0, SEEK_END);
+    size_t n = (size_t)ftell(f);
+    rewind(f);
+    u8 *bytes = malloc(n);
+    if (!bytes) { fclose(f); CHECK(false, "allocate REU fixture"); return; }
+    CHECK(fread(bytes, 1, n, f) == n, "read REU fixture");
+    fclose(f);
+    bool found = false;
+    for (size_t at = 58; at + 22 <= n;) {
+        u8 *h = bytes + at;
+        u32 size = h[18] | h[19] << 8 | h[20] << 16 | (u32)h[21] << 24;
+        if (size < 22 || size > n - at) break;
+        if (mode == 0 && !memcmp(h, "1986STATE", 9)) h[16] = 1;
+        if (!memcmp(h, "1986REU", 7)) {
+            found = true;
+            if (mode <= 1) { /* old file / missing required module */
+                memmove(h, h + size, n - at - size);
+                n -= size;
+            } else if (mode == 2) { /* incomplete RAM payload */
+                n = at + size - 1;
+            } else if (mode == 3) {
+                h[22 + 23] = 2; /* invalid active flag */
+            } else if (mode == 4) {
+                h[22] = 1; /* unsupported 513 KiB */
+            } else if (mode == 5) {
+                h[16] = 2; /* unsupported module version */
+            } else {
+                h[22 + 34] = 4; /* invalid DMA phase */
+            }
+            break;
+        }
+        at += size;
+    }
+    CHECK(found, "find REU module");
+    f = fopen(variant, "wb");
+    CHECK(f && fwrite(bytes, 1, n, f) == n, "write REU fixture variant");
+    if (f) fclose(f);
+    free(bytes);
+}
+
+static u8 reu_host_read(void *ctx, u16 address) {
+    C128 *c = ctx;
+    return c->mem.ram[address];
+}
+static void reu_host_write(void *ctx, u16 address, u8 value) {
+    C128 *c = ctx;
+    c->mem.ram[address] = value;
+}
+
+static void test_reu_snapshot(C128 *c, const char *path, const char *variant) {
+    Config cfg = {0};
+    c->cfg = &cfg;
+    reu_configure(&c->reu, 512);
+    for (unsigned i = 0; i < REU_MAX_RAM; ++i)
+        c->reu.ram[i] = (u8)(i ^ (i >> 8) ^ (i >> 16));
+    c->mem.ram[0x2000] = 0x75;
+    c->reu.ram[0x70000] = 0x82;
+    reu_write(&c->reu, 2, 0); reu_write(&c->reu, 3, 0x20);
+    reu_write(&c->reu, 4, 0); reu_write(&c->reu, 5, 0);
+    reu_write(&c->reu, 6, 7);
+    reu_write(&c->reu, 7, 1); reu_write(&c->reu, 8, 0);
+    reu_write(&c->reu, 9, 0xc0);
+    reu_write(&c->reu, 1, 0xb2); /* swap, autoload, EOB IRQ */
+    ReuBus bus = {c, reu_host_read, reu_host_write};
+    reu_tick(&c->reu, &bus); /* takeover */
+    reu_tick(&c->reu, &bus); /* latch both bytes before writing */
+    CHECK(c->reu.active && c->reu.phase == 2, "snapshot mid-swap fixture");
+    static Reu saved;
+    saved = c->reu;
+    CHECK(snapshot_save(c, path) == SNAPSHOT_OK, "save active 512K REU");
+    reu_configure(&c->reu, 0);
+    c->mem.ram[0x2000] = 0;
+    CHECK(snapshot_load(c, path) == SNAPSHOT_OK, "load active REU");
+    CHECK(cfg.reu_enabled && cfg.reu_size_kb == 512 && c->reu.size_kb == 512,
+          "snapshot restores expansion selection");
+    CHECK(!memcmp(saved.ram, c->reu.ram, REU_MAX_RAM) &&
+          !memcmp(saved.regs, c->reu.regs, REU_REG_COUNT) &&
+          !memcmp(saved.shadow, c->reu.shadow, sizeof(saved.shadow)),
+          "all expansion banks, registers and autoload shadows round trip");
+    CHECK(c->reu.active && c->reu.phase == 2 && c->reu.remaining == 1 &&
+          c->reu.host_address == 0x2000 && c->reu.reu_address == 0x70000 &&
+          c->reu.host_latch == 0x75 && c->reu.reu_latch == 0x82 &&
+          c->reu.floating_bus == saved.floating_bus,
+          "DMA address, phase and byte latches round trip");
+    reu_tick(&c->reu, &bus);
+    CHECK(!c->reu.active && c->mem.ram[0x2000] == 0x82 &&
+          c->reu.ram[0x70000] == 0x75 && reu_irq(&c->reu) &&
+          reu_peek(&c->reu, 2) == 0 && reu_peek(&c->reu, 7) == 1,
+          "resumed swap completes once, autoloads and asserts IRQ");
+
+    /* Invalid expansion state must not partially load the CPU/RAM first. */
+    for (int mode = 1; mode <= 6; ++mode) {
+        make_reu_variant(path, variant, mode);
+        core_state.pc = 0xbeef; c->mem.ram[0x2000] = 0xa5;
+        SnapshotResult result = snapshot_load(c, variant);
+        CHECK(result == (mode == 5 ? SNAPSHOT_ERR_VERSION : SNAPSHOT_ERR_STATE),
+              "reject missing, truncated or malformed REU state");
+        CHECK(core_state.pc == 0xbeef && c->mem.ram[0x2000] == 0xa5 &&
+              !c->reu.active && c->reu.ram[0x70000] == 0x75 && reu_irq(&c->reu),
+              "rejected expansion snapshot leaves running machine untouched");
+    }
+    CHECK(snapshot_save(c, variant) == SNAPSHOT_OK, "save pending REU IRQ");
+    reu_read(&c->reu, 0);
+    CHECK(snapshot_load(c, variant) == SNAPSHOT_OK && reu_irq(&c->reu),
+          "latched REU IRQ survives snapshot restore");
+
+    reu_write(&c->reu, 1, 0x81);
+    CHECK(snapshot_save(c, variant) == SNAPSHOT_OK, "save armed FF00 trigger");
+    reu_reset(&c->reu);
+    CHECK(snapshot_load(c, variant) == SNAPSHOT_OK && c->reu.armed && !c->reu.active,
+          "armed FF00 command survives snapshot restore");
+    reu_ff00_trigger(&c->reu);
+    CHECK(c->reu.active && !c->reu.armed, "restored command still triggers");
+
+    make_reu_variant(path, variant, 0);
+    CHECK(snapshot_load(c, variant) == SNAPSHOT_OK && !c->reu.size_kb &&
+          !cfg.reu_enabled && !c->reu.active && !reu_irq(&c->reu),
+          "pre-REU major-1 snapshots load with expansion detached");
+    for (unsigned kb = 0; kb <= 256; kb += 128) {
+        reu_configure(&c->reu, kb);
+        if (kb) c->reu.ram[kb * 1024 - 1] = 0x63;
+        CHECK(snapshot_save(c, variant) == SNAPSHOT_OK, "save smaller/detached REU");
+        reu_configure(&c->reu, 512);
+        CHECK(snapshot_load(c, variant) == SNAPSHOT_OK && c->reu.size_kb == kb &&
+              cfg.reu_enabled == (kb != 0) &&
+              (!kb || (cfg.reu_size_kb == (int)kb && c->reu.ram[kb * 1024 - 1] == 0x63)),
+              "smaller and detached expansions restore their exact sizes");
+    }
+    c->cfg = NULL;
+}
+
 int main(void) {
     static C128 c;
     const char *path = "/tmp/1986-test-snapshot.vsf";
@@ -192,6 +328,8 @@ int main(void) {
     CHECK(core_state.pc == 0xabcd && c.mem.ram[0x1234] == 0x6e &&
           c.mem.mmu.mcr == 0x9a,
           "rejected VICE snapshot does not partially mutate the machine");
+
+    test_reu_snapshot(&c, path, legacy);
 
     remove(path); remove(vice); remove(legacy);
     free(c.vdc.display_fb);
